@@ -1141,12 +1141,28 @@ async fn a_new_report_tells_every_reviewer_without_saying_what_it_is() {
         }
     }
 
-    // A former reviewer is told of no more.
+    // A former reviewer is told of no more. Only alerts written after the
+    // revoke count: another test's report, filed in a transaction that began
+    // before the revoke, may still queue one (its rows carry that earlier
+    // transaction's time), which says nothing about reports filed after.
     review::revoke(&app.owner, &staff.email).await.unwrap();
-    let before = queued(staff.id).await;
+    let revoked_at: time::OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
     let third = app.active().await;
     ben_reports(&app, &third).await;
-    assert_eq!(queued(staff.id).await, before);
+    let after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM outbox
+         WHERE recipient_account_id = $1 AND payload ->> 'staff' = 'REPORT_RECEIVED'
+           AND created_at > $2",
+    )
+    .bind(staff.id)
+    .bind(revoked_at)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(after, 0);
 }
 
 #[tokio::test]

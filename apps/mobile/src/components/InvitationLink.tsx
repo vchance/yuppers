@@ -1,4 +1,9 @@
-import { invitationLink } from '@yuppers/shared';
+import {
+  boundToLabel,
+  invitationLink,
+  phoneOffered,
+  type SignInChannels,
+} from '@yuppers/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Platform, Share, StyleSheet, Text, View } from 'react-native';
@@ -6,25 +11,37 @@ import { Platform, Share, StyleSheet, Text, View } from 'react-native';
 import { WEB_URL } from '../lib/config';
 import { useI18n } from '../lib/context';
 import { space, type, useColors } from '../lib/theme';
+import { QrCode } from './QrCode';
 import { Actions, Button, ErrorNote, Hint, Label, Notice, P, TextField } from './ui';
 
 /**
  * Naming who an invitation is for, so that only an account verified with
- * that email address or phone number can use the link (DESIGN.md §8).
+ * that email address or phone number can use the link (DESIGN.md §8). An
+ * email address only, until the service says it texts codes (`channels`),
+ * as signing in asks: a phone number nobody can sign in with would make the
+ * link useless.
  */
 export function InvitationFor({
   value,
   onChange,
+  channels,
+  error,
 }: {
   value: string;
   onChange(value: string): void;
+  channels: SignInChannels | null;
+  /** What is wrong with it, said with it once the person has tried to go on. */
+  error?: string | null;
 }) {
   const { wording } = useI18n();
+  const phone = phoneOffered(channels);
   return (
     <TextField
-      label={wording.invitationLink.forLabel}
+      label={boundToLabel(wording.invitationLink, channels)}
       hint={wording.invitationLink.forHint}
+      error={error}
       inputMode="email"
+      keyboardType={phone ? 'default' : 'email-address'}
       autoCapitalize="none"
       autoCorrect={false}
       autoComplete="off"
@@ -37,18 +54,20 @@ export function InvitationFor({
 /**
  * The invitation link, shown once: only its hash is kept by the service, so
  * it cannot be shown again. The initiator sends it through a channel of
- * their own, with the system's share sheet or by copying it; the platform
- * never sends it (DESIGN.md §8).
+ * their own, with the system's share sheet, by copying it, or as a QR code
+ * for someone in the same room to scan; the platform never sends it
+ * (DESIGN.md §8), and says so where the link appears.
  *
  * The link is the web address, in the sender's language, so it works for
  * someone without the app and previews in that language. What is shared
  * alongside it is fixed wording with no name, term or amount in it.
  */
 export function InvitationLink({ token }: { token: string }) {
-  const { wording, language } = useI18n();
+  const { wording, language, fmt } = useI18n();
   const colors = useColors();
   const w = wording.invitationLink;
   const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+  const [qr, setQr] = useState(false);
   const link = invitationLink(WEB_URL, language, token);
 
   async function copy() {
@@ -63,7 +82,7 @@ export function InvitationLink({ token }: { token: string }) {
     // iOS takes the link as a link; Android's share sheet takes text only.
     const content =
       Platform.OS === 'android'
-        ? { title: wording.linkPreview.title, message: `${w.shareText}\n${link}` }
+        ? { title: wording.linkPreview.title, message: fmt(w.shareMessage, { link }) }
         : { title: wording.linkPreview.title, message: w.shareText, url: link };
     // Dismissing the share sheet is not a failure; there is nothing to do about either.
     Share.share(content).catch(() => {});
@@ -84,7 +103,18 @@ export function InvitationLink({ token }: { token: string }) {
       <Actions>
         <Button variant="primary" label={w.share} onPress={share} />
         <Button label={w.copy} onPress={() => void copy()} />
+        <Button
+          label={qr ? w.hideQr : w.shareQr}
+          expanded={qr}
+          onPress={() => setQr((shown) => !shown)}
+        />
       </Actions>
+      {qr && (
+        <View style={styles.block}>
+          <QrCode text={link} label={w.qrLabel} />
+          <Hint>{w.qrHint}</Hint>
+        </View>
+      )}
       {copied === 'yes' && <Notice>{w.copied}</Notice>}
       {copied === 'failed' && <ErrorNote>{w.copyFailed}</ErrorNote>}
     </View>

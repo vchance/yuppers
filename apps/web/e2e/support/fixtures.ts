@@ -11,6 +11,11 @@ import { expect, test as base, type BrowserContext, type Page } from '@playwrigh
  * (backend/src/http/mod.rs). Anything a page tries that the policy refuses,
  * such as an inline style or script, is collected from each person's
  * browser and fails the test.
+ *
+ * Every browser here is a desktop one without a share sheet of its own, as
+ * most desktop browsers are: `navigator.share` is taken away, whatever the
+ * machine running the tests offers, so "Share link" opens the app's own
+ * panel of ways to share in every run alike.
  */
 
 export interface Person {
@@ -56,6 +61,8 @@ export const test = base.extend<Fixtures>({
         refused.push(`${name}: ${what}`)
       })
       await context.addInitScript(() => {
+        Reflect.deleteProperty(Navigator.prototype, 'share')
+        Reflect.deleteProperty(Navigator.prototype, 'canShare')
         document.addEventListener('securitypolicyviolation', (event) => {
           const report = (window as unknown as { reportRefusedByPolicy(what: string): void })
             .reportRefusedByPolicy

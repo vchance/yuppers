@@ -255,6 +255,15 @@ pub trait CodeSender: Send + Sync {
     fn delivers(&self, _channel: SignInChannel) -> bool {
         true
     }
+
+    /// The email address codes sent by email come from, so that the clients
+    /// can tell someone waiting for one what to look for (`GET /v1/meta`,
+    /// `code_sender`): the address part of the From mailbox only, never its
+    /// display name. `None` where there is no such address, as for the
+    /// development log.
+    fn email_sender(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A kind of identifier a code can be sent to: what someone can sign in with.

@@ -36,10 +36,11 @@ test('a first proposal goes from a new draft to a completed exchange both can ta
   await expect(ana.page.getByText(en.composer.moneyOutside)).toBeVisible()
   await reviewAndSend(ana.page)
 
-  // The link is shown once, and copies.
+  // The link is shown once, and copies from the ways to share it.
   const field = ana.page.getByLabel(en.invitationLink.linkLabel, { exact: true })
   await expect(field).toHaveValue(/^http:\/\/127\.0\.0\.1:\d+\/en\/i#.+/)
   const link = await field.inputValue()
+  await ana.page.getByRole('button', { name: en.invitationLink.share, exact: true }).click()
   await ana.page.getByRole('button', { name: en.invitationLink.copy }).click()
   await expect(ana.page.getByText(en.invitationLink.copied, { exact: true })).toBeVisible()
   expect(await ana.page.evaluate(() => navigator.clipboard.readText())).toBe(link)

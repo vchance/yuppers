@@ -463,6 +463,30 @@ ul.plain {
   margin-block-end: 0;
 }
 
+/* The ways of passing an invitation link on: a row of buttons that wraps. */
+ul.share-options {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+/* A QR code is dark on light in every theme, at a size a phone's camera
+   reads from arm's length, and never wider than the screen. */
+.qr {
+  margin: 0.75rem 0;
+}
+
+.qr-code {
+  display: block;
+  inline-size: min(16rem, 100%);
+  block-size: auto;
+  aspect-ratio: 1;
+  margin-block-end: 0.5rem;
+}
+
 .consent {
   margin-block-start: 1.5rem;
   padding-block-start: 0.5rem;

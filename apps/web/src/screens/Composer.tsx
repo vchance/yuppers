@@ -2,6 +2,8 @@ import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/a
 import {
   amendmentEffects,
   baseRevision,
+  boundToProblem,
+  boundToProblemText,
   buildTerms,
   canCompose,
   composerKind,
@@ -30,6 +32,7 @@ import {
   type SaveState,
   dueDateZone,
   timeZoneCity,
+  useSignInChannels,
 } from '@yuppers/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -55,10 +58,14 @@ import { api, failureCode, type RevisionSent, type Slot } from '../lib/api'
 
 type ContributionType = components['schemas']['ContributionType']
 
+/** The field for who a first proposal's invitation is for. */
+const BOUND_TO = 'bound-to'
+
 interface Props {
   exchange: Exchange
   reload(): Promise<Exchange | null>
-  onSent(sent: RevisionSent): void
+  /** `boundTo` is who a first proposal's invitation was made for, as typed. */
+  onSent(sent: RevisionSent, boundTo: string | null): void
 }
 
 /**
@@ -117,6 +124,10 @@ function Editor({ exchange, reload, onSent }: Props) {
   const [added, setAdded] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null)
+  // Who a first proposal's invitation is for is asked for beside their
+  // name, and checked with the rest before the signing step.
+  const channels = useSignInChannels(api)
+  const boundProblem = kind === 'first' && checked ? boundToProblem(boundTo, channels) : null
 
   // The working copy was started from terms that have since been replaced.
   const stale = base !== null && draft.base !== base.id
@@ -179,6 +190,7 @@ function Editor({ exchange, reload, onSent }: Props) {
 
   const built = useMemo(() => buildTerms(draft, digits, base?.terms), [draft, digits, base])
   const problems = checked && !built.ok ? built.problems : []
+  const problemCount = problems.length + (boundProblem ? 1 : 0)
   const problemText = (problem: Problem) => problemMessage(problem, wording, language)
 
   function errorFor(field: ProblemField, contribution?: string): string | null {
@@ -200,13 +212,17 @@ function Editor({ exchange, reload, onSent }: Props) {
     setChecked(true)
     setConflict(false)
     setFailure(null)
-    if (built.ok) {
+    const bound = kind === 'first' ? boundToProblem(boundTo, channels) : null
+    if (built.ok && !bound) {
       setStep('sign')
       setReturned(true)
       return
     }
-    // The keyboard goes to the first thing to fix, once it has been marked.
-    const first = fieldId(built.problems[0])
+    // The keyboard goes to the first thing to fix, once it has been marked:
+    // the names come before who the invitation is for, and the rest after.
+    const firstProblem = built.ok ? null : built.problems[0]
+    const nameFirst = firstProblem?.field === 'partyA' || firstProblem?.field === 'partyB'
+    const first = firstProblem && (nameFirst || !bound) ? fieldId(firstProblem) : BOUND_TO
     window.setTimeout(() => document.getElementById(first)?.focus())
   }
 
@@ -225,7 +241,7 @@ function Editor({ exchange, reload, onSent }: Props) {
         revisionToSend(exchange, built, language, boundTo),
       )
       saver.sent()
-      onSent(result)
+      onSent(result, kind === 'first' ? boundTo.trim() || null : null)
     } catch (error) {
       const code = failureCode(error)
       saver.resume()
@@ -289,7 +305,9 @@ function Editor({ exchange, reload, onSent }: Props) {
           />
         </section>
         {predicted && <Effects effects={predicted} />}
-        {kind === 'first' && <InvitationFor value={boundTo} onChange={setBoundTo} />}
+        {kind === 'first' && boundTo.trim() && (
+          <p>{fmt(wording.invitationLink.boundSummary, { identifier: boundTo.trim() })}</p>
+        )}
         <Consent
           signLabel={w.signAndSend}
           busy={busy}
@@ -352,9 +370,7 @@ function Editor({ exchange, reload, onSent }: Props) {
           </div>
         </div>
       )}
-      {problems.length > 0 && (
-        <ErrorNote>{fmt(w.problemsSummary, { count: problems.length })}</ErrorNote>
-      )}
+      {problemCount > 0 && <ErrorNote>{fmt(w.problemsSummary, { count: problemCount })}</ErrorNote>}
 
       <form
         noValidate
@@ -398,6 +414,19 @@ function Editor({ exchange, reload, onSent }: Props) {
               />
             )}
           </Field>
+          {kind === 'first' && (
+            <InvitationFor
+              value={boundTo}
+              onChange={setBoundTo}
+              channels={channels}
+              id={BOUND_TO}
+              error={
+                boundProblem
+                  ? boundToProblemText(boundProblem, wording.invitationLink, channels, fmt)
+                  : null
+              }
+            />
+          )}
         </fieldset>
 
         <Field label={w.termsLabel} hint={w.termsHint}>

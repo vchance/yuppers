@@ -1202,6 +1202,14 @@ export interface components {
              */
             built_at?: string | null;
             /**
+             * @description The email address sign-in codes come from, such as
+             *     `no-reply@yuppers.app`: the address part of `SMTP_FROM`, without its
+             *     display name. A client tells someone waiting for a code to look for
+             *     it, in their spam folder too. Absent where codes are not sent by
+             *     email from an address of the service's own (the development log).
+             */
+            code_sender?: string | null;
+            /**
              * @description The git commit the running build was made from, in full, or
              *     `unknown` when the build did not say. Also in every response's
              *     `X-Yuppers-Version` header, shortened to seven characters.

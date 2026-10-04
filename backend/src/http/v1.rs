@@ -78,6 +78,13 @@ pub struct Meta {
     /// can be sent to (`PHONE_COUNTRY_NOT_SERVED` refuses any other). Empty
     /// when `sign_in_channels` has no `phone`.
     pub sms_country_codes: Vec<String>,
+    /// The email address sign-in codes come from, such as
+    /// `no-reply@yuppers.app`: the address part of `SMTP_FROM`, without its
+    /// display name. A client tells someone waiting for a code to look for
+    /// it, in their spam folder too. Absent where codes are not sent by
+    /// email from an address of the service's own (the development log).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_sender: Option<String>,
 }
 
 /// Identifies the service and its build, and says how old a client may be.
@@ -107,5 +114,6 @@ pub async fn meta(
             Vec::new()
         },
         sign_in_channels: channels,
+        code_sender: state.code_sender.email_sender(),
     })
 }

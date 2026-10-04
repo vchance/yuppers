@@ -267,6 +267,10 @@ impl CodeSender for CodeRouter {
             SignInChannel::Email => self.email.delivers(channel),
         }
     }
+
+    fn email_sender(&self) -> Option<String> {
+        self.email.email_sender()
+    }
 }
 
 #[cfg(test)]

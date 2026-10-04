@@ -256,6 +256,10 @@ impl CodeSender for SmtpSender {
     fn delivers(&self, channel: SignInChannel) -> bool {
         channel == SignInChannel::Email
     }
+
+    fn email_sender(&self) -> Option<String> {
+        Some(self.from.email.to_string())
+    }
 }
 
 #[cfg(test)]

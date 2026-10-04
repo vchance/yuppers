@@ -2,6 +2,8 @@ import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/a
 import {
   amendmentEffects,
   baseRevision,
+  boundToProblem,
+  boundToProblemText,
   buildTerms,
   canCompose,
   composerKind,
@@ -25,6 +27,7 @@ import {
   dueDateZone,
   timeZoneCity,
   toMinorUnits,
+  useSignInChannels,
   type Draft,
   type DraftContribution,
   type DraftDue,
@@ -132,6 +135,10 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null);
   const scroll = useRef<ScrollView>(null);
   const reduceMotion = useReduceMotion();
+  // Who a first proposal's invitation is for is asked for beside their
+  // name, and checked with the rest before the signing step.
+  const channels = useSignInChannels(api);
+  const boundProblem = kind === 'first' && checked ? boundToProblem(boundTo, channels) : null;
 
   // The working copy was started from terms that have since been replaced.
   const stale = base !== null && draft.base !== base.id;
@@ -190,6 +197,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
 
   const built = useMemo(() => buildTerms(draft, digits, base?.terms), [draft, digits, base]);
   const problems = checked && !built.ok ? built.problems : [];
+  const problemCount = problems.length + (boundProblem ? 1 : 0);
   const problemText = (problem: Problem) => problemMessage(problem, wording, language);
 
   function errorFor(field: ProblemField, contribution?: string): string | null {
@@ -203,7 +211,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     setChecked(true);
     setConflict(false);
     setFailure(null);
-    if (built.ok) {
+    if (built.ok && !(kind === 'first' && boundToProblem(boundTo, channels))) {
       setStep('sign');
       return;
     }
@@ -289,7 +297,9 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
           />
         </Card>
         {predicted && <Effects effects={predicted} />}
-        {kind === 'first' && <InvitationFor value={boundTo} onChange={setBoundTo} />}
+        {kind === 'first' && boundTo.trim() ? (
+          <P>{fmt(wording.invitationLink.boundSummary, { identifier: boundTo.trim() })}</P>
+        ) : null}
         <Consent
           signLabel={w.signAndSend}
           busy={busy}
@@ -357,8 +367,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
             </Actions>
           </Notice>
         )}
-        {problems.length > 0 && (
-          <ErrorNote>{fmt(w.problemsSummary, { count: problems.length })}</ErrorNote>
+        {problemCount > 0 && (
+          <ErrorNote>{fmt(w.problemsSummary, { count: problemCount })}</ErrorNote>
         )}
 
         <Heading level={2}>{w.partiesLegend}</Heading>
@@ -378,6 +388,18 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
           defaultValue={nameOf(other)}
           onChangeText={(name) => setName(other, name)}
         />
+        {kind === 'first' && (
+          <InvitationFor
+            value={boundTo}
+            onChange={setBoundTo}
+            channels={channels}
+            error={
+              boundProblem
+                ? boundToProblemText(boundProblem, wording.invitationLink, channels, fmt)
+                : null
+            }
+          />
+        )}
 
         <TextField
           label={w.termsLabel}

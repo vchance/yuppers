@@ -43,11 +43,11 @@ test('a code can go to whichever identifiers the account has, email first', () =
 
 test('a phone number the service cannot text is not offered, unless it is all there is', () => {
   const both = { email: 'ana@example.test', phone: '+12025550142' }
-  const emailOnly = { phone: false, countryCodes: [] }
+  const emailOnly = { phone: false, countryCodes: [], codeSender: null }
   expect(codeDestinations(both, emailOnly)).toEqual([
     { channel: 'EMAIL', identifier: 'ana@example.test' },
   ])
-  expect(codeDestinations(both, { phone: true, countryCodes: ['+1'] })).toHaveLength(2)
+  expect(codeDestinations(both, { phone: true, countryCodes: ['+1'], codeSender: null })).toHaveLength(2)
   // Not yet known: both, as before.
   expect(codeDestinations(both, null)).toHaveLength(2)
   expect(codeDestinations({ email: null, phone: '+12025550142' }, emailOnly)).toEqual([

@@ -3578,6 +3578,13 @@
             ],
             "description": "When the running build was made, as an RFC 3339 time in UTC; null\nwhen the build did not say."
           },
+          "code_sender": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The email address sign-in codes come from, such as\n`no-reply@yuppers.app`: the address part of `SMTP_FROM`, without its\ndisplay name. A client tells someone waiting for a code to look for\nit, in their spam folder too. Absent where codes are not sent by\nemail from an address of the service's own (the development log)."
+          },
           "commit": {
             "type": "string",
             "description": "The git commit the running build was made from, in full, or\n`unknown` when the build did not say. Also in every response's\n`X-Yuppers-Version` header, shortened to seven characters."

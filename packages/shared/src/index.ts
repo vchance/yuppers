@@ -173,6 +173,10 @@ export type { Actions, CommandOutcome, CommandSender, FocusKeeper } from './acti
 export { createI18n, isComplete } from './i18n'
 export type { I18n } from './i18n'
 export { invitationLink, invitationPath, invitationToken, invitationTokenIn } from './invitation'
+export { boundToLabel, boundToProblem, boundToProblemText, shareAddresses } from './share'
+export { QR_QUIET_ZONE, qrRuns } from './qr'
+export type { QrModules, QrRun } from './qr'
+export type { BoundToProblem, IssuedInvitation, ShareAddresses } from './share'
 export {
   baseRevision,
   canCompose,
@@ -228,10 +232,13 @@ export {
 } from './wallet'
 export type { WalletApi, WalletButton } from './wallet'
 export {
+  codeWaitText,
   identifierRefused,
   phoneOffered,
+  RESEND_AFTER_MS,
   signInChannels,
   signInText,
+  useResendReady,
   useSignInChannels,
 } from './sign-in'
 export type { SignInApi, SignInChannel, SignInChannels, SignInText } from './sign-in'

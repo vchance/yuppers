@@ -204,6 +204,15 @@ export interface Wording {
     identifierHint: string
     sendCode: string
     codeSent: string
+    /**
+     * Said under `codeSent` for a code sent by email: where to look for it.
+     * `{sender}` is the address it comes from (`GET /v1/meta`,
+     * `code_sender`); `checkInboxAnySender` where the service does not say.
+     */
+    checkInbox: string
+    checkInboxAnySender: string
+    /** Said until `resend` is offered, a while after a code was sent. */
+    resendSoon: string
     codeLabel: string
     codeHint: string
     submit: string
@@ -447,10 +456,40 @@ export interface Wording {
     share: string
     /** Sent along with a shared link. Like the preview, never a name, a term or an amount. */
     shareText: string
+    /**
+     * `shareText` with the link in it, `{link}`, for the ways of sharing that
+     * take one piece of text: an email's body, a text message, WhatsApp.
+     */
+    shareMessage: string
+    /** The ways of sharing offered where the device has no share sheet of its own. */
+    shareEmail: string
+    shareSms: string
+    shareWhatsApp: string
+    shareQr: string
+    hideQr: string
+    closeShare: string
+    /** The QR code's name for a screen reader, and what it is for. */
+    qrLabel: string
+    qrHint: string
+    qrFailed: string
     unclaimed: string
     reissueIntro: string
     forLabel: string
     forHint: string
+    /** `forLabel` where the service takes email addresses only (`GET /v1/meta`). */
+    forLabelEmail: string
+    /**
+     * Said, before anything is sent, of what `forLabel` was given: not an
+     * email address or phone number at all; not an email address where only
+     * those are taken; a phone number where only email addresses are taken;
+     * a phone number of a country the service does not text (`{codes}`).
+     */
+    forInvalid: string
+    forInvalidEmail: string
+    forEmailOnly: string
+    forCountry: string
+    /** On the signing step, who the invitation is for: `{identifier}`, as typed. */
+    boundSummary: string
     reissue: string
   }
   /**

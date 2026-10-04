@@ -1,4 +1,4 @@
-import type { Account, ExchangeSummary, ExchangeView } from '@yuppers/api-client'
+import type { Account, ErrorCode, ExchangeSummary, ExchangeView } from '@yuppers/api-client'
 import type { HistoryPage, RecordDocument, RevisionView } from '@yuppers/shared'
 
 /*
@@ -28,6 +28,12 @@ export const OTHER_INVITATION = 'b4'.repeat(32)
 export const OTHER_INVITATION_CODE = 'OTHR-5K8P'
 /** The one code the stand-in accepts. */
 export const GOOD_CODE = '123456'
+
+/** The token of the invitation a first proposal sent from the draft gets. */
+export const SENT_INVITATION = 'c5'.repeat(32)
+
+/** The address the stand-in says codes come from, unless a test says otherwise. */
+export const CODE_SENDER = 'codes@yuppers.example'
 
 export const ana: Account = {
   id: 'a0000000-0000-4000-8000-000000000001',
@@ -209,6 +215,17 @@ export function draftExchange(): ExchangeView {
         },
       ],
     } as never,
+  }
+}
+
+/** The draft once its first proposal is sent: open, with nobody invited yet. */
+function sentExchange(): ExchangeView {
+  const { draft: _draft, ...sent } = draftExchange()
+  return {
+    ...sent,
+    version: 2,
+    state: 'NEGOTIATING',
+    open_revision: { ...revision, accepted_by: ['A'] },
   }
 }
 
@@ -500,6 +517,12 @@ export interface FakeService {
   sent: { call: string; body: unknown }[]
   /** Whether the service says it can send codes to phone numbers. */
   phone: boolean
+  /** The address the service says codes come from, if it says. */
+  codeSender: string | null
+  /** Whether the draft's first proposal has been sent. */
+  proposed: boolean
+  /** A refusal for every request for a code from now on, such as a limit. */
+  refuseCodes: ErrorCode | null
   fetch: typeof fetch
 }
 
@@ -508,6 +531,9 @@ export function fakeService(account: Account | null): FakeService {
     account,
     sent: [],
     phone: true,
+    codeSender: CODE_SENDER,
+    proposed: false,
+    refuseCodes: null,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -662,10 +688,14 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
         wallet_platforms: ['APPLE', 'GOOGLE'],
         sign_in_channels: service.phone ? ['email', 'phone'] : ['email'],
         sms_country_codes: service.phone ? ['+1'] : [],
+        ...(service.codeSender ? { code_sender: service.codeSender } : {}),
       },
     ]
   }
-  if (call === 'POST /v1/auth/codes') return [204, null]
+  if (call === 'POST /v1/auth/codes') {
+    if (service.refuseCodes) return [429, { code: service.refuseCodes }]
+    return [204, null]
+  }
   if (call === 'POST /v1/auth/sessions') {
     const { code, identifier } = body as { code?: string; identifier?: string }
     if (code !== GOOD_CODE) return [400, { code: 'INVALID_CODE' }]
@@ -709,6 +739,11 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     if (service.account.id === staleRita.id) return [401, { code: 'SESSION_TOO_OLD' }]
     return (service.account.id === rita.id && staff(call)) || [404, { code: 'NOT_FOUND' }]
   }
+  if (call === `POST /v1/exchanges/${DRAFT}/revisions`) {
+    service.proposed = true
+    return [200, { exchange: sentExchange(), invitation_token: SENT_INVITATION }]
+  }
+  if (service.proposed && call === `GET /v1/exchanges/${DRAFT}`) return [200, sentExchange()]
   for (const exchange of [...exchanges(), ...others()]) {
     const at = `/v1/exchanges/${exchange.id}`
     if (call === `GET ${at}`) return [200, exchange]

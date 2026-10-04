@@ -355,6 +355,50 @@ describe('the composer', () => {
   });
 });
 
+describe('passing the invitation on', () => {
+  test('who it is for is a labelled field, and what is wrong with it is said with it', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    const field = await screen.findByLabelText(w.invitationLink.forLabel);
+    expect(field.props.accessibilityHint).toContain(w.invitationLink.forHint);
+    await fireEvent.changeText(field, 'carla@');
+    await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
+    await screen.findByText(w.invitationLink.forInvalid);
+    expect(screen.getByLabelText(w.invitationLink.forLabel).props.accessibilityHint).toContain(
+      w.invitationLink.forInvalid,
+    );
+    expect(audit()).toEqual([]);
+  });
+
+  test('the link once sent, its buttons named, and the QR code an image with a name', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    await screen.findByText(w.composer.titleFirst);
+    await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
+    await screen.findByText(w.composer.signIntro);
+    await fireEvent(screen.getByTestId('consent-agree'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('consent-sign'));
+    await screen.findByText(w.invitationLink.intro);
+    expect(audit()).toEqual([]);
+
+    await fireEvent.press(screen.getByRole('button', { name: w.invitationLink.shareQr }));
+    const code = screen.getByRole('image', { name: w.invitationLink.qrLabel });
+    expect(code.props.accessible).toBe(true);
+    expect(
+      screen.getByRole('button', { name: w.invitationLink.hideQr }).props.accessibilityState,
+    ).toMatchObject({ expanded: true });
+    expect(audit()).toEqual([]);
+  });
+
+  test('waiting for a code: where to look is said, and another is offered later', async () => {
+    await open('/', { signedIn: false });
+    await screen.findByText(w.signIn.intro);
+    await fireEvent.changeText(screen.getByLabelText(w.signIn.identifierLabel), 'ana@example.test');
+    await fireEvent.press(screen.getByRole('button', { name: w.signIn.sendCode }));
+    await screen.findByLabelText(w.signIn.codeLabel);
+    screen.getByText(w.signIn.resendSoon);
+    expect(audit()).toEqual([]);
+  });
+});
+
 describe('the exchange', () => {
   test('a panel takes the screen reader to it, and gives the focus back on cancel', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });

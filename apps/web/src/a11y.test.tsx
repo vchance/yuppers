@@ -124,6 +124,10 @@ describe('signing in', () => {
 
     await type(field(wording.signIn.codeLabel), '000000')
     await press(button(wording.signIn.submit))
+    // Where to look for it, said with the rest of the step.
+    expect(document.body.textContent).toContain(wording.signIn.resendSoon)
+    expect(await violations()).toEqual([])
+
     const refusal = wording.errors.INVALID_CODE
     await until(() => document.body.textContent!.includes(refusal), 'the refusal')
     await settle()
@@ -173,6 +177,51 @@ describe('signing in', () => {
 })
 
 describe('the composer', () => {
+  test('who the invitation is for, wrong, is marked, announced and focused', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.invitationLink
+    await heading(wording.composer.titleFirst)
+    await until(() => document.body.textContent!.includes(w.forHint), 'the field')
+    const bound = field(w.forLabel)
+    await type(bound, 'carla@example')
+    await press(button(wording.composer.review))
+    await settle()
+
+    expect(bound.getAttribute('aria-invalid')).toBe('true')
+    expect(document.activeElement).toBe(bound)
+    expect(announced().assertive).toMatch(/needs fixing/)
+    expect(await violations()).toEqual([])
+  })
+
+  test('the invitation link once sent, its ways to share and its QR code', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.invitationLink
+    await heading(wording.composer.titleFirst)
+    await press(button(wording.composer.review))
+    await heading(wording.composer.signTitle)
+    await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
+    await press(button(wording.composer.signAndSend))
+    await until(() => document.body.textContent!.includes(w.intro), 'the invitation link')
+    expect(await violations()).toEqual([])
+
+    // jsdom has no share sheet: the panel opens in place and takes the focus.
+    const share = button(w.share)
+    await press(share)
+    expect(document.activeElement?.getAttribute('role')).toBe('group')
+    expect(document.activeElement?.getAttribute('aria-labelledby')).toBeTruthy()
+    expect(share.getAttribute('aria-expanded')).toBe('true')
+    expect(await violations()).toEqual([])
+
+    await press(button(w.shareQr))
+    await until(() => document.querySelector('svg[role="img"]') !== null, 'the QR code')
+    expect(document.querySelector('svg')?.getAttribute('aria-label')).toBe(w.qrLabel)
+    expect(await violations()).toEqual([])
+
+    // Closed, the focus goes back to the button that opened it.
+    await press(button(w.closeShare))
+    expect(document.activeElement).toBe(share)
+  })
+
   test('writing a first proposal', async () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     await heading(wording.composer.titleFirst)

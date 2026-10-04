@@ -15,11 +15,16 @@ import type { Wording } from './wording/types'
 
 export type SignInChannel = components['schemas']['SignInChannel']
 
-/** What the service said it can send codes to. */
+/** What the service said it can send codes to, and how. */
 export interface SignInChannels {
   phone: boolean
   /** The country calling codes phone numbers may have, such as `+1`. */
   countryCodes: string[]
+  /**
+   * The email address codes sent by email come from (`code_sender`), or
+   * `null` where the service does not say, as in development.
+   */
+  codeSender: string | null
 }
 
 export type SignInApi = Pick<ExchangeApi, 'meta'>
@@ -37,6 +42,7 @@ export function signInChannels(api: SignInApi): Promise<SignInChannels | null> {
       return {
         phone: said.sign_in_channels.includes('phone'),
         countryCodes: said.sms_country_codes ?? [],
+        codeSender: said.code_sender ?? null,
       }
     },
     () => null,
@@ -104,4 +110,46 @@ export function signInText(
     hint: codes.length ? fmt(w.identifierHintCountries, { codes: codes.join(', ') }) : w.identifierHint,
     changeIdentifier: w.changeIdentifier,
   }
+}
+
+/*
+ * Waiting for a code. A code by email can land in a spam folder, so the
+ * form says where to look and whom it comes from. Asking again is offered
+ * only once the first has had time to arrive: a request is counted against
+ * the hourly limits whether or not the email was merely slow, and asking
+ * at once, again and again, would use them up for nothing.
+ */
+
+/** How long after a code is sent asking for another is offered. */
+export const RESEND_AFTER_MS = 30_000
+
+/**
+ * What to look for after a code was sent to `sentTo`: the inbox and the spam
+ * folder, and the address it comes from where the service says. `null` for
+ * a phone number, whose text message needs no such help.
+ */
+export function codeWaitText(
+  w: Wording['signIn'],
+  sentTo: string,
+  channels: SignInChannels | null,
+  fmt: (message: string, values: MessageValues) => string,
+): string | null {
+  if (!sentTo.includes('@')) return null
+  const sender = channels?.codeSender
+  return sender ? fmt(w.checkInbox, { sender }) : w.checkInboxAnySender
+}
+
+/**
+ * Whether asking for another code is offered: [`RESEND_AFTER_MS`] after
+ * `sentAt`, the time the latest code was sent, changes. `null` while none
+ * has been.
+ */
+export function useResendReady(sentAt: number | null): boolean {
+  const [ready, setReady] = useState<number | null>(null)
+  useEffect(() => {
+    if (sentAt === null) return
+    const timer = setTimeout(() => setReady(sentAt), RESEND_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [sentAt])
+  return sentAt !== null && ready === sentAt
 }

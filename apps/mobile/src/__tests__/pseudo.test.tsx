@@ -33,7 +33,8 @@ import {
  *     and the words joining a date to its time;
  *   - each language's own name, in the language picker, and its tag, as
  *     the record says which language a signature's consent was shown in;
- *   - things that are not words: references, ids, hashes, email addresses.
+ *   - things that are not words: references, ids, hashes, email addresses,
+ *     and an invitation link, which is an address.
  */
 
 jest.mock('@yuppers/shared', () => {
@@ -242,6 +243,29 @@ describe('every word on the main mobile screens comes from the wording', () => {
     check();
     await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
     await screen.findByText(w.composer.signIntro);
+    check();
+    expect([...found]).toEqual([]);
+  });
+
+  test('who the invitation is for, then the link, its QR code and waiting for a code', async () => {
+    await open(`/exchanges/${DRAFT}`, true);
+    const field = await screen.findByLabelText(w.invitationLink.forLabel);
+    await fireEvent.changeText(field, 'carla@');
+    await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
+    await screen.findByText(w.invitationLink.forInvalid);
+    check();
+    await fireEvent.changeText(
+      screen.getByLabelText(w.invitationLink.forLabel),
+      'carla@example.test',
+    );
+    await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
+    await screen.findByText(w.composer.signIntro);
+    check();
+    await fireEvent(screen.getByTestId('consent-agree'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('consent-sign'));
+    await screen.findByText(w.invitationLink.intro);
+    await fireEvent.press(screen.getByRole('button', { name: w.invitationLink.shareQr }));
+    screen.getByTestId('qr-code');
     check();
     expect([...found]).toEqual([]);
   });

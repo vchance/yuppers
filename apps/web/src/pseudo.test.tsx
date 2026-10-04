@@ -156,6 +156,32 @@ describe('every word on the main web screens comes from the wording', () => {
     expect(found).toEqual([])
   })
 
+  test('who the invitation is for, then the link and the ways to share it', async () => {
+    const found = await screens(async (check) => {
+      await start(`/exchanges/${DRAFT}`, ana, pseudo)
+      await h1(pseudo.composer.titleFirst)
+      // What is wrong with it, said under it.
+      await until(() => document.body.textContent!.includes(pseudo.invitationLink.forHint), 'the field')
+      await type(field(pseudo.invitationLink.forLabel), 'carla@')
+      await press(button(pseudo.composer.review))
+      await check()
+      await type(field(pseudo.invitationLink.forLabel), 'carla@example.test')
+      await press(button(pseudo.composer.review))
+      await h1(pseudo.composer.signTitle)
+      await check()
+      await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
+      await press(button(pseudo.composer.signAndSend))
+      await until(() => document.body.textContent!.includes(pseudo.invitationLink.intro), 'the link')
+      await check()
+      await press(button(pseudo.invitationLink.share))
+      await press(button(pseudo.invitationLink.shareQr))
+      await until(() => document.querySelector('svg') !== null, 'the QR code')
+      await press(button(pseudo.invitationLink.copy))
+      await check()
+    })
+    expect(found).toEqual([])
+  })
+
   test('the exchange in each state a person meets it in, with its panels open', async () => {
     const found = await screens(async (check) => {
       for (const id of [OFFER, ACTIVE, DISPUTED, AMENDING, COUNTER, ENDED]) {

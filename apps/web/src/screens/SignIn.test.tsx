@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, test } from 'vitest'
+import { act } from 'react'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
+import { CODE_SENDER } from '../test/fake-service'
 import { button, field, press, settle, start, stop, type, until } from '../test/harness'
 
 /*
@@ -91,5 +93,98 @@ describe('signing in where the service sends text messages', () => {
       body: { identifier: '+15551234567' },
     })
     button(w.changeIdentifier)
+  })
+})
+
+describe('waiting for the code', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('says to look in the spam folder too, for an email from the address the service names', async () => {
+    const { wording } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    await type(field(w.identifierLabel), 'ben@example.test')
+    await press(button(w.sendCode))
+    await until(() => hasLabel(w.codeLabel), 'the code field')
+
+    expect(document.body.textContent).toContain(
+      `Check your inbox, and your spam folder, for an email from ${CODE_SENDER}.`,
+    )
+  })
+
+  test('without an address from the service, the folders alone; for a phone number, nothing', async () => {
+    const { wording } = await start('/', null, 'en', (fake) => {
+      fake.codeSender = null
+    })
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    await type(field(w.identifierLabel), 'ben@example.test')
+    await press(button(w.sendCode))
+    await until(() => hasLabel(w.codeLabel), 'the code field')
+    expect(document.body.textContent).toContain(w.checkInboxAnySender)
+    expect(document.body.textContent).not.toContain('an email from')
+
+    await press(button(w.changeIdentifier))
+    await type(field(w.identifierLabel), '+15551234567')
+    await press(button(w.sendCode))
+    await until(() => hasLabel(w.codeLabel), 'the code field')
+    expect(document.body.textContent).not.toContain(w.checkInboxAnySender)
+  })
+
+  test('offers another code only after 30 seconds, then again 30 seconds after that one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wording, service } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    await type(field(w.identifierLabel), 'ben@example.test')
+    await press(button(w.sendCode))
+    await until(() => hasLabel(w.codeLabel), 'the code field')
+    const resend = () =>
+      [...document.querySelectorAll('button')].find((found) => found.textContent === w.resend)
+
+    expect(resend()).toBeUndefined()
+    expect(document.body.textContent).toContain(w.resendSoon)
+    await act(async () => {
+      vi.advanceTimersByTime(29_000)
+    })
+    expect(resend()).toBeUndefined()
+    await act(async () => {
+      vi.advanceTimersByTime(1_000)
+    })
+    expect(resend()).toBeDefined()
+    expect(document.body.textContent).not.toContain(w.resendSoon)
+
+    await press(resend()!)
+    await until(() => document.body.textContent!.includes(w.resent), 'the new code')
+    expect(service.sent.filter((request) => request.call === 'POST /v1/auth/codes')).toHaveLength(2)
+    expect(resend()).toBeUndefined()
+    // The button pressed has gone; the keyboard is back on the code.
+    expect(document.activeElement).toBe(field(w.codeLabel))
+    await act(async () => {
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(resend()).toBeDefined()
+  })
+
+  test('another code over the limit says so, as before', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wording, service } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    await type(field(w.identifierLabel), 'ben@example.test')
+    await press(button(w.sendCode))
+    await until(() => hasLabel(w.codeLabel), 'the code field')
+    await act(async () => {
+      vi.advanceTimersByTime(30_000)
+    })
+    service.refuseCodes = 'TOO_MANY_REQUESTS'
+    await press(button(w.resend))
+    await until(
+      () => document.body.textContent!.includes(wording.errors.TOO_MANY_REQUESTS),
+      'the limit',
+    )
+    expect(document.body.textContent).not.toContain(w.resent)
   })
 })

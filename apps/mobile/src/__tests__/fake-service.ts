@@ -1,4 +1,4 @@
-import type { Account, ExchangeView } from '@yuppers/api-client';
+import type { Account, ErrorCode, ExchangeView } from '@yuppers/api-client';
 import type { RevisionView, Wording } from '@yuppers/shared';
 import { fireEvent, screen } from '@testing-library/react-native';
 
@@ -16,6 +16,10 @@ export const REPAIR = '11111111-1111-4111-8111-111111111111';
 export const PAYMENT = '22222222-2222-4222-8222-222222222222';
 export const TOKEN = 'session-token-from-the-service';
 export const INVITATION = 'a3'.repeat(32);
+/** The token of the invitation the draft's first proposal gets when it is sent. */
+export const SENT_INVITATION = 'c5'.repeat(32);
+/** The address the stand-in says codes come from, unless a test says otherwise. */
+export const CODE_SENDER = 'codes@yuppers.example';
 /** The ID the service gives a device registered for push. */
 export const DEVICE = 'd0000000-0000-4000-8000-000000000001';
 
@@ -114,6 +118,18 @@ function draftExchange(): ExchangeView {
   };
 }
 
+/** The draft once its first proposal is sent: open, with nobody invited yet. */
+function sentExchange(): ExchangeView {
+  const { draft: _draft, ...sent } = draftExchange();
+  return {
+    ...sent,
+    version: 2,
+    state: 'NEGOTIATING',
+    counterparty: 'UNCLAIMED',
+    open_revision: { ...revision, accepted_by: ['A'] },
+  };
+}
+
 export interface Sent {
   method: string;
   path: string;
@@ -142,6 +158,12 @@ export interface FakeService {
   push: boolean;
   /** Whether the service says it can send codes to phone numbers. */
   phone: boolean;
+  /** The address the service says codes come from, if it says. */
+  codeSender: string | null;
+  /** A refusal for every request for a code from now on, such as a limit. */
+  refuseCodes: ErrorCode | null;
+  /** Whether the draft's first proposal has been sent. */
+  proposed: boolean;
   /** The devices registered for push, by ID, with what was registered. */
   devices: Map<string, unknown>;
   fetch: typeof fetch;
@@ -157,6 +179,9 @@ export function fakeService(): FakeService {
     invitation: 'live',
     push: false,
     phone: true,
+    codeSender: CODE_SENDER,
+    refuseCodes: null,
+    proposed: false,
     devices: new Map(),
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -204,10 +229,14 @@ function respond(
         wallet_platforms: ['APPLE', 'GOOGLE'],
         sign_in_channels: service.phone ? ['email', 'phone'] : ['email'],
         sms_country_codes: service.phone ? ['+1'] : [],
+        ...(service.codeSender ? { code_sender: service.codeSender } : {}),
       },
     ];
   }
-  if (call === 'POST /v1/auth/codes') return [204, null];
+  if (call === 'POST /v1/auth/codes') {
+    if (service.refuseCodes) return [429, { code: service.refuseCodes }];
+    return [204, null];
+  }
   if (call === 'POST /v1/auth/sessions') {
     service.account = { ...ana, display_name: '', adult_confirmed: false };
     return [200, { account: service.account, token: TOKEN }];
@@ -285,7 +314,13 @@ function respond(
     ];
   }
   if (call === `GET /v1/exchanges/${EXCHANGE}`) return [200, service.exchange];
-  if (call === `GET /v1/exchanges/${DRAFT}`) return [200, draftExchange()];
+  if (call === `POST /v1/exchanges/${DRAFT}/revisions`) {
+    service.proposed = true;
+    return [200, { exchange: sentExchange(), invitation_token: SENT_INVITATION }];
+  }
+  if (call === `GET /v1/exchanges/${DRAFT}`) {
+    return [200, service.proposed ? sentExchange() : draftExchange()];
+  }
   if (call === `PUT /v1/exchanges/${DRAFT}/draft`) return [204, null];
   if (call === `POST /v1/exchanges/${EXCHANGE}/commands`) {
     const { expected_version, command } = body as {

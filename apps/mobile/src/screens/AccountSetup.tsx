@@ -1,5 +1,6 @@
 import type { Account, ErrorCode } from '@yuppers/api-client';
 import {
+  codeWaitText,
   failureCode,
   identifierRefused,
   isComplete,
@@ -7,6 +8,7 @@ import {
   phoneOffered,
   pickLanguage,
   signInText,
+  useResendReady,
   useSignInChannels,
   type Language,
 } from '@yuppers/shared';
@@ -21,6 +23,7 @@ import {
   ErrorNote,
   Failure,
   Heading,
+  Hint,
   Notice,
   P,
   Screen,
@@ -106,6 +109,10 @@ export function Gate({ children, signedOut }: { children: ReactNode; signedOut?:
  * request for a code the same way whether or not an account exists, and so
  * does this form. A phone number is asked for only where the service can
  * text it (`GET /v1/meta`); elsewhere one typed anyway is stopped here.
+ *
+ * While the code is on its way, the form says to look in the spam folder
+ * too, for an email from the address the service names, and offers another
+ * code only half a minute after the last (`useResendReady`).
  */
 function SignIn() {
   const { wording, fmt, language, setLanguage } = useI18n();
@@ -118,6 +125,9 @@ function SignIn() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [resent, setResent] = useState(false);
+  // When the latest code was sent, for offering another a while after.
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const resendReady = useResendReady(sentAt);
   // Said under the field, before or instead of what the service answered.
   const [problem, setProblem] = useState<string | null>(null);
   const channels = useSignInChannels(api);
@@ -142,7 +152,11 @@ function SignIn() {
     try {
       await api.requestCode(to);
       setSentTo(to);
+      setSentAt(Date.now());
       setResent(again);
+      // The button pressed goes away until another code may be asked for;
+      // the keyboard goes back to the code.
+      if (again) codeInput.current?.focus();
     } catch (error) {
       const code = failureCode(error);
       // The service's words for this one mention phone numbers.
@@ -209,9 +223,11 @@ function SignIn() {
     );
   }
 
+  const wait = codeWaitText(w, sentTo, channels, fmt);
   return (
     <>
       <P>{fmt(w.codeSent, { identifier: sentTo })}</P>
+      {wait ? <P>{wait}</P> : null}
       <TextField
         input={codeInput}
         label={w.codeLabel}
@@ -228,9 +244,12 @@ function SignIn() {
       />
       <Failure code={failure} />
       {resent && <Notice>{w.resent}</Notice>}
+      {resendReady ? null : <Hint>{w.resendSoon}</Hint>}
       <Actions>
         <Button variant="primary" label={w.submit} disabled={busy} onPress={() => void signIn()} />
-        <Button label={w.resend} disabled={busy} onPress={() => void requestCode(sentTo, true)} />
+        {resendReady && (
+          <Button label={w.resend} disabled={busy} onPress={() => void requestCode(sentTo, true)} />
+        )}
       </Actions>
       <Actions>
         <Button
@@ -239,6 +258,7 @@ function SignIn() {
           disabled={busy}
           onPress={() => {
             setSentTo(null);
+            setSentAt(null);
             setCode('');
             setFailure(null);
             setProblem(null);

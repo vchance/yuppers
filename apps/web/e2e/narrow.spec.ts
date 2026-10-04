@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 import { expect, test } from './support/fixtures'
 import { confirmClaimant, propose, signIn, signUp, stateTag } from './support/flows'
-import { es } from './support/wording'
+import { es, fill } from './support/wording'
 
 /*
  * The main screens in Spanish, which runs longer than English, in a window
@@ -138,6 +138,31 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   await check('the composer')
   await page.getByRole('button', { name: es.composer.review, exact: true }).click()
   await check('the composer, with what needs fixing')
+
+  // Who it is for, the signing step, then the link and the ways to share it.
+  for (const [number, description] of [
+    [1, 'Una silla'],
+    [2, 'Una lámpara'],
+  ] as const) {
+    await page
+      .getByRole('group', { name: fill(es.composer.itemLegend, { number }), exact: true })
+      .getByLabel(es.composer.descriptionLabel)
+      .fill(description)
+  }
+  await page.getByLabel(es.invitationLink.forLabel, { exact: true }).fill('ana@example.test')
+  await page.getByRole('button', { name: es.composer.review, exact: true }).click()
+  await expect(page.getByRole('heading', { name: es.composer.signTitle, level: 1 })).toBeVisible()
+  await check('the signing step')
+  await page.getByLabel(es.consent.agree).check()
+  await page.getByRole('button', { name: es.composer.signAndSend, exact: true }).click()
+  await expect(page.getByLabel(es.invitationLink.linkLabel, { exact: true })).toHaveValue(
+    /\/es\/i#/,
+  )
+  await check('the invitation link')
+  await page.getByRole('button', { name: es.invitationLink.share, exact: true }).click()
+  await page.getByRole('button', { name: es.invitationLink.shareQr, exact: true }).click()
+  await expect(page.getByRole('img', { name: es.invitationLink.qrLabel })).toBeVisible()
+  await check('the ways to share the link, with its QR code')
 
   // Help: the list of topics, and the longest topic with its contents.
   await page.goto('/help')

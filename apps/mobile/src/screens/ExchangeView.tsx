@@ -1,5 +1,7 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
+  boundToProblem,
+  boundToProblemText,
   consentShown,
   failureCode,
   isUnconfirmedClaimant,
@@ -12,6 +14,7 @@ import {
   troubleSituationOf,
   useActions,
   useHistory,
+  useSignInChannels,
   type Actions as ExchangeActions,
   type ClosedReason,
   type RevisionView,
@@ -383,13 +386,18 @@ interface ReissueProps {
 }
 
 function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
-  const { wording } = useI18n();
+  const { wording, fmt } = useI18n();
   const link = wording.invitationLink;
   const [boundTo, setBoundTo] = useState('');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
+  const [checked, setChecked] = useState(false);
+  const channels = useSignInChannels(api);
+  const problem = checked ? boundToProblem(boundTo, channels) : null;
 
   async function submit() {
+    setChecked(true);
+    if (boundToProblem(boundTo, channels)) return;
     setBusy(true);
     setFailure(null);
     try {
@@ -407,7 +415,12 @@ function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
 
   return (
     <Panel title={link.reissue}>
-      <InvitationFor value={boundTo} onChange={setBoundTo} />
+      <InvitationFor
+        value={boundTo}
+        onChange={setBoundTo}
+        channels={channels}
+        error={problem ? boundToProblemText(problem, link, channels, fmt) : null}
+      />
       <Failure code={failure} />
       <Actions>
         <Button

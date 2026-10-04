@@ -445,6 +445,55 @@ async fn the_service_says_which_identifiers_it_can_send_codes_to() {
     );
 }
 
+#[tokio::test]
+async fn the_service_names_the_address_codes_come_from_where_it_has_one() {
+    let _turn = TURN.lock().await;
+    let sender = |app: App| async move {
+        let meta = app
+            .call(None, Method::GET, "/v1/meta", None, &[])
+            .await
+            .ok();
+        meta.as_object().unwrap().get("code_sender").cloned()
+    };
+    let named = Arc::new(
+        SmtpSender::new(
+            SmtpSettings {
+                host: "127.0.0.1".to_owned(),
+                port: 9,
+                tls: TlsMode::None,
+                credentials: None,
+                from: "Yuppers <No-Reply@example.test>".to_owned(),
+                timeout: Duration::from_secs(1),
+            },
+            Wording::embedded().unwrap(),
+        )
+        .unwrap(),
+    );
+
+    // CODE_DELIVERY=smtp: the From address, and only its address, not the
+    // display name in front of it.
+    assert_eq!(
+        sender(open(50, smtp()).await).await,
+        Some(json!("no-reply@example.test"))
+    );
+    assert_eq!(
+        sender(open(50, named.clone()).await).await,
+        Some(json!("No-Reply@example.test"))
+    );
+    // With SMS on too, codes for email addresses still come from it.
+    let routed: Arc<dyn CodeSender> = Arc::new(CodeRouter::new(
+        named,
+        Arc::new(LogSmsSender),
+        Wording::embedded().unwrap(),
+    ));
+    assert_eq!(
+        sender(open(50, routed).await).await,
+        Some(json!("No-Reply@example.test"))
+    );
+    // CODE_DELIVERY=log: no address to name, so the field is left out.
+    assert_eq!(sender(open(50, Arc::new(LogSender)).await).await, None);
+}
+
 // ---- Twilio, against a stand-in ---------------------------------------------
 
 /// One request the stand-in received.

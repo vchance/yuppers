@@ -1,4 +1,5 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
+import type { IssuedInvitation } from '@yuppers/shared'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 
 import { useI18n } from '../app/context'
@@ -23,7 +24,7 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   // The invitation token, held only while this page stays open: it is shown
   // once and cannot be fetched again.
-  const [issued, setIssued] = useState<string | null>(null)
+  const [issued, setIssued] = useState<IssuedInvitation | null>(null)
 
   const reload = useCallback(async () => {
     try {
@@ -65,9 +66,9 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
     )
   }
 
-  function sent(result: RevisionSent) {
+  function sent(result: RevisionSent, boundTo: string | null) {
     setExchange(result.exchange)
-    setIssued(result.invitation_token ?? null)
+    setIssued(result.invitation_token ? { token: result.invitation_token, boundTo } : null)
     // Back to the exchange, from the top: the first thing there after a
     // first proposal is the invitation link.
     navigate(paths.exchange(id), { replace: true })

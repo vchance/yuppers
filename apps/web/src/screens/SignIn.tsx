@@ -1,5 +1,12 @@
 import type { ErrorCode } from '@yuppers/api-client'
-import { identifierRefused, phoneOffered, signInText, useSignInChannels } from '@yuppers/shared'
+import {
+  codeWaitText,
+  identifierRefused,
+  phoneOffered,
+  signInText,
+  useResendReady,
+  useSignInChannels,
+} from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -12,6 +19,10 @@ import { api, failureCode } from '../lib/api'
  * request for a code the same way whether or not an account exists, and so
  * does this form. A phone number is asked for only where the service can
  * text it (`GET /v1/meta`); elsewhere one typed anyway is stopped here.
+ *
+ * While the code is on its way, the form says to look in the spam folder
+ * too, for an email from the address the service names, and offers another
+ * code only half a minute after the last (`useResendReady`).
  */
 export function SignIn() {
   const { wording, fmt, language } = useI18n()
@@ -24,6 +35,9 @@ export function SignIn() {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [resent, setResent] = useState(false)
+  // When the latest code was sent, for offering another a while after.
+  const [sentAt, setSentAt] = useState<number | null>(null)
+  const resendReady = useResendReady(sentAt)
   // Said under the field, before or instead of what the service answered.
   const [problem, setProblem] = useState<string | null>(null)
   const channels = useSignInChannels(api)
@@ -55,7 +69,11 @@ export function SignIn() {
     try {
       await api.requestCode(to)
       setSentTo(to)
+      setSentAt(Date.now())
       setResent(again)
+      // The button pressed goes away until another code may be asked for;
+      // the keyboard goes back to the code rather than to the top.
+      if (again) codeInput.current?.focus()
     } catch (error) {
       const code = failureCode(error)
       // The service's words for this one mention phone numbers.
@@ -135,9 +153,11 @@ export function SignIn() {
     )
   }
 
+  const wait = codeWaitText(w, sentTo, channels, fmt)
   return (
     <form key="code" noValidate onSubmit={signIn}>
       <p>{fmt(w.codeSent, { identifier: sentTo })}</p>
+      {wait && <p>{wait}</p>}
       <Field label={w.codeLabel} hint={w.codeHint} required problem={failure ? failureId : null}>
         {(control) => (
           <input
@@ -155,13 +175,16 @@ export function SignIn() {
       </Field>
       <Failure code={failure} id={failureId} />
       {resent && <Notice>{w.resent}</Notice>}
+      {!resendReady && <p className="hint">{w.resendSoon}</p>}
       <div className="actions">
         <button type="submit" className="primary" disabled={busy}>
           {w.submit}
         </button>
-        <button type="button" disabled={busy} onClick={() => void requestCode(sentTo, true)}>
-          {w.resend}
-        </button>
+        {resendReady && (
+          <button type="button" disabled={busy} onClick={() => void requestCode(sentTo, true)}>
+            {w.resend}
+          </button>
+        )}
         <button
           type="button"
           className="link"
@@ -169,6 +192,7 @@ export function SignIn() {
           onClick={() => {
             changing.current = true
             setSentTo(null)
+            setSentAt(null)
             setCode('')
             setFailure(null)
             setProblem(null)

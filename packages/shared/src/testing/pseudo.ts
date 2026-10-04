@@ -149,6 +149,7 @@ export function formattedWords(language: string, timeZones: readonly string[] = 
 
 /** Things that are not words in any language: hashes, ids, references, addresses. */
 const NOT_WORDS = [
+  /\bhttps?:\/\/\S+\/i#[\w-]+/g, // an invitation link, `{origin}/{language}/i#{token}`
   /\b[0-9a-f]{64}\b/g, // a content hash
   /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/g, // an id
   /\b[A-Z0-9]{2,4}-[A-Z0-9]{4}\b/g, // an exchange's reference, such as PVVS-5Q2K

@@ -1,5 +1,7 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
 import {
+  boundToProblem,
+  boundToProblemText,
   consentShown,
   isInvitationSpent,
   isUnconfirmedClaimant,
@@ -10,9 +12,11 @@ import {
   troublePanel,
   troubleSituationOf,
   useHistory,
+  useSignInChannels,
   type ClosedReason,
+  type IssuedInvitation,
 } from '@yuppers/shared'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
@@ -41,9 +45,9 @@ const CHECK_EVERY_MS = 20_000
 
 interface Props {
   exchange: Exchange
-  /** A just-issued invitation token, to show once. */
-  issued: string | null
-  onIssued(token: string | null): void
+  /** A just-issued invitation, to show once. */
+  issued: IssuedInvitation | null
+  onIssued(issued: IssuedInvitation | null): void
   onChange(exchange: Exchange): void
   reload(): Promise<Exchange | null>
 }
@@ -280,8 +284,8 @@ interface CounterpartyProps {
   exchange: Exchange
   otherName: string
   actions: Actions
-  issued: string | null
-  onIssued(token: string | null): void
+  issued: IssuedInvitation | null
+  onIssued(issued: IssuedInvitation | null): void
   reload(): Promise<Exchange | null>
 }
 
@@ -318,7 +322,7 @@ function Counterparty({
         <h2 id="invitation-heading">{link.heading}</h2>
         {removed && !issued && <Notice>{wording.claimant.rejected}</Notice>}
         {issued ? (
-          <InvitationLink key={issued} token={issued} />
+          <InvitationLink key={issued.token} token={issued.token} boundTo={issued.boundTo} />
         ) : (
           <p>{spent ? wording.claimant.linkUsed : link.unclaimed}</p>
         )}
@@ -363,23 +367,33 @@ function Counterparty({
 interface ReissueProps {
   exchange: string
   actions: Actions
-  onIssued(token: string | null): void
+  onIssued(issued: IssuedInvitation | null): void
   reload(): Promise<Exchange | null>
 }
 
 function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
-  const { wording } = useI18n()
+  const { wording, fmt } = useI18n()
   const link = wording.invitationLink
+  const forId = useId()
   const [boundTo, setBoundTo] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
+  const [checked, setChecked] = useState(false)
+  const channels = useSignInChannels(api)
+  const problem = checked ? boundToProblem(boundTo, channels) : null
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    setChecked(true)
+    if (boundToProblem(boundTo, channels)) {
+      window.setTimeout(() => document.getElementById(forId)?.focus())
+      return
+    }
     setBusy(true)
     setFailure(null)
+    const bound = boundTo.trim() || null
     try {
-      onIssued(await api.reissueInvitation(exchange, boundTo.trim() || null))
+      onIssued({ token: await api.reissueInvitation(exchange, bound), boundTo: bound })
       actions.close()
     } catch (error) {
       const code = failureCode(error)
@@ -394,7 +408,13 @@ function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
   return (
     <Panel title={link.reissue}>
       <form noValidate onSubmit={submit}>
-        <InvitationFor value={boundTo} onChange={setBoundTo} />
+        <InvitationFor
+          value={boundTo}
+          onChange={setBoundTo}
+          channels={channels}
+          id={forId}
+          error={problem ? boundToProblemText(problem, link, channels, fmt) : null}
+        />
         <Failure code={failure} />
         <div className="actions">
           <button type="submit" className="primary" disabled={busy}>

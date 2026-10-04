@@ -23,7 +23,7 @@ use crate::http::{AppLinks, TrustedProxies};
 use crate::notifications::expo::{EXPO_ORIGIN, ExpoPushSender};
 use crate::notifications::push::{LogPushSender, PushSender};
 use crate::notifications::sms::{
-    CodeRouter, LogSmsSender, SmsSender, TWILIO_ORIGIN, TwilioSmsSender,
+    CodeRouter, LogSmsSender, SmsSender, TWILIO_ORIGIN, TwilioCredential, TwilioSmsSender,
 };
 use crate::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use crate::notifications::wording::Wording;
@@ -173,8 +173,7 @@ fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
         "off" => Ok(None),
         "log" => Ok(Some(Arc::new(LogSmsSender))),
         "twilio" => {
-            let account_sid = required(get, "SMS_ACCOUNT_SID")?.trim().to_owned();
-            let auth_token = Secret::new(required(get, "SMS_AUTH_TOKEN")?.trim().to_owned());
+            let (account_sid, credential) = twilio_account(get)?;
             let from = required(get, "SMS_FROM")?.trim().to_owned();
             let number = matches!(Identifier::parse(&from), Ok(Identifier::Phone(_)));
             if !number && !from.starts_with("MG") {
@@ -186,13 +185,66 @@ fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
             Ok(Some(Arc::new(TwilioSmsSender::new(
                 TWILIO_ORIGIN,
                 account_sid,
-                auth_token,
+                credential,
                 from,
                 SMS_TIMEOUT,
             ))))
         }
         other => bail!("SMS_DELIVERY={other} is not supported; use `off`, `log` or `twilio`"),
     }
+}
+
+/// Whether `value` is a Twilio SID of the kind `prefix` names: the prefix
+/// and 32 hexadecimal digits.
+fn is_twilio_sid(value: &str, prefix: &str) -> bool {
+    value.len() == 34
+        && value.starts_with(prefix)
+        && value[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// The Twilio account (`SMS_ACCOUNT_SID`) and exactly one credential for
+/// it: an API key (`SMS_API_KEY_SID` and `SMS_API_KEY_SECRET`, recommended)
+/// or the account's auth token (`SMS_AUTH_TOKEN`). The secrets are read into
+/// a type that cannot be printed, and no message here quotes a value, so a
+/// secret pasted into the wrong setting is not written to the log either.
+fn twilio_account(get: Lookup<'_>) -> anyhow::Result<(String, TwilioCredential)> {
+    let account_sid = required(get, "SMS_ACCOUNT_SID")?.trim().to_owned();
+    if !is_twilio_sid(&account_sid, "AC") {
+        bail!(
+            "SMS_ACCOUNT_SID is not an account SID: AC followed by 32 hexadecimal digits, \
+             as Twilio's console shows it"
+        );
+    }
+    let token = optional(get, "SMS_AUTH_TOKEN");
+    let key_sid = optional(get, "SMS_API_KEY_SID");
+    let key_secret = optional(get, "SMS_API_KEY_SECRET");
+    let credential = match (token, key_sid, key_secret) {
+        (Some(token), None, None) => {
+            TwilioCredential::AuthToken(Secret::new(token.trim().to_owned()))
+        }
+        (None, Some(sid), Some(secret)) => {
+            let sid = sid.trim().to_owned();
+            if !is_twilio_sid(&sid, "SK") {
+                bail!(
+                    "SMS_API_KEY_SID is not an API key SID: SK followed by 32 hexadecimal \
+                     digits, as Twilio shows it when the key is created"
+                );
+            }
+            TwilioCredential::ApiKey {
+                sid,
+                secret: Secret::new(secret.trim().to_owned()),
+            }
+        }
+        (None, None, None) => bail!(
+            "SMS_DELIVERY=twilio needs a credential: SMS_API_KEY_SID and SMS_API_KEY_SECRET \
+             (recommended), or SMS_AUTH_TOKEN"
+        ),
+        (Some(_), _, _) => {
+            bail!("set either SMS_AUTH_TOKEN or SMS_API_KEY_SID and SMS_API_KEY_SECRET, not both")
+        }
+        (None, _, _) => bail!("SMS_API_KEY_SID and SMS_API_KEY_SECRET must be set together"),
+    };
+    Ok((account_sid, credential))
 }
 
 /// How push notifications are sent, from `PUSH_DELIVERY`. Default off.
@@ -808,7 +860,7 @@ mod tests {
 
         let twilio = [
             ("SMS_DELIVERY", "twilio"),
-            ("SMS_ACCOUNT_SID", "AC0123"),
+            ("SMS_ACCOUNT_SID", ACCOUNT_SID),
             ("SMS_AUTH_TOKEN", "hunter2-sms"),
             ("SMS_FROM", "+15550000000"),
         ];
@@ -829,6 +881,103 @@ mod tests {
         );
     }
 
+    /// Obviously fake SIDs of the right shape.
+    const ACCOUNT_SID: &str = "AC00000000000000000000000000000000";
+    const KEY_SID: &str = "SK00000000000000000000000000000000";
+
+    #[test]
+    fn twilio_takes_exactly_one_credential_an_api_key_or_the_auth_token() {
+        let read = |pairs: &[(&str, &str)]| {
+            let pairs = [&[("SMS_ACCOUNT_SID", ACCOUNT_SID)][..], pairs].concat();
+            twilio_account(&lookup(&table(&pairs)))
+        };
+        let refused = |pairs: &[(&str, &str)], says: &str| {
+            let error = format!("{:#}", read(pairs).expect_err("refused"));
+            assert!(error.contains(says), "{says} in {error}");
+            for secret in ["hunter2-token", "hunter2-key"] {
+                assert!(!error.contains(secret), "{error}");
+            }
+        };
+        let token = ("SMS_AUTH_TOKEN", "hunter2-token");
+        let key_sid = ("SMS_API_KEY_SID", KEY_SID);
+        let key_secret = ("SMS_API_KEY_SECRET", "hunter2-key");
+
+        // The API key.
+        let (account, credential) = read(&[key_sid, key_secret]).unwrap();
+        assert_eq!(account, ACCOUNT_SID);
+        assert_eq!(
+            credential,
+            TwilioCredential::ApiKey {
+                sid: KEY_SID.to_owned(),
+                secret: Secret::new("hunter2-key".to_owned()),
+            }
+        );
+        assert!(!format!("{credential:?}").contains("hunter2-key"));
+        // The auth token.
+        let (_, credential) = read(&[token]).unwrap();
+        assert_eq!(
+            credential,
+            TwilioCredential::AuthToken(Secret::new("hunter2-token".to_owned()))
+        );
+        assert!(!format!("{credential:?}").contains("hunter2-token"));
+        // A setting left empty in .env counts as unset.
+        assert!(read(&[("SMS_AUTH_TOKEN", ""), key_sid, key_secret]).is_ok());
+
+        // Neither, both, or half a key.
+        refused(&[], "needs a credential");
+        refused(&[token, key_sid, key_secret], "not both");
+        refused(&[token, key_sid], "not both");
+        refused(&[token, key_secret], "not both");
+        refused(&[key_sid], "must be set together");
+        refused(&[key_secret], "must be set together");
+
+        // SIDs of the wrong shape, including each in the other's place.
+        let short = "SK0000000000000000000000000000000";
+        let not_hex = "SK0000000000000000000000000000000g";
+        for wrong in [ACCOUNT_SID, short, not_hex, "hunter2-key"] {
+            refused(
+                &[("SMS_API_KEY_SID", wrong), key_secret],
+                "SMS_API_KEY_SID is not an API key SID",
+            );
+        }
+        for wrong in [
+            KEY_SID,
+            "AC0123",
+            "AC0000000000000000000000000000000x",
+            "hunter2-token",
+        ] {
+            let pairs = table(&[("SMS_ACCOUNT_SID", wrong), token]);
+            let error = format!("{:#}", twilio_account(&lookup(&pairs)).unwrap_err());
+            assert!(
+                error.contains("SMS_ACCOUNT_SID is not an account SID"),
+                "{error}"
+            );
+            assert!(!error.contains("hunter2-token"), "{error}");
+        }
+        assert!(
+            twilio_account(&lookup(&table(&[token])))
+                .unwrap_err()
+                .to_string()
+                .contains("SMS_ACCOUNT_SID is not set")
+        );
+        // Upper-case hexadecimal digits are as good.
+        let upper = "ACABCDEF0123456789ABCDEF0123456789";
+        let pairs = table(&[("SMS_ACCOUNT_SID", upper), token]);
+        assert_eq!(twilio_account(&lookup(&pairs)).unwrap().0, upper);
+    }
+
+    #[test]
+    fn sms_delivery_by_twilio_starts_with_an_api_key() {
+        let pairs = table(&[
+            ("SMS_DELIVERY", "twilio"),
+            ("SMS_ACCOUNT_SID", ACCOUNT_SID),
+            ("SMS_API_KEY_SID", KEY_SID),
+            ("SMS_API_KEY_SECRET", "hunter2-key"),
+            ("SMS_FROM", "+15550000000"),
+        ]);
+        assert!(sms_sender(&lookup(&pairs)).unwrap().is_some());
+    }
+
     #[test]
     fn codes_for_phone_numbers_go_by_sms_only_when_it_is_on() {
         let phone = Identifier::parse("+15551234567").unwrap();
@@ -847,8 +996,9 @@ mod tests {
         use crate::auth::{SignInChannel::*, sign_in_channels};
         const TWILIO: &[(&str, &str)] = &[
             ("SMS_DELIVERY", "twilio"),
-            ("SMS_ACCOUNT_SID", "AC0123"),
-            ("SMS_AUTH_TOKEN", "hunter2-sms"),
+            ("SMS_ACCOUNT_SID", ACCOUNT_SID),
+            ("SMS_API_KEY_SID", KEY_SID),
+            ("SMS_API_KEY_SECRET", "hunter2-sms"),
             ("SMS_FROM", "+15550000000"),
         ];
         let channels = |codes: &str, sms: &[(&str, &str)]| {

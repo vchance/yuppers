@@ -121,14 +121,25 @@ impl SmsSender for LogSmsSender {
 /// Where Twilio's REST API is.
 pub const TWILIO_ORIGIN: &str = "https://api.twilio.com";
 
-/// Sends through Twilio's Messages API: one POST per message, with the
-/// account's SID and auth token as HTTP Basic credentials. Other providers'
-/// APIs are much the same shape and would be another [`SmsSender`].
+/// How the sender proves it may use the account: HTTP Basic, with either
+/// pair Twilio takes. The URL names the account (`AC…`) either way.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TwilioCredential {
+    /// The account's own auth token, with the account SID as the username.
+    AuthToken(Secret),
+    /// An API key (`SK…`) and its secret: the recommended way, since a key
+    /// can be revoked without touching the account or its other keys.
+    ApiKey { sid: String, secret: Secret },
+}
+
+/// Sends through Twilio's Messages API: one POST per message, with a
+/// [`TwilioCredential`] as HTTP Basic credentials. Other providers' APIs are
+/// much the same shape and would be another [`SmsSender`].
 pub struct TwilioSmsSender {
     client: Client,
     origin: String,
     account_sid: String,
-    auth_token: Secret,
+    credential: TwilioCredential,
     /// A number of the account's in E.164 form, or the SID of a Messaging
     /// Service (`MG…`), which picks the number itself.
     from: String,
@@ -140,7 +151,7 @@ impl TwilioSmsSender {
     pub fn new(
         origin: &str,
         account_sid: String,
-        auth_token: Secret,
+        credential: TwilioCredential,
         from: String,
         timeout: Duration,
     ) -> Self {
@@ -148,7 +159,7 @@ impl TwilioSmsSender {
             client: Client::new(timeout),
             origin: origin.trim_end_matches('/').to_owned(),
             account_sid,
-            auth_token,
+            credential,
             from,
         }
     }
@@ -159,11 +170,12 @@ impl TwilioSmsSender {
     }
 
     fn headers(&self) -> Vec<(HeaderName, HeaderValue)> {
-        let credentials = base64::engine::general_purpose::STANDARD.encode(format!(
-            "{}:{}",
-            self.account_sid,
-            self.auth_token.expose()
-        ));
+        let (username, password) = match &self.credential {
+            TwilioCredential::AuthToken(token) => (self.account_sid.as_str(), token),
+            TwilioCredential::ApiKey { sid, secret } => (sid.as_str(), secret),
+        };
+        let credentials = base64::engine::general_purpose::STANDARD
+            .encode(format!("{username}:{}", password.expose()));
         let mut authorization = HeaderValue::from_str(&format!("Basic {credentials}"))
             .expect("base64 is a valid header value");
         authorization.set_sensitive(true);
@@ -374,7 +386,7 @@ mod tests {
             TwilioSmsSender::new(
                 TWILIO_ORIGIN,
                 "AC123".to_owned(),
-                Secret::new("token".to_owned()),
+                TwilioCredential::AuthToken(Secret::new("token".to_owned())),
                 from.to_owned(),
                 Duration::from_secs(1),
             )
@@ -401,5 +413,32 @@ mod tests {
         // base64 of "AC123:token".
         assert_eq!(authorization.to_str().unwrap(), "Basic QUMxMjM6dG9rZW4=");
         assert!(authorization.is_sensitive());
+    }
+
+    #[test]
+    fn an_api_key_signs_the_request_and_the_account_is_still_in_the_path() {
+        let sender = TwilioSmsSender::new(
+            TWILIO_ORIGIN,
+            "AC123".to_owned(),
+            TwilioCredential::ApiKey {
+                sid: "SK456".to_owned(),
+                secret: Secret::new("key-secret".to_owned()),
+            },
+            "+15550000000".to_owned(),
+            Duration::from_secs(1),
+        );
+        assert_eq!(
+            sender.url(),
+            "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json"
+        );
+        let headers = sender.headers();
+        let (_, authorization) = &headers[0];
+        // base64 of "SK456:key-secret".
+        assert_eq!(
+            authorization.to_str().unwrap(),
+            "Basic U0s0NTY6a2V5LXNlY3JldA=="
+        );
+        assert!(authorization.is_sensitive());
+        assert!(!format!("{:?}", sender.credential).contains("key-secret"));
     }
 }

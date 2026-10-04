@@ -12,7 +12,7 @@ Render's documentation and prices were read on **2026-10-03**; both change, so c
 | `yuppers-worker` | Background worker, the same `Dockerfile` | `/usr/local/bin/worker`; before each deploy, `/usr/local/bin/migrate` too | `0.5c-512mb`, one instance |
 | `yuppers-db` | PostgreSQL **17** | Database `yuppers`, owner user `exchange`; internal connections only | `0.1c-256mb`, 5 GB disk |
 | `yuppers-settings` | Environment group | The plain settings shared by both services | |
-| `yuppers-secrets` | Environment group | `SMTP_USERNAME` and `SMTP_PASSWORD` (asked for), `APP_DB_PASSWORD` (generated) | |
+| `yuppers-secrets` | Environment group | `SMTP_USERNAME` and `SMTP_PASSWORD` (asked for), `APP_DB_PASSWORD` (generated), and for text messages `SMS_ACCOUNT_SID`, `SMS_API_KEY_SID` and `SMS_API_KEY_SECRET` (entered by hand; "Text messages") | |
 
 Everything is in `virginia` (US East). Render's regions are `oregon`, `ohio`, `virginia`, `frankfurt` and `singapore`, and services reach each other and the database privately only within one region ([Blueprint spec](https://render.com/docs/blueprint-spec), [private network](https://render.com/docs/private-network)). Render currently offers PostgreSQL 13 to 18 for new databases; the version cannot be changed after creation, so it is pinned to 17, the version the code, CI and the backup scripts use ([creating and connecting](https://render.com/docs/postgresql-creating-connecting)).
 
@@ -26,8 +26,10 @@ Everything is in `virginia` (US East). Render's regions are `oregon`, `ohio`, `v
 | `SMTP_FROM` | `Yuppers <no-reply@yuppers.app>` (confirm the address) | group |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Postmark's Server API token, both | group `yuppers-secrets`, entered in the dashboard |
 | `TRUSTED_PROXY_HEADER`, `TRUSTED_PROXIES` | `CF-Connecting-IP`, `1` ("Client addresses" below) | group |
-| `SMS_DELIVERY`, `PUSH_DELIVERY` | `off` | group |
+| `SMS_DELIVERY`, `PUSH_DELIVERY` | `off` (`SMS_DELIVERY=twilio` once Twilio approves the campaign; "Text messages") | group |
 | `SMS_ALLOWED_COUNTRY_CODES` | `+1` | group |
+| `SMS_ACCOUNT_SID`, `SMS_API_KEY_SID`, `SMS_API_KEY_SECRET` | Twilio's account SID and a standard API key with its secret; unused while SMS is off | group `yuppers-secrets`, entered in the dashboard by hand |
+| `SMS_FROM` | the Twilio number, `+1...`; unset while SMS is off | group, once SMS is on |
 | `LOG_FORMAT`, `RUST_LOG` | `json`, `info` | group |
 | Wallet settings | none, so passes are off | |
 | `METRICS_ADDR` | unset ("Metrics" below) | |
@@ -144,6 +146,33 @@ docker run --rm -e MIGRATION_DATABASE_URL='<external URL>?sslmode=require' yuppe
 - [ ] The worker's logs show `worker started`, its own `build` line, and `timers ran` about every minute. Two test accounts making a yup each get the notification email within seconds.
 - [ ] `render jobs create srv-... --start-command "/usr/local/bin/staff list"` lists you.
 
+## Text messages
+
+Sign-in codes by SMS are off (`SMS_DELIVERY=off`) until Twilio has approved the messaging campaign: US carriers block or filter texts from a local number that is not registered for A2P 10DLC. The service needs only one number and sends only codes, so a **Sole Proprietor** registration fits (no business tax ID, one number per campaign). [operations.md](operations.md), "Codes by text message", says what the settings do. Twilio's pages read for this on **2026-10-04**: [Sole Proprietor registration](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/direct-sole-proprietor-registration-overview), [geo permissions](https://www.twilio.com/docs/messaging/guides/sms-geo-permissions), [API keys](https://www.twilio.com/docs/iam/api-keys), [requests to Twilio](https://www.twilio.com/docs/usage/requests-to-twilio).
+
+In Twilio's console:
+
+1. **Upgrade the account from trial** (add a payment method). A trial account texts only verified numbers.
+2. **Buy a local number** able to send SMS (Phone Numbers → Buy a number, United States).
+3. **Register a Sole Proprietor brand** (Messaging → Regulatory Compliance): first the Starter Profile with your name, email and US address, then the brand, which texts a one-time code to your own mobile number; answer it within 24 hours.
+4. **Create the campaign** with the number. A Sole Proprietor brand offers a single use case, "Sole Proprietor", so the description has to say it is two-factor sign-in codes. Twilio links the campaign to a Messaging Service and adds the number to it as the sender; keep Twilio's default opt-out and help keywords (STOP, HELP). Suggested text:
+   - **Description**: "One-time sign-in codes for Yuppers (yuppers.app), sent only when the user types their phone number on the sign-in page."
+   - **How users opt in**: "The user enters their own phone number on yuppers.app's sign-in screen and asks for a code. We only text that number, only with a code, only in reply to that request."
+   - **Sample messages**, exactly as the service sends them (`backend/src/notifications/sms.rs` tests them):
+     - "123456 is your Yuppers sign-in code. Do not share it with anyone."
+     - "123456 es tu código de Yuppers para entrar. No se lo des a nadie."
+
+   Vetting is manual and can take weeks; resubmitting after a refusal costs a further fee.
+5. **Geographic permissions** (Messaging → Settings → Geo permissions): the **United States only**; untick everything else, Canada included, unless it is served. Keep `SMS_ALLOWED_COUNTRY_CODES=+1` in Render: it is the service's own check, and the geo permissions keep out the rest of `+1`.
+6. **Create a standard API key** (the **API keys & tokens** page) and copy its SID (`SK...`) and secret; the secret is shown once. A key can be revoked without touching the account, which is why it is preferred to the auth token. Copy the **Account SID** (`AC...`) from the same page.
+
+Then in Render, once the campaign is approved:
+
+1. **Environment Groups → `yuppers-secrets`**: add `SMS_ACCOUNT_SID`, `SMS_API_KEY_SID` and `SMS_API_KEY_SECRET`. `render.yaml` lists them, but Render does not prompt for a `sync: false` value in an environment group, or for one added to a Blueprint already applied ([Blueprint spec](https://render.com/docs/blueprint-spec)), so enter them by hand. Leave `SMS_AUTH_TOKEN` unset: the api refuses to start with both kinds of credential.
+2. **`yuppers-settings`**: `SMS_FROM` = the number, `+1...` (or the Messaging Service's `MG...` SID), and `SMS_DELIVERY=twilio`. Change `SMS_DELIVERY` in `render.yaml` too, or the next Blueprint sync sets it back to `off`.
+3. The api restarts with the new settings. If one is missing or malformed, it stops at start and its log names the setting (never the secret); the old instance keeps serving.
+4. **Check**: `curl -s https://yuppers.app/v1/meta` lists `"phone"` in `sign_in_channels`; ask for a code for your own phone; it arrives in one message; Twilio's Messaging logs show it delivered.
+
 ## Client addresses
 
 Each signature records the requester's address, and the sign-in limits count by it (`DESIGN.md` §8), so the service must read the real one. Every request to a Render web service passes through Cloudflare, which "writes [`CF-Connecting-IP`] on every request that reaches a Render web service, and it overwrites whatever the caller sent", while it appends to `X-Forwarded-For`, so "a caller who sends their own copy of the header controls the leftmost entry" ([Render, hosting PocketBase](https://render.com/articles/host-pocketbase-on-render)). Requests seen on Render carry more than one hop in `X-Forwarded-For` (the client, a Cloudflare edge, an internal hop), so the count of trusted entries would be 3, not 1, and is not documented. Hence `TRUSTED_PROXY_HEADER=CF-Connecting-IP` with `TRUSTED_PROXIES=1`: one address that the caller cannot set. Traffic over Render's private network does not pass through Cloudflare and has no such header; the api then warns about once a minute and counts the request as its peer, which only matters if something private calls the api.
@@ -214,3 +243,4 @@ About **$36 a month** on Hobby, **$61** on Pro, before traffic. Compute is bille
 - That `RENDER_GIT_COMMIT` reaches the Docker build as a build argument. Render passes the service's own environment variables as build arguments; whether its built-in ones go too is not stated. The api and worker fall back to `RENDER_GIT_COMMIT` at run time, which is documented, so `/v1/meta` names the commit either way; the web app's version line then lacks the commit until this is settled, for example by having CI build the image.
 - That `RUN --mount=type=cache` in the `Dockerfile` works on Render's BuildKit builders. Render uses BuildKit and caches layers; the cargo cache likely does not persist between builds, which makes builds slower but not wrong.
 - That `CF-Connecting-IP` is present on every request ("Client addresses").
+- That Twilio takes the first text message. Nothing has been sent through Twilio; the requests are checked against a stand-in (`backend/tests/sms.rs`), written from its documentation ("Text messages").

@@ -17,6 +17,7 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
+use base64::Engine as _;
 use common::App;
 use serde_json::{Value, json};
 use tokio::sync::MutexGuard;
@@ -26,7 +27,7 @@ use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, LogSender, Purpo
 use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::metrics::{self, Text};
 use yuppers_backend::notifications::sms::{
-    CodeRouter, LogSmsSender, Sms, SmsSender, TwilioSmsSender, encoding,
+    CodeRouter, LogSmsSender, Sms, SmsSender, TwilioCredential, TwilioSmsSender, encoding,
 };
 use yuppers_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use yuppers_backend::notifications::wording::Wording;
@@ -540,14 +541,122 @@ async fn answer(
     (twilio.answer.0, twilio.answer.1.to_string())
 }
 
+/// A sender signing in with the account's auth token.
 fn twilio(addr: SocketAddr, from: &str) -> TwilioSmsSender {
     TwilioSmsSender::new(
         &format!("http://{addr}"),
         "AC0123456789abcdef".to_owned(),
-        Secret::new("auth-token-not-for-logs".to_owned()),
+        TwilioCredential::AuthToken(Secret::new("auth-token-not-for-logs".to_owned())),
         from.to_owned(),
         Duration::from_secs(5),
     )
+}
+
+/// Obviously fake SIDs of the shape Twilio gives.
+const ACCOUNT_SID: &str = "AC00000000000000000000000000000000";
+const KEY_SID: &str = "SK00000000000000000000000000000000";
+
+/// A sender signing in with an API key.
+fn twilio_with_key(addr: SocketAddr) -> TwilioSmsSender {
+    TwilioSmsSender::new(
+        &format!("http://{addr}"),
+        ACCOUNT_SID.to_owned(),
+        TwilioCredential::ApiKey {
+            sid: KEY_SID.to_owned(),
+            secret: Secret::new("api-key-secret-not-for-logs".to_owned()),
+        },
+        "+15550000000".to_owned(),
+        Duration::from_secs(5),
+    )
+}
+
+/// The username and password of an HTTP Basic `Authorization` header.
+fn basic(request: &Received) -> (String, String) {
+    let value = request.headers["authorization"].to_str().unwrap();
+    let encoded = value.strip_prefix("Basic ").expect("HTTP Basic");
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .unwrap();
+    let decoded = String::from_utf8(decoded).unwrap();
+    let (username, password) = decoded.split_once(':').unwrap();
+    (username.to_owned(), password.to_owned())
+}
+
+#[tokio::test]
+async fn with_an_api_key_twilio_is_sent_the_key_as_basic_auth_and_the_account_in_the_path() {
+    let (stand_in, addr) = Twilio::start(
+        StatusCode::CREATED,
+        json!({ "sid": "SM0123", "status": "queued" }),
+    )
+    .await;
+    twilio_with_key(addr)
+        .send(Sms {
+            to: "+15551234567",
+            text: "123456 is your Yuppers sign-in code. Do not share it with anyone.",
+        })
+        .await
+        .unwrap();
+    // And with the auth token, as before: the account SID is the username.
+    twilio(addr, "+15550000000")
+        .send(Sms {
+            to: "+15551234567",
+            text: "654321",
+        })
+        .await
+        .unwrap();
+
+    let received = stand_in.received.lock().unwrap().clone();
+    assert_eq!(received.len(), 2);
+    assert_eq!(
+        received[0].path,
+        format!("/2010-04-01/Accounts/{ACCOUNT_SID}/Messages.json")
+    );
+    assert_eq!(
+        basic(&received[0]),
+        (KEY_SID.to_owned(), "api-key-secret-not-for-logs".to_owned())
+    );
+    assert_eq!(
+        received[1].path,
+        "/2010-04-01/Accounts/AC0123456789abcdef/Messages.json"
+    );
+    assert_eq!(
+        basic(&received[1]),
+        (
+            "AC0123456789abcdef".to_owned(),
+            "auth-token-not-for-logs".to_owned()
+        )
+    );
+    // The form is the same either way.
+    for request in &received {
+        assert!(
+            request
+                .body
+                .starts_with("To=%2B15551234567&From=%2B15550000000&Body=")
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_refusal_to_an_api_key_names_neither_the_key_secret_nor_the_number() {
+    let (_stand_in, addr) = Twilio::start(
+        StatusCode::UNAUTHORIZED,
+        json!({ "code": 20003, "message": "Authenticate", "status": 401 }),
+    )
+    .await;
+    let error = twilio_with_key(addr)
+        .send(Sms {
+            to: "+15551234567",
+            text: "123456",
+        })
+        .await
+        .unwrap_err();
+    let error = format!("{error:#}");
+    assert_eq!(
+        error,
+        "the SMS provider refused the message (HTTP 401, error 20003)"
+    );
+    assert!(!error.contains("api-key-secret"));
+    assert!(!error.contains("5551234567"));
 }
 
 #[tokio::test]

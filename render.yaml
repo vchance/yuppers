@@ -55,6 +55,8 @@ envVarGroups:
       # A sender on a domain verified in Postmark.
       - key: SMTP_FROM
         value: Yuppers <no-reply@yuppers.app>
+      # Off until Twilio approves the A2P 10DLC campaign; then `twilio`, with
+      # SMS_FROM set here or in the dashboard (docs/deploy-render.md).
       - key: SMS_DELIVERY
         value: "off"
       - key: SMS_ALLOWED_COUNTRY_CODES
@@ -71,6 +73,20 @@ envVarGroups:
       - key: SMTP_USERNAME
         sync: false
       - key: SMTP_PASSWORD
+        sync: false
+      # Twilio, for codes by text message (docs/deploy-render.md, "Text
+      # messages"): the account SID (AC...) and a standard API key (SK...)
+      # with its secret. Unused while SMS_DELIVERY is off. Render neither
+      # prompts for a `sync: false` value in an environment group nor for one
+      # added to a Blueprint already applied, so these are listed to say what
+      # the group holds, and are entered by hand in the dashboard
+      # (Environment Groups -> yuppers-secrets) once Twilio approves the
+      # campaign.
+      - key: SMS_ACCOUNT_SID
+        sync: false
+      - key: SMS_API_KEY_SID
+        sync: false
+      - key: SMS_API_KEY_SECRET
         sync: false
       # The application role's password, generated once by Render. migrate
       # creates exchange_app with it; the api and the worker sign in with it.

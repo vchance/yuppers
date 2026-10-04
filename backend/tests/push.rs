@@ -606,7 +606,16 @@ async fn the_push_payload_is_generic_in_the_recipients_language_and_opens_the_ex
     ];
     expected.sort_by(|a, b| a["to"].as_str().cmp(&b["to"].as_str()));
     assert_eq!(body, Value::Array(expected));
-    let text = body.to_string();
+    // What a person could read: everything but the device token and the
+    // exchange's link, whose random hex can contain any short string (a
+    // token holding "450" once failed this test).
+    let mut readable = body.clone();
+    for push in readable.as_array_mut().unwrap() {
+        let push = push.as_object_mut().unwrap();
+        push.remove("to");
+        push.remove("data");
+    }
+    let text = readable.to_string();
     let code: String = sqlx::query_scalar("SELECT display_code FROM exchange WHERE id = $1::uuid")
         .bind(&deal.exchange)
         .fetch_one(&app.owner)

@@ -869,6 +869,12 @@
     "optedOut": "{phone} replied STOP to our texts, so we don’t text it any more. To get texts again, reply START to any text from us, then turn updates on here.",
     "howItWorks": "How we text you"
   },
+  "smsCode": {
+    "signIn": "Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.",
+    "deleteAccount": "Text me a one-time code to confirm deleting your account from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.",
+    "verifyNumber": "Text me a one-time code to confirm this number from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.",
+    "tickToSend": "To get a code by text, first tick the box."
+  },
   "record": {
     "historyHeading": "History",
     "historyEmpty": "Nothing has happened yet.",
@@ -1074,7 +1080,6 @@
   "privacy": {
     "link": "Privacy",
     "policy": "Privacy policy",
-    "sms": "Message and data rates may apply. Reply STOP to opt out.",
     "smsLink": "About text messages",
     "deletion": "What we keep after you delete your account"
   },
@@ -1115,7 +1120,8 @@
     "CONTENT_HIDDEN": "Part of this yup has been hidden by review, so its terms can’t be signed or changed.",
     "REPORT_RESOLVED": "This report has already been resolved.",
     "SUBJECT_IS_REVIEWER": "The person reported is a reviewer. Only the owner can suspend a reviewer, or lift a reviewer’s suspension, after taking their reviewer role away.",
-    "PHONE_OPTED_OUT": "This number replied STOP to our texts, so we can’t text it a code. Sign in with your email address instead, or reply START to one of our texts to get them again."
+    "PHONE_OPTED_OUT": "This number replied STOP to our texts, so we can’t text it a code. Sign in with your email address instead, or reply START to one of our texts to get them again.",
+    "SMS_CONSENT_REQUIRED": "To get a code by text, tick the box beside the number. If there is no box, reload the page or update the app."
   },
   "a11y": {
     "openExchange": "Opens this yup.",

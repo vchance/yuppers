@@ -133,6 +133,11 @@ describe('every word on the main web screens comes from the wording', () => {
       await start('/', null, pseudo)
       await h1(pseudo.signIn.title)
       await check()
+      // A phone number: the box beside it, unticked and then ticked.
+      await type(field(pseudo.signIn.identifierLabel), '+12015550123')
+      await check()
+      await press(field(pseudo.smsCode.signIn))
+      await check()
       await type(field(pseudo.signIn.identifierLabel), 'ben@example.test')
       await press(button(pseudo.signIn.sendCode))
       await until(() => document.activeElement === field(pseudo.signIn.codeLabel), 'the code field')

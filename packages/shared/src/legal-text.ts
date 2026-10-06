@@ -36,8 +36,8 @@ export type LegalDocument = (typeof LEGAL_DOCUMENTS)[number]
 
 /** The day each document as written took effect, as an ISO date. */
 export const LEGAL_EFFECTIVE_DATES: Record<LegalDocument, string> = {
-  privacy: '2026-10-05',
-  terms: '2026-10-05',
+  privacy: '2026-10-06',
+  terms: '2026-10-06',
 }
 
 /**

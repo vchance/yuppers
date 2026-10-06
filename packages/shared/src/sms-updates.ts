@@ -2,6 +2,7 @@ import type { Account, ErrorCode, ExchangeView } from '@yuppers/api-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { failureCode, type ExchangeApi, type SmsUpdates } from './api'
+import { smsCodeConsent } from './sms-code-consent'
 
 /*
  * Text updates for an agreement: "Yuppers.app agreement updates" (DESIGN.md
@@ -9,7 +10,8 @@ import { failureCode, type ExchangeApi, type SmsUpdates } from './api'
  *
  *   - with no phone number on the account, a US number to add, checked with
  *     a one-time code by text (`requestCode`, then `addIdentifier`, the way
- *     any identifier is added);
+ *     any identifier is added), asked for only once the box beside the
+ *     number is ticked (`smsCode.verifyNumber`, `sms-code-consent.ts`);
  *   - with one, a box beside the consent wording, word for word as the terms
  *     quote it, and Save: ticked, updates go on and the consent is recorded
  *     by the service; unticked, they go off;
@@ -124,6 +126,13 @@ export interface SmsUpdatesControl {
   failure: ErrorCode | null
   /** The number typed is not a US number. */
   invalidPhone: boolean
+  /**
+   * Whether the box beside the number to add is ticked. No code is asked
+   * for until it is; it starts unticked, and is unticked again when the
+   * number is to be changed.
+   */
+  codeConsent: boolean
+  setCodeConsent(checked: boolean): void
   /** A number was just added to the account. */
   phoneAdded: string | null
   /** What was just saved, for the screen to say. */
@@ -153,6 +162,7 @@ export function useSmsUpdates(
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [invalidPhone, setInvalidPhone] = useState(false)
+  const [codeConsent, setCodeConsent] = useState(false)
   const [phoneAdded, setPhoneAdded] = useState<string | null>(null)
   const [saved, setSaved] = useState<'on' | 'off' | null>(null)
   const working = useRef(false)
@@ -202,15 +212,16 @@ export function useSmsUpdates(
 
   const requestCode = useCallback(
     async (input: string) => {
+      if (!codeConsent) return
       const phone = usPhone(input)
       setInvalidPhone(phone === null)
       if (phone === null) return
       await run(async () => {
-        await api.requestCode(phone)
+        await api.requestCode(phone, smsCodeConsent(language))
         setPending(phone)
       })
     },
-    [api, run],
+    [api, codeConsent, language, run],
   )
 
   const verify = useCallback(
@@ -230,6 +241,7 @@ export function useSmsUpdates(
   const changePhone = useCallback(() => {
     setPending(null)
     setFailure(null)
+    setCodeConsent(false)
   }, [])
 
   const save = useCallback(async () => {
@@ -267,6 +279,8 @@ export function useSmsUpdates(
     busy,
     failure,
     invalidPhone,
+    codeConsent,
+    setCodeConsent,
     phoneAdded,
     saved,
     requestCode,

@@ -1,4 +1,4 @@
-import { deletedNotice, formatMessage, wordingFor } from '@yuppers/shared';
+import { deletedNotice, formatMessage, SMS_CODE_CONSENT_VERSION, wordingFor } from '@yuppers/shared';
 import * as SecureStore from 'expo-secure-store';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
@@ -50,7 +50,14 @@ function deletion(method: string, path: string, authorized: boolean, body: unkno
   if (!authorized || !service.account) return [401, { code: 'UNAUTHENTICATED' }] as const;
   const call = `${method} ${path}`;
   if (call === 'GET /v1/me/deletion') return [200, preview] as const;
-  if (call === 'POST /v1/me/deletion/codes') return [204, null] as const;
+  if (call === 'POST /v1/me/deletion/codes') {
+    // Like the service: a code by text only with the box beside the number ticked.
+    const { channel, sms_consent } = body as { channel: string; sms_consent?: unknown };
+    if (channel === 'PHONE' && !sms_consent) {
+      return [422, { code: 'SMS_CONSENT_REQUIRED' }] as const;
+    }
+    return [204, null] as const;
+  }
   if (call === 'POST /v1/me/deletion') {
     if ((body as { code?: string }).code !== CODE) return [401, { code: 'INVALID_CODE' }] as const;
     // Every session ends with the account.
@@ -224,12 +231,38 @@ test('a code that is wrong goes back to asking for it, and the account and its s
   await screen.findByText(d.nothingOpen);
   expect(screen.queryByText(d.agreementsStand)).toBeNull();
   screen.getByText(d.codeChoice);
+  // By email, the first offered, there is no box.
+  expect(screen.queryByRole('checkbox')).toBeNull();
   await fireEvent.press(screen.getByRole('radio', { name: '+12025550142' }));
-  await fireEvent.press(screen.getByText(d.sendCode));
+
+  // To the phone: a box, unticked, named by the words for deleting, and
+  // the button waits for it, saying why.
+  const box = () => screen.getByRole('checkbox');
+  expect(box().props.accessibilityLabel).toBe(w.smsCode.deleteAccount);
+  expect(w.smsCode.deleteAccount).toBe(
+    'Text me a one-time code to confirm deleting your account from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+  );
+  expect(box().props.accessibilityState).toMatchObject({ checked: false });
+  const send = () => screen.getByRole('button', { name: d.sendCode });
+  expect(send().props.accessibilityState).toMatchObject({ disabled: true });
+  expect(send().props.accessibilityHint).toBe(w.smsCode.tickToSend);
+  await fireEvent.press(send());
+  expect(deletionCalls()).toEqual(['GET /v1/me/deletion']);
+
+  // Ticked, then by email and back: unticked, never remembered.
+  await fireEvent.press(box());
+  expect(send().props.accessibilityState).toMatchObject({ disabled: false });
+  await fireEvent.press(screen.getByRole('radio', { name: 'ana@example.test' }));
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  await fireEvent.press(screen.getByRole('radio', { name: '+12025550142' }));
+  expect(box().props.accessibilityState).toMatchObject({ checked: false });
+
+  await fireEvent.press(box());
+  await fireEvent.press(send());
   await screen.findByText(fmt(d.codeSent, { identifier: '+12025550142' }));
   expect(service.sent.at(-1)).toMatchObject({
     path: '/v1/me/deletion/codes',
-    body: { channel: 'PHONE' },
+    body: { channel: 'PHONE', sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' } },
   });
 
   await fireEvent.changeText(screen.getByLabelText(w.signIn.codeLabel), '000000');

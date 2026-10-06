@@ -1,8 +1,9 @@
 import type { Account, ErrorCode } from '@yuppers/api-client'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
-import { failureCode, type CodeChannel, type DeletionPreview } from './api'
+import { failureCode, type CodeChannel, type DeletionPreview, type SmsCodeConsent } from './api'
 import type { SignInChannels } from './sign-in'
+import { smsCodeConsent, useSmsCodeConsentBox, type SmsCodeConsentBox } from './sms-code-consent'
 
 /*
  * Deleting the account, as both apps do it (DESIGN.md §4.1): what will
@@ -37,7 +38,7 @@ export function codeDestinations(
 /** The calls a deletion makes. */
 export interface DeletionApi {
   deletionPreview(): Promise<DeletionPreview>
-  requestDeletionCode(channel: CodeChannel): Promise<void>
+  requestDeletionCode(channel: CodeChannel, smsConsent?: SmsCodeConsent): Promise<void>
   deleteAccount(channel: CodeChannel, code: string): Promise<void>
 }
 
@@ -85,6 +86,11 @@ export interface AccountDeletion {
   failure: ErrorCode | null
   /** A second code was just sent. */
   resent: boolean
+  /**
+   * The box beside the phone number, shown while the code is to go by text
+   * (`sms-code-consent.ts`). Until it is ticked, no code is asked for.
+   */
+  codeConsent: SmsCodeConsentBox
   loadPreview(): void
   choose(channel: CodeChannel): void
   setCode(code: string): void
@@ -101,12 +107,15 @@ export interface AccountDeletion {
 /**
  * The steps of deleting the signed-in account. `onDeleted` is where a client
  * forgets the session it held and goes back to its signed-out screen.
+ * `language` is the one the screen is in, which the box beside a phone
+ * number is shown in.
  */
 export function useAccountDeletion(
   api: DeletionApi,
   account: Pick<Account, 'email' | 'phone'>,
   onDeleted: () => void | Promise<void>,
   channels: SignInChannels | null = null,
+  language = 'en',
 ): AccountDeletion {
   const { email, phone } = account
   const destinations = codeDestinations({ email, phone }, channels)
@@ -123,6 +132,9 @@ export function useAccountDeletion(
 
   const destination =
     destinations.find((found) => found.channel === channel) ?? destinations[0] ?? null
+  const codeConsent = useSmsCodeConsentBox(
+    destination?.channel === 'PHONE' ? destination.identifier : null,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -147,13 +159,16 @@ export function useAccountDeletion(
   }, [])
 
   async function sendCode() {
-    if (!destination) return
+    if (!destination || codeConsent.missing) return
     const again = step === 'code'
     setBusy(true)
     setFailure(null)
     setResent(false)
     try {
-      await api.requestDeletionCode(destination.channel)
+      await api.requestDeletionCode(
+        destination.channel,
+        codeConsent.checked ? smsCodeConsent(language) : undefined,
+      )
       // The field starts empty for the code just sent.
       setCode('')
       setCodeMissing(false)
@@ -181,6 +196,8 @@ export function useAccountDeletion(
     setFailure(null)
     setResent(false)
     setCodeMissing(false)
+    // Back where the box is, it is unticked again: it is never remembered.
+    if (step === 'code') codeConsent.setChecked(false)
     setStep(step === 'confirm' ? 'code' : 'explain')
   }
 
@@ -211,8 +228,13 @@ export function useAccountDeletion(
     busy,
     failure,
     resent,
+    codeConsent,
     loadPreview,
-    choose: setChannel,
+    choose(next) {
+      // Whatever was ticked was for the other one.
+      codeConsent.setChecked(false)
+      setChannel(next)
+    },
     setCode(next) {
       setCode(next)
       if (next.trim() !== '') setCodeMissing(false)

@@ -2,7 +2,9 @@ import type { Account, ExchangeView } from '@yuppers/api-client';
 import {
   ApiFailure,
   createI18n,
+  SMS_CODE_CONSENT_VERSION,
   SMS_CONSENT_VERSION,
+  type SmsCodeConsent,
   wordingFor,
   type SetSmsUpdates,
   type SmsUpdates as Standing,
@@ -54,6 +56,8 @@ interface Stand extends SmsUpdatesApi {
   optedOut: boolean;
   texting: boolean;
   codes: string[];
+  /** What each request for a code said about the box beside the number. */
+  consents: (SmsCodeConsent | undefined)[];
   saved: SetSmsUpdates[];
 }
 
@@ -65,6 +69,7 @@ function stand(prepare: Partial<Stand> = {}): Stand {
     optedOut: false,
     texting: true,
     codes: [],
+    consents: [],
     saved: [],
     ...prepare,
     meta: async () => ({
@@ -85,8 +90,9 @@ function stand(prepare: Partial<Stand> = {}): Stand {
       service.on = body.on;
       return standing(service, 'ACTIVE');
     },
-    requestCode: async (identifier: string) => {
+    requestCode: async (identifier: string, smsConsent?: SmsCodeConsent) => {
       service.codes.push(identifier);
+      service.consents.push(smsConsent);
     },
     addIdentifier: async (identifier: string, code: string) => {
       if (code !== '123456') throw new ApiFailure('INVALID_CODE');
@@ -131,18 +137,36 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   const { wording, session } = await show(service);
   const w = wording.smsUpdates;
   expect(await screen.findByRole('header', { name: w.heading })).toBeTruthy();
-  expect(screen.getByText(wording.privacy.sms)).toBeTruthy();
+
+  // Before a number gets a code, a box, unticked, beside the words the
+  // terms quote for checking a number; "Text me a code" waits for it.
+  const codeBox = () => screen.getByRole('checkbox');
+  expect(codeBox().props.accessibilityLabel).toBe(wording.smsCode.verifyNumber);
+  expect(wording.smsCode.verifyNumber).toBe(
+    'Text me a one-time code to confirm this number from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+  );
+  expect(codeBox().props.accessibilityState).toMatchObject({ checked: false });
+  const send = () => screen.getByRole('button', { name: w.sendCode });
+  expect(send().props.accessibilityState).toMatchObject({ disabled: true });
+  expect(send().props.accessibilityHint).toBe(wording.smsCode.tickToSend);
 
   // Not a US number: said, and nothing sent.
   await fireEvent.changeText(screen.getByLabelText(w.phoneLabel), '+44 7700 900123');
-  await fireEvent.press(screen.getByRole('button', { name: w.sendCode }));
+  await fireEvent.press(codeBox());
+  await fireEvent.press(send());
   expect(await screen.findByText(w.phoneInvalid)).toBeTruthy();
   expect(service.codes).toEqual([]);
 
+  // Another number: unticked again.
   await fireEvent.changeText(screen.getByLabelText(w.phoneLabel), '(555) 234-5678');
-  await fireEvent.press(screen.getByRole('button', { name: w.sendCode }));
+  expect(codeBox().props.accessibilityState).toMatchObject({ checked: false });
+  await fireEvent.press(send());
+  expect(service.codes).toEqual([]);
+  await fireEvent.press(codeBox());
+  await fireEvent.press(send());
   expect(await screen.findByText('We texted a code to +1 •••-•••-5678.')).toBeTruthy();
   expect(service.codes).toEqual([PHONE]);
+  expect(service.consents).toEqual([{ version: SMS_CODE_CONSENT_VERSION, language: 'en' }]);
 
   await fireEvent.changeText(screen.getByLabelText(w.codeLabel), '123456');
   await fireEvent.press(screen.getByRole('button', { name: w.addPhone }));

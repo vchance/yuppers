@@ -714,6 +714,9 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     ]
   }
   if (call === 'POST /v1/auth/codes') {
+    // Like the service: a code by text only with the box beside the number ticked.
+    const { identifier, sms_consent } = body as { identifier: string; sms_consent?: unknown }
+    if (!identifier.includes('@') && !sms_consent) return [422, { code: 'SMS_CONSENT_REQUIRED' }]
     if (service.refuseCodes) return [429, { code: service.refuseCodes }]
     return [204, null]
   }
@@ -749,6 +752,14 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return onlyIfYours ? [404, { code: 'INVITATION_UNAVAILABLE' }] : [200, offerExchange()]
   }
   if (call === 'GET /v1/me') return [200, service.account]
+  if (call === 'GET /v1/me/deletion') {
+    return [200, { drafts: 0, open_proposals: 0, agreements_in_force: 0 }]
+  }
+  if (call === 'POST /v1/me/deletion/codes') {
+    const { channel, sms_consent } = body as { channel: string; sms_consent?: unknown }
+    if (channel === 'PHONE' && !sms_consent) return [422, { code: 'SMS_CONSENT_REQUIRED' }]
+    return [204, null]
+  }
   if (call === 'POST /v1/me/identifiers') {
     const { code, identifier } = body as { code: string; identifier: string }
     if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]

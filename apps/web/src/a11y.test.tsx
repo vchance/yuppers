@@ -448,15 +448,20 @@ describe('the privacy policy and the terms', () => {
     }
   })
 
-  test('the sign-in form with what text messages cost', async () => {
+  test('the sign-in form with a phone number, its box unticked and then ticked', async () => {
     const { wording } = await start('/', null, 'en', (service) => {
       service.phone = true
     })
     await heading(wording.signIn.title)
     await until(
-      () => document.querySelector('main')!.textContent!.includes(wording.privacy.sms),
-      'the text message terms',
+      () => document.querySelector('main')!.textContent!.includes(wording.privacy.smsLink),
+      'the link on text messages',
     )
+    await type(field(wording.signIn.identifierLabel), '+12015550123')
+    const box = field(wording.smsCode.signIn) as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect(await violations()).toEqual([])
+    await press(box)
     expect(await violations()).toEqual([])
   })
 })

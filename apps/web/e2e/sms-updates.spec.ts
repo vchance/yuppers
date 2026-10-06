@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { apiEnvironment, apiLog, port, repoRoot, webRoot, workerBinary } from './support/env'
 import { expect, test } from './support/fixtures'
 import { agree, move, type ItemSpec } from './support/flows'
+import { number, textsTo, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -25,37 +26,6 @@ const ITEMS: ItemSpec[] = [
   { from: 'them', kind: 'MONEY', description: 'Payment', amount: '120' },
 ]
 
-/** A US number nobody else uses, as the service stores it. */
-function number(): string {
-  const digits = () => Math.floor(Math.random() * 10)
-  return `+1${7 + (digits() % 3)}${digits()}${digits()}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
-}
-
-/** The texts a log shows were sent to `phone`, which logs mask but for the last two digits. */
-function textsTo(phone: string, log: string): string[] {
-  let text: string
-  try {
-    text = readFileSync(log, 'utf8')
-  } catch {
-    return []
-  }
-  const masked = `+1••••••••${phone.slice(-2)}`
-  return text
-    .split('\n')
-    .filter((line) => line.includes('text message (development delivery)') && line.includes(masked))
-    .map((line) => /text="((?:[^"\\]|\\.)*)"/.exec(line)?.[1]?.replaceAll('\\"', '"') ?? '')
-}
-
-async function waitFor<T>(find: () => T | undefined, what: string): Promise<T> {
-  const deadline = Date.now() + 30_000
-  while (Date.now() < deadline) {
-    const found = find()
-    if (found !== undefined) return found
-    await new Promise((settle) => setTimeout(settle, 200))
-  }
-  throw new Error(`timed out waiting for ${what}`)
-}
-
 test('a party adds a number, turns on text updates, and is texted when the agreement changes', async ({
   person,
 }) => {
@@ -70,8 +40,14 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   const control = page.getByRole('region', { name: w.heading, exact: true })
   await expect(control.getByText(w.addPhoneIntro)).toBeVisible()
   await control.getByLabel(w.phoneLabel).fill(phone)
+  // The code goes by text only once the box beside the number is ticked.
+  const sendCode = control.getByRole('button', { name: w.sendCode, exact: true })
+  await expect(sendCode).toBeDisabled()
+  const codeBox = control.getByRole('checkbox', { name: en.smsCode.verifyNumber, exact: true })
+  await expect(codeBox).not.toBeChecked()
+  await codeBox.check()
   const before = textsTo(phone, apiLog).length
-  await control.getByRole('button', { name: w.sendCode, exact: true }).click()
+  await sendCode.click()
   await expect(control.getByText(fill(w.codeSent, { phone: `+1 •••-•••-${phone.slice(-4)}` }))).toBeVisible()
   const codeText = await waitFor(() => textsTo(phone, apiLog)[before], 'the code by text')
   const code = /^\d{6}/.exec(codeText)![0]
@@ -161,13 +137,13 @@ test('the page on how people opt in shows its steps on the website and in the ap
       "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     )
     await expect(page.locator('html')).toHaveAttribute('lang', language)
-    // Six steps on the website, four in the app.
-    await expect(page.locator('section.part:has(> h2#website) section.step > h3')).toHaveCount(6)
-    await expect(page.locator('section.part:has(> h2#mobile-app) section.step > h3')).toHaveCount(4)
+    // Seven steps on the website, five in the app.
+    await expect(page.locator('section.part:has(> h2#website) section.step > h3')).toHaveCount(7)
+    await expect(page.locator('section.part:has(> h2#mobile-app) section.step > h3')).toHaveCount(5)
     // Every picture is there, from this origin, served, and drawn.
     const images = page.locator('section.step img')
-    await expect(images).toHaveCount(8)
-    await expect(page.locator('section.part:has(> h2#mobile-app) img[src^="/sms-opt-in/mobile/"]')).toHaveCount(4)
+    await expect(images).toHaveCount(10)
+    await expect(page.locator('section.part:has(> h2#mobile-app) img[src^="/sms-opt-in/mobile/"]')).toHaveCount(5)
     for (const image of await images.all()) {
       await image.scrollIntoViewIfNeeded()
       const src = (await image.getAttribute('src'))!
@@ -187,6 +163,7 @@ test('the page on how people opt in shows its steps on the website and in the ap
     await expect(page.getByRole('heading', { name: step.title, level: 3, exact: true })).toBeVisible()
   }
   await expect(page.getByText(en.smsUpdates.consent, { exact: true }).first()).toBeVisible()
+  await expect(page.getByText(en.smsCode.signIn, { exact: true }).first()).toBeVisible()
   await expect(page.getByText(en.sms.optInConfirmation, { exact: true })).toBeVisible()
 
   // The contents list leads to the mobile app's part, at its own address.

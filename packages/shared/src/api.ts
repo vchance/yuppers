@@ -28,6 +28,7 @@ export type SessionCreated = Schemas['SessionCreated']
 export type Slot = Schemas['Slot']
 export type WalletLink = Schemas['WalletLink']
 export type SmsUpdates = Schemas['SmsUpdates']
+export type SmsCodeConsent = Schemas['SmsCodeConsent']
 export type SetSmsUpdates = Schemas['SetSmsUpdates']
 export type WalletPlatform = Schemas['WalletPlatform']
 
@@ -185,10 +186,14 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
       return send(async () => reply)
     },
 
-    requestCode(identifier: string): Promise<void> {
-      return send(() =>
-        client.POST('/v1/auth/codes', { headers: headers(), body: { identifier } }),
-      )
+    /**
+     * Sends a one-time code to an email address or phone number. For a
+     * phone number, `smsConsent` says the box beside it was ticked
+     * (`sms-code-consent.ts`); without it the service refuses.
+     */
+    requestCode(identifier: string, smsConsent?: SmsCodeConsent): Promise<void> {
+      const body = smsConsent ? { identifier, sms_consent: smsConsent } : { identifier }
+      return send(() => client.POST('/v1/auth/codes', { headers: headers(), body }))
     },
 
     /**
@@ -222,11 +227,11 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
     /**
      * Sends the code that confirms a deletion to the account's own email
      * address or phone number. The service knows the address; none is sent.
+     * For the phone number, `smsConsent` says the box beside it was ticked.
      */
-    requestDeletionCode(channel: CodeChannel): Promise<void> {
-      return send(() =>
-        client.POST('/v1/me/deletion/codes', { headers: headers(), body: { channel } }),
-      )
+    requestDeletionCode(channel: CodeChannel, smsConsent?: SmsCodeConsent): Promise<void> {
+      const body = smsConsent ? { channel, sms_consent: smsConsent } : { channel }
+      return send(() => client.POST('/v1/me/deletion/codes', { headers: headers(), body }))
     },
 
     /**

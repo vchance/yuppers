@@ -78,7 +78,7 @@ describe.each(cases)('%s in %s', (kind, language) => {
     // Where to write is a link to write to.
     const email = kind === 'privacy' ? PRIVACY_EMAIL : SUPPORT_EMAIL
     expect(main.querySelector(`a[href="mailto:${email}"]`)?.textContent).toBe(email)
-    expect(main.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-05')
+    expect(main.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-06')
     // The address stays the one the page is read at, and the footer marks it.
     expect(window.location.pathname).toBe(address(kind, language))
     const footer = document.querySelector('footer')!
@@ -196,17 +196,18 @@ describe('the ways to them', () => {
     expect(privacy.getAttribute('target')).toBe('_blank')
     expect(privacy.textContent).toContain(wording.help.newTab)
     expect(link(wording.termsOfUse.document).getAttribute('href')).toBe('/terms')
-    expect(document.querySelector('main')!.textContent).not.toContain(wording.privacy.sms)
+    expect(document.querySelector('main')!.textContent).not.toContain(wording.privacy.smsLink)
+    expect(document.querySelector('input[type="checkbox"]')).toBeNull()
   })
 
-  test('where codes can go to phone numbers, signing in says what texts cost and links to the section on them', async () => {
+  test('where codes can go to phone numbers, signing in links to the section on texts', async () => {
     const { wording } = await start('/', null, 'es', (service) => {
       service.phone = true
     })
     await heading(wording.signIn.title)
     await until(
-      () => document.querySelector('main')!.textContent!.includes(wording.privacy.sms),
-      'the text message terms',
+      () => document.querySelector('main')!.textContent!.includes(wording.privacy.smsLink),
+      'the link on text messages',
     )
     expect(link(wording.privacy.smsLink).getAttribute('href')).toBe('/es/privacy#text-messages')
     expect(link(wording.privacy.policy).getAttribute('href')).toBe('/es/privacy')

@@ -1,10 +1,11 @@
 import type { ExchangeView as Exchange } from '@yuppers/api-client'
-import { consentPieces, maskPhone, useSmsUpdates } from '@yuppers/shared'
+import { maskPhone, useSmsUpdates } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
 import { api } from '../lib/api'
 import { useAnnouncement } from '../lib/announce'
+import { ConsentCheckbox } from './ConsentCheckbox'
 import { Failure, Field, Notice } from './ui'
 
 interface Props {
@@ -18,8 +19,9 @@ function optInPage(language: string): string {
 
 /**
  * "Text updates" on an agreement (DESIGN.md §12, "Yuppers.app agreement
- * updates"): add a US number, checked with a code by text, then a box beside
- * the consent wording, word for word as the terms quote it, and Save. Shown
+ * updates"): add a US number, checked with a code by text once the box
+ * beside it is ticked (`smsCode.verifyNumber`), then a box beside the
+ * consent wording, word for word as the terms quote it, and Save. Shown
  * only where the service texts updates, on an agreement sent and not closed
  * (`useSmsUpdates` decides).
  */
@@ -57,6 +59,7 @@ export function SmsUpdates({ exchange }: Props) {
     event.preventDefault()
     void control.requestCode(phone)
   }
+  const waitId = `${id}-wait`
   const submitCode = (event: FormEvent) => {
     event.preventDefault()
     void control.verify(code)
@@ -89,14 +92,32 @@ export function SmsUpdates({ exchange }: Props) {
                 inputMode="tel"
                 autoComplete="tel"
                 value={phone}
-                onChange={(event) => setPhone(event.target.value)}
+                onChange={(event) => {
+                  setPhone(event.target.value)
+                  // What was ticked was for the number as it was.
+                  control.setCodeConsent(false)
+                }}
               />
             )}
           </Field>
           <Failure code={control.failure} id={failureId} />
-          <p className="hint">{wording.privacy.sms}</p>
+          <ConsentCheckbox
+            wording={wording.smsCode.verifyNumber}
+            checked={control.codeConsent}
+            onChange={control.setCodeConsent}
+          />
+          {!control.codeConsent && (
+            <p className="hint" id={waitId}>
+              {wording.smsCode.tickToSend}
+            </p>
+          )}
           <div className="actions">
-            <button type="submit" className="primary" disabled={control.busy}>
+            <button
+              type="submit"
+              className="primary"
+              disabled={control.busy || !control.codeConsent}
+              aria-describedby={control.codeConsent ? undefined : waitId}
+            >
               {w.sendCode}
             </button>
           </div>
@@ -149,26 +170,11 @@ export function SmsUpdates({ exchange }: Props) {
       {step === 'consent' && (
         <form noValidate onSubmit={submitConsent}>
           {phoneAdded && <Notice>{fmt(w.phoneAdded, { phone: maskPhone(phoneAdded) })}</Notice>}
-          <label className="check sms-consent">
-            <input
-              type="checkbox"
-              checked={control.checked}
-              onChange={(event) => control.setChecked(event.target.checked)}
-            />
-            <span>
-              {consentPieces(w.consent).map((piece, index) =>
-                'url' in piece ? (
-                  // The box's name is the consent wording and nothing else,
-                  // so these say only the address, though they open a tab.
-                  <a key={index} href={piece.url} target="_blank" rel="noopener">
-                    {piece.url}
-                  </a>
-                ) : (
-                  piece.text
-                ),
-              )}
-            </span>
-          </label>
+          <ConsentCheckbox
+            wording={w.consent}
+            checked={control.checked}
+            onChange={control.setChecked}
+          />
           <Failure code={control.failure} />
           <div className="actions">
             <button type="submit" className="primary" disabled={control.busy}>

@@ -1,6 +1,5 @@
 import type { ExchangeView as Exchange } from '@yuppers/api-client';
 import {
-  consentPieces,
   defaultLanguage,
   maskPhone,
   staticPagePath,
@@ -8,13 +7,13 @@ import {
   type SmsUpdatesApi,
 } from '@yuppers/shared';
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking } from 'react-native';
 
 import { announce } from '../lib/accessibility';
 import { WEB_URL } from '../lib/config';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
-import { space, TOUCH_TARGET, type, useColors } from '../lib/theme';
+import { ConsentCheckbox } from './ConsentCheckbox';
 import { Actions, Button, Card, Failure, Heading, Hint, Notice, P, TextField } from './ui';
 
 /** Opens an address in the system's browser; a device without one has nothing better. */
@@ -31,15 +30,15 @@ interface Props {
 /**
  * "Text updates" on an agreement (DESIGN.md §12, "Yuppers.app agreement
  * updates"), as on the web (`apps/web/src/components/SmsUpdates.tsx`): add a
- * US number, checked with a code by text, then a box beside the consent
- * wording, word for word as the terms quote it, and Save. Shown only where
+ * US number, checked with a code by text once the box beside it is ticked
+ * (`smsCode.verifyNumber`), then a box beside the consent wording, word for
+ * word as the terms quote it, and Save. Shown only where
  * the service texts updates, on an agreement sent and not closed
  * (`useSmsUpdates` decides).
  */
 export function SmsUpdates({ exchange, client = api }: Props) {
   const { wording, fmt, language } = useI18n();
   const session = useSession();
-  const colors = useColors();
   const w = wording.smsUpdates;
   // A number added here is the account's from now on, on every screen.
   const control = useSmsUpdates(client, exchange, language, session.setAccount);
@@ -74,15 +73,26 @@ export function SmsUpdates({ exchange, client = api }: Props) {
             autoComplete="tel"
             textContentType="telephoneNumber"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => {
+              setPhone(value);
+              // What was ticked was for the number as it was.
+              control.setCodeConsent(false);
+            }}
           />
           <Failure code={control.failure} />
-          <Hint>{wording.privacy.sms}</Hint>
+          <ConsentCheckbox
+            wording={wording.smsCode.verifyNumber}
+            checked={control.codeConsent}
+            onChange={control.setCodeConsent}
+            disabled={control.busy}
+          />
+          {control.codeConsent ? null : <Hint>{wording.smsCode.tickToSend}</Hint>}
           <Actions>
             <Button
               label={w.sendCode}
               variant="primary"
-              disabled={control.busy}
+              disabled={control.busy || !control.codeConsent}
+              hint={control.codeConsent ? undefined : wording.smsCode.tickToSend}
               onPress={() => void control.requestCode(phone)}
             />
           </Actions>
@@ -129,53 +139,12 @@ export function SmsUpdates({ exchange, client = api }: Props) {
           {phoneAdded && (
             <Notice>{fmt(w.phoneAdded, { phone: maskPhone(phoneAdded) })}</Notice>
           )}
-          <View style={styles.consent}>
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityLabel={w.consent}
-              accessibilityLanguage={language}
-              accessibilityState={{ checked: control.checked, disabled: control.busy }}
-              aria-checked={control.checked}
-              disabled={control.busy}
-              onPress={() => control.setChecked(!control.checked)}
-              style={styles.box}>
-              <View
-                style={[
-                  styles.square,
-                  {
-                    borderColor: control.checked ? colors.primary : colors.border,
-                    backgroundColor: control.checked ? colors.primary : colors.background,
-                  },
-                ]}>
-                {control.checked ? (
-                  <Text
-                    aria-hidden
-                    importantForAccessibility="no"
-                    style={[type.body, { color: colors.onPrimary }]}>
-                    ✓
-                  </Text>
-                ) : null}
-              </View>
-            </Pressable>
-            <Text
-              accessibilityLanguage={language}
-              style={[type.body, styles.consentText, { color: colors.text }]}>
-              {consentPieces(w.consent).map((piece, index) =>
-                'url' in piece ? (
-                  <Text
-                    key={index}
-                    accessibilityRole="link"
-                    accessibilityHint={wording.help.inBrowser}
-                    onPress={() => openInBrowser(piece.url)}
-                    style={[styles.link, { color: colors.primary }]}>
-                    {piece.url}
-                  </Text>
-                ) : (
-                  piece.text
-                ),
-              )}
-            </Text>
-          </View>
+          <ConsentCheckbox
+            wording={w.consent}
+            checked={control.checked}
+            onChange={control.setChecked}
+            disabled={control.busy}
+          />
           <Failure code={control.failure} />
           <Actions>
             <Button
@@ -206,23 +175,3 @@ export function SmsUpdates({ exchange, client = api }: Props) {
     </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  consent: { flexDirection: 'row', alignItems: 'flex-start', gap: space.m },
-  box: {
-    minHeight: TOUCH_TARGET,
-    minWidth: TOUCH_TARGET,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  square: {
-    width: 28,
-    height: 28,
-    borderWidth: 2,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  consentText: { flex: 1, paddingTop: space.s },
-  link: { textDecorationLine: 'underline' },
-});

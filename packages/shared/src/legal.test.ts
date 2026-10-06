@@ -205,8 +205,8 @@ describe('inline pieces', () => {
   })
 
   test('the effective date is written in each language', () => {
-    expect(legalEffectiveDate('privacy', 'en')).toBe('October 5, 2026')
-    expect(legalEffectiveDate('terms', 'es')).toBe('5 de octubre de 2026')
+    expect(legalEffectiveDate('privacy', 'en')).toBe('October 6, 2026')
+    expect(legalEffectiveDate('terms', 'es')).toBe('6 de octubre de 2026')
   })
 })
 

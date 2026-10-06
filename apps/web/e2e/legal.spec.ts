@@ -102,12 +102,12 @@ test('with scripts, the app shows the same document, and the language picks the 
   await expect(page).toHaveURL(/\/es\/terms$/)
 })
 
-test('signing in says what texts cost and opens the documents in a new tab', async ({ person }) => {
+test('signing in links to texts and opens the documents in a new tab', async ({ person }) => {
   const visitor = await person('Visitor')
   const { page, context } = visitor
   await page.goto('/')
   await expect(page.getByRole('heading', { name: en.signIn.title, level: 1 })).toBeVisible()
-  await expect(page.getByText(en.privacy.sms)).toBeVisible()
+  await expect(page.getByRole('link', { name: en.privacy.smsLink })).toBeVisible()
 
   const [tab] = await Promise.all([
     context.waitForEvent('page'),

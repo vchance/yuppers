@@ -87,10 +87,9 @@ test('deleting the account links to what stays', async () => {
   );
 });
 
-test('signing in, where codes go to phone numbers, says what texts cost and links to the section on them', async () => {
+test('signing in, where codes go to phone numbers, links to the section on texts', async () => {
   const w = wordingFor('en');
   await open('/', { signedIn: false });
-  expect(await screen.findByText(w.privacy.sms)).toBeTruthy();
   await fireEvent.press(await screen.findByRole('link', { name: w.privacy.smsLink }));
   await waitFor(() => expect(opened).toHaveBeenCalledWith(`${web}/privacy#text-messages`));
   await fireEvent.press(await screen.findByRole('link', { name: w.privacy.policy }));
@@ -104,5 +103,6 @@ test('where codes go by email only, signing in says nothing of texts', async () 
   await open('/', { signedIn: false, phone: false });
   await screen.findByRole('link', { name: w.privacy.policy });
   await waitFor(() => expect(screen.queryByText(w.signIn.introEmail)).toBeTruthy());
-  expect(screen.queryByText(w.privacy.sms)).toBeNull();
+  expect(screen.queryByRole('link', { name: w.privacy.smsLink })).toBeNull();
+  expect(screen.queryByRole('checkbox')).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { codeFrom } from './support/codes'
 import { expect, test } from './support/fixtures'
 import { button, signIn, title } from './support/flows'
 import { en, fill } from './support/wording'
@@ -22,6 +23,47 @@ test('the service offers phone numbers here, and the screen asks for them with t
     page.getByText(fill(en.signIn.identifierHintCountries, { codes: '+1' })),
   ).toBeVisible()
   await signIn(ana)
+  await expect(page.getByText(en.profile.firstIntro)).toBeVisible()
+})
+
+test('a phone number gets its code by text only once the box beside it is ticked', async ({ person }) => {
+  const sam = await person('Sam')
+  const { page } = sam
+  const digits = () => Math.floor(Math.random() * 10)
+  const phone = `+1${7 + (digits() % 3)}${digits()}${digits()}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
+  const asked: unknown[] = []
+  page.on('request', (request) => {
+    if (request.url().endsWith('/v1/auth/codes')) asked.push(request.postDataJSON())
+  })
+
+  await page.goto('/')
+  await expect(title(page, en.signIn.title)).toBeVisible()
+  const identifier = page.getByLabel(en.signIn.identifierLabel)
+  const box = page.getByRole('checkbox', { name: en.smsCode.signIn, exact: true })
+  const send = button(page, en.signIn.sendCode)
+  // An email address: no box.
+  await identifier.fill(sam.email)
+  await expect(box).toHaveCount(0)
+
+  // A number: the box, unticked, and the button waiting for it, saying why.
+  await identifier.fill(phone)
+  await expect(box).toBeVisible()
+  await expect(box).not.toBeChecked()
+  await expect(send).toBeDisabled()
+  await expect(page.getByText(en.smsCode.tickToSend, { exact: true })).toBeVisible()
+  await expect(page.getByText('Message and data rates may apply. Reply STOP to opt out.')).toHaveCount(0)
+  await send.click({ force: true })
+  expect(asked).toEqual([])
+
+  await box.click()
+  await expect(box).toBeChecked()
+  await expect(send).toBeEnabled()
+  // The log masks the number but for its last two digits.
+  const code = await codeFrom(`+1••••••••${phone.slice(-2)}`, 'sign-in', () => send.click())
+  await expect(page.getByText(fill(en.signIn.codeSent, { identifier: phone }))).toBeVisible()
+  expect(asked).toEqual([{ identifier: phone, sms_consent: { version: expect.any(String), language: 'en' } }])
+  await page.getByLabel(en.signIn.codeLabel).fill(code)
+  await button(page, en.signIn.submit).click()
   await expect(page.getByText(en.profile.firstIntro)).toBeVisible()
 })
 

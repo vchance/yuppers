@@ -869,6 +869,12 @@
     "optedOut": "El {phone} respondió STOP a nuestros mensajes, así que ya no le enviamos mensajes. Para volver a recibirlos, responde START a cualquiera de nuestros mensajes y después activa aquí las actualizaciones.",
     "howItWorks": "Cómo te enviamos mensajes"
   },
+  "smsCode": {
+    "signIn": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para entrar. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
+    "deleteAccount": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para confirmar la eliminación de mi cuenta. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
+    "verifyNumber": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para confirmar este número. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
+    "tickToSend": "Para recibir un código por mensaje de texto, primero marca la casilla."
+  },
   "record": {
     "historyHeading": "Historial",
     "historyEmpty": "Todavía no ha pasado nada.",
@@ -1074,7 +1080,6 @@
   "privacy": {
     "link": "Privacidad",
     "policy": "Política de privacidad",
-    "sms": "Pueden aplicarse tarifas por mensajes y datos. Responde STOP para dejar de recibirlos.",
     "smsLink": "Sobre los mensajes de texto",
     "deletion": "Qué guardamos después de que eliminas tu cuenta"
   },
@@ -1115,7 +1120,8 @@
     "CONTENT_HIDDEN": "Parte de este yup se ocultó tras una revisión, así que sus términos no se pueden firmar ni cambiar.",
     "REPORT_RESOLVED": "Esta denuncia ya se resolvió.",
     "SUBJECT_IS_REVIEWER": "La persona denunciada es revisora. Solo el propietario puede suspender a una persona revisora, o levantar su suspensión, después de quitarle ese rol.",
-    "PHONE_OPTED_OUT": "Este número respondió STOP a nuestros mensajes, así que no podemos enviarle un código. Entra con tu correo electrónico, o responde START a uno de nuestros mensajes para volver a recibirlos."
+    "PHONE_OPTED_OUT": "Este número respondió STOP a nuestros mensajes, así que no podemos enviarle un código. Entra con tu correo electrónico, o responde START a uno de nuestros mensajes para volver a recibirlos.",
+    "SMS_CONSENT_REQUIRED": "Para recibir un código por mensaje de texto, marca la casilla junto al número. Si no ves la casilla, vuelve a cargar la página o actualiza la app."
   },
   "a11y": {
     "openExchange": "Abre este yup.",

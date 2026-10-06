@@ -165,6 +165,11 @@ describe('every word on the main mobile screens comes from the wording', () => {
     await open('/', false);
     await screen.findByText(w.signIn.intro);
     check();
+    // A phone number: the box beside it, unticked and then ticked.
+    await fireEvent.changeText(screen.getByLabelText(w.signIn.identifierLabel), '+12015550123');
+    check();
+    await fireEvent.press(screen.getByRole('checkbox'));
+    check();
     await fireEvent.changeText(screen.getByLabelText(w.signIn.identifierLabel), 'ana@example.test');
     await fireEvent.press(screen.getByRole('button', { name: w.signIn.sendCode }));
     await screen.findByLabelText(w.signIn.codeLabel);

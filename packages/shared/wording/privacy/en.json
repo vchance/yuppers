@@ -74,6 +74,12 @@
           "p": "If you turn on text updates for an agreement, we keep a record of it: which agreement, the phone number, when you turned them on, and the consent wording you were shown. We use it only to send you those updates and to show that you agreed to receive them. With it we keep the language the wording was in and whether you used the website or the app, and, for {networkDays} days, the IP address and user agent of your request, as we do for a signature. We also record when updates are turned off, whether by you, by a STOP reply, by a change of your phone number or by deleting your account, and every STOP and START we receive from a phone number."
         },
         {
+          "h": "Codes by text, if you ask for one"
+        },
+        {
+          "p": "When you ask for a one-time code by text, to sign in, to confirm deleting your account or to add a number to your account, we keep a record that you ticked the box beside your number: what the code was for, the version of the wording beside the box and its language, whether you used the website or the app, and when. If the number is already your account’s, we keep it and your account with the record. If it isn’t yet, we keep only a keyed hash of it: a fingerprint, made with a secret key, that lets us find the record from the number if we are asked about a text, but that can’t be turned back into the number. For {networkDays} days we also keep the IP address and user agent of your request, as we do for a signature. We use the record only to show that you asked for the text we sent."
+        },
+        {
           "h": "Notifications in the app, if you turn them on"
         },
         {
@@ -165,7 +171,7 @@
         },
         {
           "ul": [
-            "Yuppers.app sign-in codes: a one-time code to sign in (which also creates your account the first time), or to confirm that you want to delete your account. We send one only when you ask for a code, and only to the number you entered or, to confirm a deletion, the number on your account. Entering your number and asking for a code is your request for that text. Message frequency: one message for each code you ask for.",
+            "Yuppers.app sign-in codes: a one-time code to sign in (which also creates your account the first time), or to confirm that you want to delete your account. We send one only when you ask for a code, and only to the number you entered or, to confirm a deletion, the number on your account. Entering your number, ticking the box beside it that says what we will send, and asking for a code is your request for that text; until the box is ticked, we send nothing. Message frequency: one message for each code you ask for.",
             "Yuppers.app agreement updates: if you turn on text updates for an agreement, by ticking a box on that agreement, we text you when its status changes, for example when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it. Message frequency varies; there is no fixed maximum: one text per status change of an agreement you turned updates on for. An update says only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
             "Message and data rates may apply.",
             "**Reply HELP for help.** **Reply STOP to stop receiving texts from us.** STOP stops all texts from Yuppers.app, sign-in codes included, so you’ll need to sign in with an email address instead. Turning off text updates for one agreement stops the updates for that agreement only.",
@@ -195,6 +201,7 @@
             "Drafts you haven’t sent: until you send them, discard them or delete your account.",
             "The IP address and user agent recorded with a signature: {networkDays} days.",
             "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
+            "The record of each code you asked for by text: {smsConsentYears} years, as proof that you asked for it. The IP address and user agent recorded with it: {networkDays} days.",
             "One-time codes: each code works for {codeMinutes} minutes, and only once. We don’t yet delete the records of codes (the hash, where it went and when) on a schedule; deleting your account deletes the ones for your email address and phone number.",
             "Sign-ins: each lasts {sessionDays} days, unless you sign out first.",
             "Sign-in limit counts: two days.",
@@ -245,6 +252,7 @@
             "Yups that were sent stay with the other person, as the record of what was proposed and agreed: the terms, the history, your signature, and your name exactly as the agreement gives it. Your name in those records is not removed or replaced.",
             "The IP address and user agent recorded with your signatures, until {networkDays} days after each signature.",
             "The record of text updates you turned on, and that they ended when you deleted your account, with the phone number they went to, for {smsConsentYears} years, as proof of what you agreed to; and, if your number replied STOP, that it did, for as long as it stays unsubscribed.",
+            "The record of each code you asked for by text, with your account and, where the number was on your account, the number, for {smsConsentYears} years, as proof that you asked for it.",
             "Reports you made, or that were made about you, and the history of their review.",
             "An account record with no contact details and no name: its ID, when it was created and when its holder confirmed being 18 or over, which the signatures it gave rely on; and its line in the deletion log.",
             "Backup copies, until they expire as described above."

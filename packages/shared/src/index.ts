@@ -279,6 +279,14 @@ export type {
   SmsUpdatesStep,
 } from './sms-updates'
 export {
+  readsAsPhone,
+  SMS_CODE_CONSENT_VERSION,
+  smsCodeConsent,
+  smsCodeConsentLabel,
+  useSmsCodeConsentBox,
+} from './sms-code-consent'
+export type { SmsCodeConsent, SmsCodeConsentBox, SmsCodePurpose } from './sms-code-consent'
+export {
   codeWaitText,
   identifierRefused,
   phoneOffered,

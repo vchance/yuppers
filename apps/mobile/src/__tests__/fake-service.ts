@@ -244,6 +244,9 @@ function respond(
     ];
   }
   if (call === 'POST /v1/auth/codes') {
+    // Like the service: a code by text only with the box beside the number ticked.
+    const { identifier, sms_consent } = body as { identifier: string; sms_consent?: unknown };
+    if (!identifier.includes('@') && !sms_consent) return [422, { code: 'SMS_CONSENT_REQUIRED' }];
     if (service.refuseCodes) return [429, { code: service.refuseCodes }];
     return [204, null];
   }

@@ -124,6 +124,8 @@ describe('waiting for a sign-in code', () => {
   async function requestCode(identifier = 'ana@example.test') {
     await screen.findByText(w.signIn.intro);
     await fireEvent.changeText(screen.getByLabelText(w.signIn.identifierLabel), identifier);
+    // A number gets its code by text only with the box beside it ticked.
+    if (!identifier.includes('@')) await fireEvent.press(screen.getByRole('checkbox'));
     await fireEvent.press(screen.getByText(w.signIn.sendCode));
     await screen.findByLabelText(w.signIn.codeLabel);
   }

@@ -7,9 +7,12 @@ import {
   languages,
   phoneOffered,
   pickLanguage,
+  readsAsPhone,
   signInText,
+  smsCodeConsent,
   useResendReady,
   useSignInChannels,
+  useSmsCodeConsentBox,
   type Language,
 } from '@yuppers/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -29,6 +32,7 @@ import {
   Screen,
   TextField,
 } from '../components/ui';
+import { ConsentCheckbox } from '../components/ConsentCheckbox';
 import { LegalLinks } from '../components/LegalLinks';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
@@ -111,6 +115,12 @@ export function Gate({ children, signedOut }: { children: ReactNode; signedOut?:
  * does this form. A phone number is asked for only where the service can
  * text it (`GET /v1/meta`); elsewhere one typed anyway is stopped here.
  *
+ * As soon as what is typed reads as a phone number, an unticked box appears
+ * beside the words the terms quote (`smsCode.signIn`), and "Send code"
+ * waits for it, saying why: a code goes by text only once it is ticked
+ * (`sms-code-consent.ts`). Never ticked to begin with, and unticked again
+ * whenever the number changes.
+ *
  * While the code is on its way, the form says to look in the spam folder
  * too, for an email from the address the service names, and offers another
  * code only half a minute after the last (`useResendReady`).
@@ -135,6 +145,10 @@ function SignIn() {
   const text = signInText(w, channels, fmt);
   const phone = phoneOffered(channels);
   const codeInput = useRef<TextInput>(null);
+  // The box, while what is typed would be texted a code.
+  const typed = identifier.trim();
+  const texted = readsAsPhone(typed) && identifierRefused(typed, channels) === null;
+  const consent = useSmsCodeConsentBox(texted ? typed : null);
 
   // Each step starts with the keyboard on the one thing it asks for.
   useEffect(() => {
@@ -151,7 +165,7 @@ function SignIn() {
     }
     setBusy(true);
     try {
-      await api.requestCode(to);
+      await api.requestCode(to, consent.checked ? smsCodeConsent(language) : undefined);
       setSentTo(to);
       setSentAt(Date.now());
       setResent(again);
@@ -202,29 +216,37 @@ function SignIn() {
             setIdentifier(value);
             setProblem(null);
           }}
-          onSubmitEditing={() => void requestCode(identifier.trim(), false)}
+          onSubmitEditing={() => {
+            if (!consent.missing) void requestCode(identifier.trim(), false);
+          }}
         />
         {problem ? <ErrorNote>{problem}</ErrorNote> : <Failure code={failure} />}
+        {consent.shown ? (
+          <ConsentCheckbox
+            wording={wording.smsCode.signIn}
+            checked={consent.checked}
+            onChange={consent.setChecked}
+            disabled={busy}
+          />
+        ) : null}
+        {consent.missing ? <Hint>{wording.smsCode.tickToSend}</Hint> : null}
         <Actions>
           <Button
             variant="primary"
             label={w.sendCode}
-            disabled={busy}
+            disabled={busy || consent.missing}
+            hint={consent.missing ? wording.smsCode.tickToSend : undefined}
             onPress={() => void requestCode(identifier.trim(), false)}
           />
         </Actions>
-        {/* What a text message costs and how to stop them, said wherever a
-            code can go to a phone number, before one is asked for. */}
+        {/* Where a code can go to a phone number, the policy on texts. */}
         {phone ? (
-          <>
-            <Hint>{wording.privacy.sms}</Hint>
-            <LegalLinks
-              documents={['privacy']}
-              testID="privacy-sms"
-              section="text-messages"
-              label={wording.privacy.smsLink}
-            />
-          </>
+          <LegalLinks
+            documents={['privacy']}
+            testID="privacy-sms"
+            section="text-messages"
+            label={wording.privacy.smsLink}
+          />
         ) : null}
         <LegalLinks />
         {/* Before anyone is signed in, the language is this device's to choose. */}
@@ -272,6 +294,8 @@ function SignIn() {
           label={text.changeIdentifier}
           disabled={busy}
           onPress={() => {
+            // Back to the number, the box is unticked: it is never remembered.
+            consent.setChecked(false);
             setSentTo(null);
             setSentAt(null);
             setCode('');

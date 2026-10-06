@@ -74,6 +74,12 @@
           "p": "Si activas las actualizaciones por mensaje de texto para un acuerdo, guardamos un registro: qué acuerdo, el número de teléfono, cuándo las activaste y el texto de consentimiento que se te mostró. Lo usamos solo para enviarte esas actualizaciones y para demostrar que aceptaste recibirlas. Con él guardamos el idioma del texto y si usaste el sitio web o la app, y, durante {networkDays} días, la dirección IP y el agente de usuario de tu solicitud, como hacemos con una firma. También registramos cuándo se desactivan las actualizaciones, ya sea por ti, por una respuesta STOP, por un cambio de tu número de teléfono o por la eliminación de tu cuenta, y cada STOP y START que recibimos de un número de teléfono."
         },
         {
+          "h": "Códigos por mensaje de texto, si pides uno"
+        },
+        {
+          "p": "Cuando pides un código de un solo uso por mensaje de texto, para entrar, para confirmar la eliminación de tu cuenta o para agregar un número a tu cuenta, guardamos un registro de que marcaste la casilla junto a tu número: para qué era el código, la versión del texto junto a la casilla y su idioma, si usaste el sitio web o la app, y cuándo. Si el número ya es el de tu cuenta, guardamos el número y tu cuenta con el registro. Si todavía no lo es, guardamos solo un hash con clave del número: una huella, hecha con una clave secreta, que nos permite encontrar el registro a partir del número si nos preguntan por un mensaje, pero que no se puede convertir de nuevo en el número. Durante {networkDays} días guardamos también la dirección IP y el agente de usuario de tu solicitud, como hacemos con una firma. Usamos el registro solo para mostrar que pediste el mensaje que te enviamos."
+        },
+        {
           "h": "Notificaciones en la app, si las activas"
         },
         {
@@ -165,7 +171,7 @@
         },
         {
           "ul": [
-            "Códigos de Yuppers.app para entrar (Yuppers.app sign-in codes): un código de un solo uso para entrar (con lo que también se crea tu cuenta la primera vez), o para confirmar que quieres eliminar tu cuenta. Lo enviamos solo cuando pides un código, y solo al número que escribiste o, para confirmar una eliminación, al número de tu cuenta. Escribir tu número y pedir un código es tu solicitud de ese mensaje. Frecuencia de los mensajes: un mensaje por cada código que pides.",
+            "Códigos de Yuppers.app para entrar (Yuppers.app sign-in codes): un código de un solo uso para entrar (con lo que también se crea tu cuenta la primera vez), o para confirmar que quieres eliminar tu cuenta. Lo enviamos solo cuando pides un código, y solo al número que escribiste o, para confirmar una eliminación, al número de tu cuenta. Escribir tu número, marcar la casilla junto a él que dice lo que te enviaremos y pedir un código es tu solicitud de ese mensaje; hasta que marcas la casilla, no enviamos nada. Frecuencia de los mensajes: un mensaje por cada código que pides.",
             "Actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates): si activas las actualizaciones por mensaje de texto para un acuerdo, marcando una casilla en ese acuerdo, te enviamos un mensaje cuando cambia su estado, por ejemplo cuando la otra persona firma, marca algo como entregado, lo confirma, lo disputa o pide cerrarlo. La frecuencia de los mensajes varía; no hay un máximo fijo: un mensaje por cada cambio de estado de un acuerdo para el que activaste las actualizaciones. Una actualización solo dice que algo cambió, con un enlace para entrar y verlo. Nunca incluye los términos, las cantidades ni los nombres de lo que se entrega, igual que nuestros correos y las notificaciones de la app.",
             "Pueden aplicarse tarifas por mensajes y datos. (Message and data rates may apply.)",
             "**Responde HELP para obtener ayuda.** **Responde STOP para dejar de recibir nuestros mensajes.** STOP detiene todos los mensajes de Yuppers.app, incluidos los códigos para entrar, así que tendrás que entrar con un correo electrónico. Desactivar las actualizaciones de un acuerdo las detiene solo para ese acuerdo.",
@@ -195,6 +201,7 @@
             "Los borradores que no has enviado: hasta que los envíes, los descartes o elimines tu cuenta.",
             "La dirección IP y el agente de usuario registrados con una firma: {networkDays} días.",
             "El registro de las actualizaciones por mensaje que activaste para un acuerdo, y de su fin: mientras estén activadas y, después, durante {smsConsentYears} años, como prueba de que pediste los mensajes que te enviamos. La dirección IP y el agente de usuario registrados con él: {networkDays} días. Un número de teléfono que respondió STOP: mientras siga dado de baja, para no volver a enviarle mensajes.",
+            "El registro de cada código que pediste por mensaje de texto: {smsConsentYears} años, como prueba de que lo pediste. La dirección IP y el agente de usuario registrados con él: {networkDays} días.",
             "Los códigos de un solo uso: cada código sirve durante {codeMinutes} minutos, y una sola vez. Todavía no borramos de forma periódica los registros de los códigos (el hash, adónde se envió y cuándo); al eliminar tu cuenta se borran los de tu correo electrónico y tu número de teléfono.",
             "Las sesiones: cada una dura {sessionDays} días, salvo que la cierres antes.",
             "Las cuentas de los límites para entrar: dos días.",
@@ -245,6 +252,7 @@
             "Los yups que se enviaron se quedan con la otra persona, como el registro de lo que se propuso y se acordó: los términos, el historial, tu firma y tu nombre exactamente como lo da el acuerdo. Tu nombre en esos registros no se borra ni se reemplaza.",
             "La dirección IP y el agente de usuario registrados con tus firmas, hasta {networkDays} días después de cada firma.",
             "El registro de las actualizaciones por mensaje que activaste, y de que terminaron al eliminar tu cuenta, con el número de teléfono al que iban, durante {smsConsentYears} años, como prueba de lo que aceptaste; y, si tu número respondió STOP, que lo hizo, mientras siga dado de baja.",
+            "El registro de cada código que pediste por mensaje de texto, con tu cuenta y, si el número era el de tu cuenta, el número, durante {smsConsentYears} años, como prueba de que lo pediste.",
             "Las denuncias que hiciste, o que se hicieron sobre ti, y el historial de su revisión.",
             "Un registro de la cuenta sin datos de contacto y sin nombre: su identificador, cuándo se creó y cuándo su titular confirmó tener 18 años o más, en lo que se basan las firmas que dio; y su línea en el registro de eliminaciones.",
             "Las copias de seguridad, hasta que caduquen como se describe arriba."

@@ -1,5 +1,7 @@
+import { apiLog } from './support/env'
 import { expect, test } from './support/fixtures'
 import { signIn } from './support/flows'
+import { number, textsTo, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -25,6 +27,59 @@ test('the service offers phone numbers here, and the form asks for them with the
   await expect(page.getByLabel(en.signIn.identifierLabel)).toBeVisible()
   await expect(page.getByText(fill(en.signIn.identifierHintCountries, { codes: '+1' }))).toBeVisible()
   await signIn(ana)
+  await expect(page.getByRole('heading', { name: en.profile.firstTitle })).toBeVisible()
+})
+
+test('a phone number gets its code by text only once the box beside it is ticked', async ({ person }) => {
+  const sam = await person('Sam')
+  const { page } = sam
+  const phone = number()
+  const asked: unknown[] = []
+  page.on('request', (request) => {
+    if (request.url().endsWith('/v1/auth/codes')) asked.push(request.postDataJSON())
+  })
+
+  // Without the box, as from a client from before it, the service refuses.
+  const refused = await page.request.post('/v1/auth/codes', { data: { identifier: phone } })
+  expect(refused.status()).toBe(422)
+  expect(await refused.json()).toEqual({ code: 'SMS_CONSENT_REQUIRED' })
+
+  await page.goto('/')
+  const identifier = page.getByLabel(en.signIn.identifierLabel)
+  const box = page.getByRole('checkbox', { name: en.smsCode.signIn, exact: true })
+  const send = page.getByRole('button', { name: en.signIn.sendCode, exact: true })
+  // An email address: no box, and nothing to wait for.
+  await identifier.fill(sam.email)
+  await expect(box).toHaveCount(0)
+  await expect(send).toBeEnabled()
+
+  // A number: the box, unticked, its addresses links to a new tab, and the
+  // button waiting for it, saying why. The short line it replaces is gone.
+  await identifier.fill(phone)
+  await expect(box).toBeVisible()
+  await expect(box).not.toBeChecked()
+  await expect(send).toBeDisabled()
+  await expect(send).toHaveAccessibleDescription(en.smsCode.tickToSend)
+  for (const address of ['https://yuppers.app/terms', 'https://yuppers.app/privacy']) {
+    const link = page.getByRole('link', { name: address, exact: true })
+    await expect(link).toHaveAttribute('href', address)
+    await expect(link).toHaveAttribute('target', '_blank')
+  }
+  await expect(page.getByText('Message and data rates may apply. Reply STOP to opt out.')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: en.privacy.smsLink })).toBeVisible()
+  await send.click({ force: true })
+  expect(asked).toEqual([])
+
+  await box.check()
+  await expect(send).toBeEnabled()
+  const before = textsTo(phone, apiLog).length
+  await send.click()
+  await expect(page.getByText(fill(en.signIn.codeSent, { identifier: phone }))).toBeVisible()
+  expect(asked).toEqual([{ identifier: phone, sms_consent: { version: expect.any(String), language: 'en' } }])
+  const text = await waitFor(() => textsTo(phone, apiLog)[before], 'the code by text')
+  const code = /^\d{6}/.exec(text)![0]
+  await page.getByLabel(en.signIn.codeLabel).fill(code)
+  await page.getByRole('button', { name: en.signIn.submit, exact: true }).click()
   await expect(page.getByRole('heading', { name: en.profile.firstTitle })).toBeVisible()
 })
 

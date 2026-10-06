@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { SMS_CONSENT_VERSION } from '@yuppers/shared'
+import { SMS_CODE_CONSENT_VERSION, SMS_CONSENT_VERSION } from '@yuppers/shared'
 import { afterEach, expect, test } from 'vitest'
 
 import { ACTIVE, DRAFT, ENDED, GOOD_CODE, ana } from '../test/fake-service'
@@ -47,19 +47,38 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   const control = await shown()
   expect(control.textContent).toContain(w.intro)
   expect(control.textContent).toContain(w.addPhoneIntro)
-  // What a text costs and how to stop them, before a number is given.
-  expect(control.textContent).toContain(wording.privacy.sms)
+  // Before a number gets a code, a box, unticked, beside the words the
+  // terms quote for checking a number; "Text me a code" waits for it.
+  const codeBox = field(wording.smsCode.verifyNumber) as HTMLInputElement
+  expect(codeBox.type).toBe('checkbox')
+  expect(codeBox.checked).toBe(false)
+  expect(wording.smsCode.verifyNumber).toBe(
+    'Text me a one-time code to confirm this number from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+  )
+  const send = button(w.sendCode)
+  expect(send.disabled).toBe(true)
+  expect(document.getElementById(send.getAttribute('aria-describedby')!)?.textContent).toBe(
+    wording.smsCode.tickToSend,
+  )
   expect(await violations()).toEqual([])
 
   // Not a US number: said, and nothing sent.
   await type(field(w.phoneLabel), '+44 7700 900123')
+  await press(field(wording.smsCode.verifyNumber))
   await press(button(w.sendCode))
   expect(control.textContent).toContain(w.phoneInvalid)
   expect(lastSent(service, 'POST /v1/auth/codes')).toBeUndefined()
 
+  // Another number: the box is unticked again.
   await type(field(w.phoneLabel), '(555) 234-5678')
+  expect((field(wording.smsCode.verifyNumber) as HTMLInputElement).checked).toBe(false)
+  expect(button(w.sendCode).disabled).toBe(true)
+  await press(field(wording.smsCode.verifyNumber))
   await press(button(w.sendCode))
-  expect(lastSent(service, 'POST /v1/auth/codes')).toEqual({ identifier: '+15552345678' })
+  expect(lastSent(service, 'POST /v1/auth/codes')).toEqual({
+    identifier: '+15552345678',
+    sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
+  })
   await until(() => control.textContent!.includes('We texted a code to +1 •••-•••-5678.'), 'the code step')
   expect(document.activeElement).toBe(field(w.codeLabel))
   expect(await violations()).toEqual([])

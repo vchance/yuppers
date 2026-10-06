@@ -1,4 +1,4 @@
-import { wordingFor } from '@yuppers/shared';
+import { SMS_CODE_CONSENT_VERSION, wordingFor } from '@yuppers/shared';
 import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { Platform } from 'react-native';
@@ -115,6 +115,8 @@ test('signing in keeps the token in secure storage and nowhere else, then asks f
     screen.getByLabelText(w.signIn.identifierLabel),
     ' ana@example.test ',
   );
+  // No box for an email address.
+  expect(screen.queryByRole('checkbox')).toBeNull();
   await fireEvent.press(screen.getByText(w.signIn.sendCode));
   await screen.findByLabelText(w.signIn.codeLabel);
   expect(service.sent.at(-1)).toMatchObject({
@@ -164,8 +166,10 @@ test('where the service has no text messages, signing in asks for an email addre
   expect(email.props.textContentType).toBe('emailAddress');
   expect(email.props.autoComplete).toBe('email');
 
-  // A phone number typed anyway is stopped here, before anything is sent.
+  // A phone number typed anyway is stopped here, before anything is sent,
+  // and with no box: no code would go by text.
   await fireEvent.changeText(email, '+1 555 123 4567');
+  expect(screen.queryByRole('checkbox')).toBeNull();
   await fireEvent.press(screen.getByText(w.signIn.sendCode));
   await screen.findByText(w.signIn.emailOnly);
   expect(screen.queryByText(w.errors.SERVICE_UNAVAILABLE)).toBeNull();
@@ -191,14 +195,59 @@ test('where the service sends text messages, a phone number is asked for and sen
     w.signIn.identifierHintCountries.replace('{codes}', '+1'),
   );
   expect(identifier.props.textContentType).toBe('username');
+  expect(screen.queryByRole('checkbox')).toBeNull();
   await fireEvent.changeText(identifier, '+15551234567');
-  await fireEvent.press(screen.getByText(w.signIn.sendCode));
+
+  // The box, unticked, named by the words the terms quote, its two
+  // addresses links; "Send code" waits for it and says why.
+  const box = screen.getByRole('checkbox');
+  expect(box.props.accessibilityLabel).toBe(w.smsCode.signIn);
+  expect(w.smsCode.signIn).toBe(
+    'Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+  );
+  expect(box.props.accessibilityState).toMatchObject({ checked: false });
+  expect(
+    screen
+      .getAllByRole('link')
+      .map((link) => link.props.children)
+      .filter((text) => /^https:/.test(String(text))),
+  ).toEqual(['https://yuppers.app/terms', 'https://yuppers.app/privacy']);
+  const send = () => screen.getByRole('button', { name: w.signIn.sendCode });
+  expect(send().props.accessibilityState).toMatchObject({ disabled: true });
+  expect(send().props.accessibilityHint).toBe(w.smsCode.tickToSend);
+  screen.getByText(w.smsCode.tickToSend);
+  // The short line it replaces is gone.
+  expect(screen.queryByText('Message and data rates may apply. Reply STOP to opt out.')).toBeNull();
+  await fireEvent.press(send());
+  expect(service.sent.some((request) => request.path === '/v1/auth/codes')).toBe(false);
+
+  // Another number unticks it, even typed back.
+  await fireEvent.press(box);
+  expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: true });
+  await fireEvent.changeText(identifier, '+15551234568');
+  expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: false });
+  await fireEvent.changeText(identifier, '+15551234567');
+  expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: false });
+
+  await fireEvent.press(screen.getByRole('checkbox'));
+  expect(send().props.accessibilityState).toMatchObject({ disabled: false });
+  expect(send().props.accessibilityHint).toBeUndefined();
+  expect(screen.queryByText(w.smsCode.tickToSend)).toBeNull();
+  await fireEvent.press(send());
   await screen.findByLabelText(w.signIn.codeLabel);
   expect(service.sent.at(-1)).toMatchObject({
     path: '/v1/auth/codes',
-    body: { identifier: '+15551234567' },
+    body: {
+      identifier: '+15551234567',
+      sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
+    },
   });
-  expect(screen.getByText(w.signIn.changeIdentifier)).toBeTruthy();
+
+  // Back to the number: unticked again.
+  await fireEvent.press(screen.getByText(w.signIn.changeIdentifier));
+  expect((await screen.findByRole('checkbox')).props.accessibilityState).toMatchObject({
+    checked: false,
+  });
 });
 
 test('a session from an earlier launch opens straight onto the exchanges', async () => {

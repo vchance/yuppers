@@ -194,6 +194,21 @@ describe('signing in', () => {
     expect(screen.getByRole('header', { name: w.signIn.title })).toBeTruthy();
   });
 
+  test('a phone number: the box beside it is a named checkbox with its state, and the button says why it waits', async () => {
+    await open('/', { signedIn: false });
+    await screen.findByText(w.signIn.intro);
+    await fireEvent.changeText(screen.getByLabelText(w.signIn.identifierLabel), '+12015550123');
+    expect(audit()).toEqual([]);
+    const box = screen.getByRole('checkbox', { name: w.smsCode.signIn });
+    expect(box.props.accessibilityState).toMatchObject({ checked: false });
+    const send = screen.getByRole('button', { name: w.signIn.sendCode });
+    expect(send.props.accessibilityState).toMatchObject({ disabled: true });
+    expect(send.props.accessibilityHint).toBe(w.smsCode.tickToSend);
+    await fireEvent.press(box);
+    expect(audit()).toEqual([]);
+    expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: true });
+  });
+
   test('the profile: what is missing is said, and stays with its field', async () => {
     await open('/', { signedIn: false });
     await screen.findByText(w.signIn.intro);

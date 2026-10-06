@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SMS_CODE_CONSENT_VERSION } from '@yuppers/shared'
 import { act } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
@@ -46,6 +47,8 @@ describe('signing in where the service has no text messages', () => {
 
     const email = field(w.emailLabel)
     await type(email, '+1 555 123 4567')
+    // No box: no code would go by text.
+    expect(document.querySelector('input[type="checkbox"]')).toBeNull()
     await press(button(w.sendCode))
     await until(() => document.body.textContent!.includes(w.emailOnly), 'the email-only message')
     expect(document.body.textContent).not.toContain(wording.errors.SERVICE_UNAVAILABLE)
@@ -86,13 +89,126 @@ describe('signing in where the service sends text messages', () => {
     expect(identifier.type).toBe('text')
 
     await type(identifier, '+15551234567')
+    await press(field(wording.smsCode.signIn))
     await press(button(w.sendCode))
     await until(() => hasLabel(w.codeLabel), 'the code field')
     expect(service.sent.at(-1)).toEqual({
       call: 'POST /v1/auth/codes',
-      body: { identifier: '+15551234567' },
+      body: {
+        identifier: '+15551234567',
+        sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
+      },
     })
     button(w.changeIdentifier)
+  })
+})
+
+describe('the box beside a phone number', () => {
+  const box = () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')
+
+  test('appears unticked once what is typed reads as a phone number, never for an email address', async () => {
+    const { wording } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    const identifier = field(w.identifierLabel)
+    expect(box()).toBeNull()
+
+    await type(identifier, 'ben@example.test')
+    expect(box()).toBeNull()
+    expect(button(w.sendCode).disabled).toBe(false)
+    expect(button(w.sendCode).getAttribute('aria-describedby')).toBeNull()
+
+    await type(identifier, '+1')
+    expect(box()).not.toBeNull()
+    expect(box()!.checked).toBe(false)
+    await type(identifier, '+1 201 555 0123')
+    expect(box()!.checked).toBe(false)
+    // The short line it replaces is gone; the link to the policy on texts stays.
+    expect(document.body.textContent).not.toContain(
+      'Message and data rates may apply. Reply STOP to opt out.',
+    )
+    expect(document.body.textContent).toContain(wording.privacy.smsLink)
+
+    await type(identifier, 'ben@example.test')
+    expect(box()).toBeNull()
+  })
+
+  test('is labelled with the words the terms quote, its two addresses links that open a new tab', async () => {
+    const { wording } = await start('/', null)
+    await until(() => hasLabel(wording.signIn.identifierLabel), 'the email or phone field')
+    await type(field(wording.signIn.identifierLabel), '+12015550123')
+
+    expect(field(wording.smsCode.signIn)).toBe(box())
+    expect(wording.smsCode.signIn).toBe(
+      'Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+    )
+    const links = [...box()!.closest('label')!.querySelectorAll('a')]
+    expect(links.map((link) => [link.textContent, link.getAttribute('href'), link.target])).toEqual([
+      ['https://yuppers.app/terms', 'https://yuppers.app/terms', '_blank'],
+      ['https://yuppers.app/privacy', 'https://yuppers.app/privacy', '_blank'],
+    ])
+  })
+
+  test('holds back “Send code”, saying why, until it is ticked', async () => {
+    const { wording, service } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    const identifier = field(w.identifierLabel)
+    await type(identifier, '+12015550123')
+
+    const send = button(w.sendCode)
+    expect(send.disabled).toBe(true)
+    const why = document.getElementById(send.getAttribute('aria-describedby')!)
+    expect(why?.textContent).toBe(wording.smsCode.tickToSend)
+    // Submitted anyway, from the keyboard: nothing is asked for.
+    await act(async () => {
+      send.form!.requestSubmit()
+    })
+    expect(service.sent.some((request) => request.call === 'POST /v1/auth/codes')).toBe(false)
+
+    await press(box()!)
+    expect(box()!.checked).toBe(true)
+    expect(send.disabled).toBe(false)
+    expect(send.getAttribute('aria-describedby')).toBeNull()
+    expect(document.body.textContent).not.toContain(wording.smsCode.tickToSend)
+
+    // Another number unticks it, and typing the first again does not tick it back.
+    await type(identifier, '+12015550124')
+    expect(box()!.checked).toBe(false)
+    await type(identifier, '+12015550123')
+    expect(box()!.checked).toBe(false)
+    expect(button(w.sendCode).disabled).toBe(true)
+  })
+
+  test('is unticked again on coming back to the number', async () => {
+    const { wording } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    await type(field(w.identifierLabel), '+12015550123')
+    await press(box()!)
+    await press(button(w.sendCode))
+    await until(() => hasLabel(w.codeLabel), 'the code field')
+
+    await press(button(w.changeIdentifier))
+    await until(() => box() !== null, 'the box again')
+    expect(box()!.checked).toBe(false)
+    expect(button(w.sendCode).disabled).toBe(true)
+  })
+
+  test('is in Spanish in Spanish, HELP, STOP and the addresses as they are', async () => {
+    const { wording, service } = await start('/', null, 'es')
+    await until(() => hasLabel(wording.signIn.identifierLabel), 'the email or phone field')
+    await type(field(wording.signIn.identifierLabel), '+12015550123')
+    const label = box()!.closest('label')!
+    expect(label.textContent).toBe(wording.smsCode.signIn)
+    expect(label.textContent).toMatch(/HELP.*STOP.*https:\/\/yuppers\.app\/terms.*https:\/\/yuppers\.app\/privacy/)
+    await press(box()!)
+    await press(button(wording.signIn.sendCode))
+    await until(() => hasLabel(wording.signIn.codeLabel), 'the code field')
+    expect(service.sent.at(-1)?.body).toEqual({
+      identifier: '+12015550123',
+      sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'es' },
+    })
   })
 })
 
@@ -128,6 +244,7 @@ describe('waiting for the code', () => {
 
     await press(button(w.changeIdentifier))
     await type(field(w.identifierLabel), '+15551234567')
+    await press(field(wording.smsCode.signIn))
     await press(button(w.sendCode))
     await until(() => hasLabel(w.codeLabel), 'the code field')
     expect(document.body.textContent).not.toContain(w.checkInboxAnySender)

@@ -923,6 +923,22 @@ export interface Wording {
     howItWorks: string
   }
   /**
+   * Consent to a one-time code by text (`sms-code-consent.ts`): the words
+   * beside the box on each form that texts a code, word for word as the
+   * terms quote them, their two addresses links. Their version is
+   * `SMS_CODE_CONSENT_VERSION`.
+   */
+  smsCode: {
+    /** On the sign-in form, once what is typed reads as a phone number. */
+    signIn: string
+    /** On account deletion, with the code to go to the phone number. */
+    deleteAccount: string
+    /** In "Text updates", adding a number to the account. */
+    verifyNumber: string
+    /** Beside the button that sends the code, while the box is not ticked: why it waits. */
+    tickToSend: string
+  }
+  /**
    * Wallet passes (DESIGN.md §11): the button on the exchange view, and what
    * the service writes on a pass (`backend/src/wallet`). A pass carries
    * nothing from the agreement, so none of this takes a name or an amount.
@@ -1114,9 +1130,7 @@ export interface Wording {
     link: string
     /** The policy's name, for a link that stands on its own: sign-in, the account screens, the help pages. */
     policy: string
-    /** Under the sign-in form, only where codes can go to phone numbers: what a text message costs and how to stop them. */
-    sms: string
-    /** After `sms`: the link to the policy's section on text messages. */
+    /** On the sign-in form, only where codes can go to phone numbers: the link to the policy's section on text messages. */
     smsLink: string
     /** Beside account deletion: the link to the policy's section on what deleting leaves. */
     deletion: string

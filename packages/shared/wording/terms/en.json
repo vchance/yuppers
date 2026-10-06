@@ -139,6 +139,8 @@
           "ul": [
             "Program name: Yuppers.app sign-in codes.",
             "Description: Yuppers.app (https://yuppers.app) texts a one-time sign-in code to the phone number you enter on the sign-in screen, only when you ask for one. If you choose your phone number to confirm deleting your account, we also text you a one-time code for that.",
+            "How you opt in: by entering your number and ticking a box that shows this text: “Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked, no code is sent.",
+            "To confirm deleting your account by text, or to add a number to your account before turning on agreement updates, the box shows the same text with “a one-time code to confirm deleting your account” or “a one-time code to confirm this number” in place of “a one-time sign-in code”.",
             "Message frequency: One message per code request."
           ]
         },
@@ -150,7 +152,7 @@
             "Program name: Yuppers.app agreement updates.",
             "Description: If you turn on text updates for an agreement, Yuppers.app texts you when its status changes: for example, when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it.",
             "How you opt in: by ticking a box on that agreement, which shows this text: “Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”",
-            "Before the box, if your account has no phone number, you add one, a US number that we check with a one-time code sent to it by text.",
+            "Before the box, if your account has no phone number, you add one, a US number that we check with a one-time code sent to it by text once you tick the box beside it (above).",
             "Message frequency: Message frequency varies; there is no fixed maximum. One text per status change of an agreement you turned updates on for.",
             "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
             "Turning text updates off for an agreement stops them for that agreement only."

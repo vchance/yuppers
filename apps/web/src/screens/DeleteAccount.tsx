@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useI18n, useSession } from '../app/context'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
+import { ConsentCheckbox } from '../components/ConsentCheckbox'
 import { HelpLink } from '../components/HelpLink'
 import { LegalLink } from '../components/LegalLink'
 import { Panel } from '../components/Panel'
@@ -59,7 +60,7 @@ export default function DeleteAccount({ account }: { account: Account }) {
 }
 
 function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
-  const { wording, fmt } = useI18n()
+  const { wording, fmt, language } = useI18n()
   const { setAccount } = useSession()
   const w = wording.deletion
   const id = useId()
@@ -76,6 +77,7 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
       navigate(paths.home)
     },
     channels,
+    language,
   )
   const { step, preview, destination, busy } = deletion
   const identifier = destination?.identifier ?? ''
@@ -91,6 +93,8 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
     if (codeMissing) codeInput.current?.focus()
   }, [codeMissing])
   const failureId = useId()
+  const waitId = useId()
+  const consent = deletion.codeConsent
 
   if (step === 'confirm') {
     return (
@@ -230,12 +234,26 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
         <p>{fmt(w.codeIntro, { identifier })}</p>
       )}
 
+      {/* A code by text only once the box beside the number is ticked. */}
+      {consent.shown && (
+        <ConsentCheckbox
+          wording={wording.smsCode.deleteAccount}
+          checked={consent.checked}
+          onChange={consent.setChecked}
+        />
+      )}
+      {consent.missing && (
+        <p className="hint" id={waitId}>
+          {wording.smsCode.tickToSend}
+        </p>
+      )}
       <Failure code={deletion.failure} />
       <div className="actions">
         <button
           type="button"
           className="primary"
-          disabled={busy || !preview || !destination}
+          disabled={busy || !preview || !destination || consent.missing}
+          aria-describedby={consent.missing ? waitId : undefined}
           onClick={() => void deletion.sendCode()}
         >
           {w.sendCode}

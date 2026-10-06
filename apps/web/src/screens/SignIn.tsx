@@ -3,13 +3,17 @@ import {
   codeWaitText,
   identifierRefused,
   phoneOffered,
+  readsAsPhone,
   signInText,
+  smsCodeConsent,
   useResendReady,
   useSignInChannels,
+  useSmsCodeConsentBox,
 } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
+import { ConsentCheckbox } from '../components/ConsentCheckbox'
 import { LegalLink } from '../components/LegalLink'
 import { ErrorNote, Failure, Field, Notice } from '../components/ui'
 import { api, failureCode } from '../lib/api'
@@ -20,6 +24,12 @@ import { api, failureCode } from '../lib/api'
  * request for a code the same way whether or not an account exists, and so
  * does this form. A phone number is asked for only where the service can
  * text it (`GET /v1/meta`); elsewhere one typed anyway is stopped here.
+ *
+ * As soon as what is typed reads as a phone number, an unticked box appears
+ * beside the words the terms quote (`smsCode.signIn`), and "Send code"
+ * waits for it, saying why: a code goes by text only once it is ticked
+ * (`sms-code-consent.ts`). Never ticked to begin with, and unticked again
+ * whenever the number changes.
  *
  * While the code is on its way, the form says to look in the spam folder
  * too, for an email from the address the service names, and offers another
@@ -48,6 +58,11 @@ export function SignIn() {
   const identifierInput = useRef<HTMLInputElement>(null)
   const changing = useRef(false)
   const failureId = useId()
+  const waitId = useId()
+  // The box, while what is typed would be texted a code.
+  const typed = identifier.trim()
+  const texted = readsAsPhone(typed) && identifierRefused(typed, channels) === null
+  const consent = useSmsCodeConsentBox(texted ? typed : null)
 
   // Each step starts with the focus on the one thing it asks for. The first
   // step does so only when the person came back to it; arriving on the page
@@ -68,7 +83,7 @@ export function SignIn() {
     }
     setBusy(true)
     try {
-      await api.requestCode(to)
+      await api.requestCode(to, consent.checked ? smsCodeConsent(language) : undefined)
       setSentTo(to)
       setSentAt(Date.now())
       setResent(again)
@@ -110,6 +125,7 @@ export function SignIn() {
         noValidate
         onSubmit={(event) => {
           event.preventDefault()
+          if (consent.missing) return
           void requestCode(identifier.trim(), false)
         }}
       >
@@ -145,16 +161,31 @@ export function SignIn() {
         ) : (
           <Failure code={failure} id={failureId} />
         )}
+        {consent.shown && (
+          <ConsentCheckbox
+            wording={wording.smsCode.signIn}
+            checked={consent.checked}
+            onChange={consent.setChecked}
+          />
+        )}
+        {consent.missing && (
+          <p className="hint" id={waitId}>
+            {wording.smsCode.tickToSend}
+          </p>
+        )}
         <div className="actions">
-          <button type="submit" className="primary" disabled={busy}>
+          <button
+            type="submit"
+            className="primary"
+            disabled={busy || consent.missing}
+            aria-describedby={consent.missing ? waitId : undefined}
+          >
             {w.sendCode}
           </button>
         </div>
-        {/* What a text message costs and how to stop them, said wherever a
-            code can go to a phone number, before one is asked for. */}
+        {/* Where a code can go to a phone number, the policy on texts. */}
         {phone && (
-          <p className="hint">
-            {wording.privacy.sms}{' '}
+          <p className="learn-more">
             <LegalLink document="privacy" section="text-messages" label={wording.privacy.smsLink} />
           </p>
         )}
@@ -204,6 +235,8 @@ export function SignIn() {
           disabled={busy}
           onClick={() => {
             changing.current = true
+            // Back to the number, the box is unticked: it is never remembered.
+            consent.setChecked(false)
             setSentTo(null)
             setSentAt(null)
             setCode('')

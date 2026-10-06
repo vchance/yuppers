@@ -78,7 +78,7 @@ describe('the static pages of the privacy policy and the terms', () => {
       }
       const email = document === 'privacy' ? PRIVACY_EMAIL : SUPPORT_EMAIL
       expect(root.querySelector(`a[href="mailto:${email}"]`)?.textContent).toBe(email)
-      expect(root.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-05')
+      expect(root.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-06')
       expect(root.textContent).not.toMatch(/[{}]|\*\*/)
       // Each links to the other.
       const other = document === 'privacy' ? 'terms' : 'privacy'

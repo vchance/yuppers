@@ -10,12 +10,14 @@ import {
   Choice,
   Failure,
   Heading,
+  Hint,
   Lines,
   Notice,
   P,
   Panel,
   TextField,
 } from '../components/ui';
+import { ConsentCheckbox } from '../components/ConsentCheckbox';
 import { HelpLink } from '../components/HelpLink';
 import { LegalLinks } from '../components/LegalLinks';
 import { useI18n, useSession } from '../lib/context';
@@ -53,7 +55,7 @@ export function DeleteAccount({ account }: { account: Account }) {
 }
 
 function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
-  const { wording, fmt } = useI18n();
+  const { wording, fmt, language } = useI18n();
   const { forget } = useSession();
   const router = useRouter();
   const w = wording.deletion;
@@ -75,9 +77,11 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
       router.dismissTo('/');
     },
     channels,
+    language,
   );
   const { step, preview, destination, busy } = deletion;
   const identifier = destination?.identifier ?? '';
+  const consent = deletion.codeConsent;
 
   // The code step starts with the keyboard on the one thing it asks for.
   const codeInput = useRef<TextInput>(null);
@@ -208,12 +212,23 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
         <P>{fmt(w.codeIntro, { identifier })}</P>
       )}
 
+      {/* A code by text only once the box beside the number is ticked. */}
+      {consent.shown ? (
+        <ConsentCheckbox
+          wording={wording.smsCode.deleteAccount}
+          checked={consent.checked}
+          onChange={consent.setChecked}
+          disabled={busy}
+        />
+      ) : null}
+      {consent.missing ? <Hint>{wording.smsCode.tickToSend}</Hint> : null}
       <Failure code={deletion.failure} />
       <Actions>
         <Button
           variant="primary"
           label={w.sendCode}
-          disabled={busy || !preview || !destination}
+          disabled={busy || !preview || !destination || consent.missing}
+          hint={consent.missing ? wording.smsCode.tickToSend : undefined}
           onPress={() => void deletion.sendCode()}
         />
         <Button label={wording.common.cancel} disabled={busy} onPress={onCancel} />

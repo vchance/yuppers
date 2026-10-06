@@ -53,7 +53,7 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   expect(codeBox.type).toBe('checkbox')
   expect(codeBox.checked).toBe(false)
   expect(wording.smsCode.verifyNumber).toBe(
-    'Text me a one-time code to confirm this number from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+    'Text me a one-time verification code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
   )
   const send = button(w.sendCode)
   expect(send.disabled).toBe(true)

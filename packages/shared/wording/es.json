@@ -872,7 +872,7 @@
   "smsCode": {
     "signIn": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para entrar. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
     "deleteAccount": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para confirmar la eliminación de mi cuenta. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
-    "verifyNumber": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para confirmar este número. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
+    "verifyNumber": "Envíame por mensaje de texto a este número un código de un solo uso de yuppers.app para verificarlo. Un mensaje por solicitud. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
     "tickToSend": "Para recibir un código por mensaje de texto, primero marca la casilla."
   },
   "record": {

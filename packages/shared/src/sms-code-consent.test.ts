@@ -39,10 +39,10 @@ describe('the words beside the box', () => {
       `Text me a one-time sign-in code from yuppers.app at this number.${rest}`,
     )
     expect(en.smsCode.deleteAccount).toBe(
-      `Text me a one-time code to confirm deleting your account from yuppers.app at this number.${rest}`,
+      `Text me a one-time account-deletion code from yuppers.app at this number.${rest}`,
     )
     expect(en.smsCode.verifyNumber).toBe(
-      `Text me a one-time code to confirm this number from yuppers.app at this number.${rest}`,
+      `Text me a one-time verification code from yuppers.app at this number.${rest}`,
     )
   })
 
@@ -52,8 +52,8 @@ describe('the words beside the box', () => {
         en.smsCode.signIn.replace(
           'a one-time sign-in code',
           purpose === 'deleteAccount'
-            ? 'a one-time code to confirm deleting your account'
-            : 'a one-time code to confirm this number',
+            ? 'a one-time account-deletion code'
+            : 'a one-time verification code',
         ),
       )
     }
@@ -86,8 +86,8 @@ describe('the words beside the box', () => {
   })
 
   test.each([
-    ['en', en, termsEn, ['a one-time sign-in code', 'a one-time code to confirm deleting your account', 'a one-time code to confirm this number']],
-    ['es', es, termsEs, ['para entrar', 'para confirmar la eliminación de mi cuenta', 'para confirmar este número']],
+    ['en', en, termsEn, ['a one-time sign-in code', 'a one-time account-deletion code', 'a one-time verification code']],
+    ['es', es, termsEs, ['para entrar', 'para confirmar la eliminación de mi cuenta', 'para verificarlo']],
   ] as const)(
     'in %s are, on the other two forms, what the terms say they are',
     (language, wording, terms, [signIn, deleteAccount, verifyNumber]) => {

@@ -240,7 +240,7 @@ test('a code that is wrong goes back to asking for it, and the account and its s
   const box = () => screen.getByRole('checkbox');
   expect(box().props.accessibilityLabel).toBe(w.smsCode.deleteAccount);
   expect(w.smsCode.deleteAccount).toBe(
-    'Text me a one-time code to confirm deleting your account from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+    'Text me a one-time account-deletion code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
   );
   expect(box().props.accessibilityState).toMatchObject({ checked: false });
   const send = () => screen.getByRole('button', { name: d.sendCode });

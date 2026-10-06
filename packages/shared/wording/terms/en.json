@@ -140,7 +140,7 @@
             "Program name: Yuppers.app sign-in codes.",
             "Description: Yuppers.app (https://yuppers.app) texts a one-time sign-in code to the phone number you enter on the sign-in screen, only when you ask for one. If you choose your phone number to confirm deleting your account, we also text you a one-time code for that.",
             "How you opt in: by entering your number and ticking a box that shows this text: “Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked, no code is sent.",
-            "To confirm deleting your account by text, or to add a number to your account before turning on agreement updates, the box shows the same text with “a one-time code to confirm deleting your account” or “a one-time code to confirm this number” in place of “a one-time sign-in code”.",
+            "To confirm deleting your account by text, or to add a number to your account before turning on agreement updates, the box shows the same text with “a one-time account-deletion code” or “a one-time verification code” in place of “a one-time sign-in code”.",
             "Message frequency: One message per code request."
           ]
         },

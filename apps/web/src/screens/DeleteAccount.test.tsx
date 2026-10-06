@@ -37,7 +37,7 @@ test('a code to the phone waits for the box beside it; one by email needs none',
   expect(box()!.checked).toBe(false)
   expect(field(wording.smsCode.deleteAccount)).toBe(box())
   expect(wording.smsCode.deleteAccount).toBe(
-    'Text me a one-time code to confirm deleting your account from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
+    'Text me a one-time account-deletion code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.',
   )
   const send = button(w.sendCode)
   expect(send.disabled).toBe(true)

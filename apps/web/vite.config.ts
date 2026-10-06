@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
 import { entryPagesPlugin } from './build/entry-pages.ts'
@@ -34,9 +35,35 @@ const wording = fileURLToPath(new URL('../../packages/shared/wording', import.me
 // Read by `scripts/check-budget.mjs`; kept out of `dist`, which is served.
 const manifest = fileURLToPath(new URL('./.build/manifest.json', import.meta.url))
 
+/**
+ * Leaves out of the web app's copy of each language's wording what only the
+ * service sends: the emails (`notifications`) and the text messages (`sms`),
+ * which no screen shows. The service reads the files whole
+ * (`backend/src/notifications/wording.rs`), and so does the mobile app; this
+ * keeps them off the invitation page's first load (`scripts/check-budget.mjs`).
+ */
+function serviceWordingOut(): Plugin {
+  const SERVICE_ONLY = ['notifications', 'sms']
+  return {
+    name: 'yuppers:service-wording-out',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!/packages\/shared\/wording\/[a-z]{2,3}(-[A-Za-z0-9]{2,8})*\.json$/.test(id)) return null
+      const wording = JSON.parse(code) as Record<string, unknown>
+      for (const key of SERVICE_ONLY) delete wording[key]
+      return { code: JSON.stringify(wording), map: null }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), entryPagesPlugin(wording), manifestOutPlugin(manifest)],
+  plugins: [
+    serviceWordingOut(),
+    react(),
+    entryPagesPlugin(wording),
+    manifestOutPlugin(manifest),
+  ],
   build: { manifest: MANIFEST_IN_BUILD },
   define: { __WEB_VERSION__: JSON.stringify(version), __WEB_COMMIT__: JSON.stringify(commit) },
   server: {

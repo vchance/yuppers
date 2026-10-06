@@ -16,7 +16,16 @@ import {
   type ClosedReason,
   type IssuedInvitation,
 } from '@yuppers/shared'
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
@@ -26,7 +35,6 @@ import { InvitationFor, InvitationLink } from '../components/InvitationLink'
 import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
-import { SmsUpdates } from '../components/SmsUpdates'
 import { WalletButton } from '../components/WalletButton'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { restoreFocus, useActions, type Actions } from '../lib/actions'
@@ -40,6 +48,12 @@ import { Fulfillment } from './Fulfillment'
 import { History } from './History'
 import { ProposalChanges } from './ProposalChanges'
 import { Trouble } from './Trouble'
+
+// Text updates are for parties to an agreement, never needed by the
+// invitation page, which has a size budget (`scripts/check-budget.mjs`).
+const SmsUpdates = lazy(() =>
+  import('../components/SmsUpdates').then((module) => ({ default: module.SmsUpdates })),
+)
 
 /** How often an open exchange is checked for what the other party has done. */
 const CHECK_EVERY_MS = 20_000
@@ -259,7 +273,9 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
 
-      <SmsUpdates exchange={exchange} />
+      <Suspense fallback={null}>
+        <SmsUpdates exchange={exchange} />
+      </Suspense>
 
       <History exchange={exchange} reading={history} money={money} />
 

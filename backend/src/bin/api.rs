@@ -8,6 +8,7 @@ use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, WebApp};
 use yuppers_backend::metrics::{self, HttpMetrics, Text};
 use yuppers_backend::notifications::outbox::DeliveryRules;
+use yuppers_backend::notifications::sms_updates;
 use yuppers_backend::wallet::Wallet;
 use yuppers_backend::{db, shutdown, telemetry};
 
@@ -30,11 +31,19 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (sms, sms_cap) = (config.sms, config.auth.sms_codes_per_hour);
+    // Agreement updates are queued wherever an exchange changes.
+    sms_updates::configure(sms, config.sms_updates_per_day);
     if sms {
         tracing::info!(
             cap = sms_cap,
-            "codes for phone numbers go by text message, at most this many an hour"
+            "codes for phone numbers, and agreement updates, go by text message, at most this many an hour"
         );
+        if config.sms_webhook_token.is_none() {
+            tracing::warn!(
+                "no auth token checks Twilio's requests to /v1/sms/inbound, so STOP and START \
+                 replies are refused there; set SMS_WEBHOOK_AUTH_TOKEN (docs/deploy-render.md)"
+            );
+        }
     }
 
     let wallet =
@@ -58,6 +67,8 @@ async fn main() -> anyhow::Result<()> {
             app_links: config.app_links,
             push_notifications: config.push_notifications,
             build: BuildInfo::current().clone(),
+            sms_updates: sms,
+            sms_webhook_token: config.sms_webhook_token,
         }),
         code_sender: config.code_sender,
         metrics: Arc::new(HttpMetrics::default()),

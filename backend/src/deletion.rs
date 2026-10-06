@@ -15,7 +15,9 @@
 //! being an adult: the second is what the signatures it gave rest on.
 //!
 //! **Its working data** is removed: every session, on every device; the
-//! devices registered for its push notifications; codes sent to its
+//! devices registered for its push notifications; the agreements it turned
+//! text updates on for (the record of that consent stays, with the turning
+//! off recorded beside it, `crate::notifications::sms_updates`); codes sent to its
 //! identifiers; unsent working copies of terms; idempotency keys; queued
 //! notifications to it; the blocks it made. Invitation links it issued
 //! that nobody took are revoked, and forget whom they were for. A block
@@ -99,6 +101,7 @@ use crate::domain::identity::Identifier;
 use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::exchanges::repo;
+use crate::notifications::sms_updates;
 use crate::{languages, wallet};
 
 /// Which of the account's identifiers a code is sent to.
@@ -477,6 +480,12 @@ async fn attempt(
     .bind(phone.as_deref())
     .execute(&mut *tx)
     .await?;
+
+    // Its text updates end, each turn-off recorded beside the opt-in it
+    // ends: the consent record is kept, as the privacy policy says, while
+    // the account loses its number below.
+    sms_updates::forget_numbers(&mut tx, account, None, sms_updates::Source::AccountDeleted)
+        .await?;
 
     // Its devices first: nothing more is pushed to them. (Removing the
     // sessions would take them too; this says so.)

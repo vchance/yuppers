@@ -174,7 +174,9 @@
   },
   "sms": {
     "signIn": "{code} es tu código de {productName} para entrar. No se lo des a nadie.",
-    "deleteAccount": "{code}: código para eliminar tu cuenta de {productName}. No lo compartas."
+    "deleteAccount": "{code}: código para eliminar tu cuenta de {productName}. No lo compartas.",
+    "update": "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: {link}. Responde STOP para cancelar.",
+    "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar."
   },
   "common": {
     "loading": "Cargando…",
@@ -691,8 +693,8 @@
       "turnOn": "Activar notificaciones",
       "notNow": "Ahora no",
       "channel": "Novedades de tus yups",
-      "phoneOnly": "Los mensajes de texto solo llevan códigos para iniciar sesión, y tu cuenta no tiene correo electrónico, así que las notificaciones en este teléfono son la única forma de avisarte sobre tus yups.",
-      "phoneOnlyNoPush": "Los mensajes de texto solo llevan códigos para iniciar sesión, y tu cuenta no tiene correo electrónico, así que nada te avisa cuando cambia uno de tus yups. Revísalos aquí."
+      "phoneOnly": "Tu cuenta no tiene correo electrónico, así que las notificaciones en este teléfono son la forma en que te avisamos sobre tus yups. Los mensajes de texto llevan códigos para iniciar sesión y, en un acuerdo para el que los actives, sus actualizaciones.",
+      "phoneOnlyNoPush": "Tu cuenta no tiene correo electrónico, así que nada te avisa cuando cambia uno de tus yups, salvo que actives para él las actualizaciones por mensaje. Revísalos aquí."
     }
   },
   "exchange": {
@@ -846,6 +848,26 @@
       "nov": "nov",
       "dec": "dic"
     }
+  },
+  "smsUpdates": {
+    "heading": "Actualizaciones por mensaje",
+    "intro": "Recibe un mensaje de texto cada vez que cambie el estado de este acuerdo. Los mensajes solo dicen que algo cambió, con un enlace para verlo.",
+    "addPhoneIntro": "Primero agrega a tu cuenta tu número de celular de EE. UU. Le enviaremos un código de un solo uso para comprobar que es tuyo.",
+    "phoneLabel": "Número de celular",
+    "phoneHint": "Un número de EE. UU., como +1 555 123 4567.",
+    "phoneInvalid": "Escribe un número de celular de EE. UU.: 10 dígitos, o +1 y 10 dígitos.",
+    "sendCode": "Envíame un código",
+    "codeSent": "Enviamos un código por mensaje a {phone}.",
+    "codeLabel": "Código del mensaje",
+    "addPhone": "Agregar este número",
+    "changePhone": "Usar otro número",
+    "phoneAdded": "{phone} ya está en tu cuenta.",
+    "consent": "Recibir actualizaciones por mensaje de texto de yuppers.app sobre este acuerdo, un mensaje por cada cambio de estado. La frecuencia de los mensajes varía; no hay un máximo fijo. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.",
+    "save": "Guardar",
+    "on": "Las actualizaciones por mensaje están activadas para este acuerdo. Recibirás un mensaje por cada cambio de estado en el {phone}. Responde STOP para cancelar.",
+    "off": "Las actualizaciones por mensaje están desactivadas para este acuerdo.",
+    "optedOut": "El {phone} respondió STOP a nuestros mensajes, así que ya no le enviamos mensajes. Para volver a recibirlos, responde START a cualquiera de nuestros mensajes y después activa aquí las actualizaciones.",
+    "howItWorks": "Cómo te enviamos mensajes"
   },
   "record": {
     "historyHeading": "Historial",
@@ -1092,7 +1114,8 @@
     "SESSION_TOO_OLD": "Esta página requiere haber iniciado sesión en las últimas 12 horas. Cierra sesión y vuelve a iniciarla.",
     "CONTENT_HIDDEN": "Parte de este yup se ocultó tras una revisión, así que sus términos no se pueden firmar ni cambiar.",
     "REPORT_RESOLVED": "Esta denuncia ya se resolvió.",
-    "SUBJECT_IS_REVIEWER": "La persona denunciada es revisora. Solo el propietario puede suspender a una persona revisora, o levantar su suspensión, después de quitarle ese rol."
+    "SUBJECT_IS_REVIEWER": "La persona denunciada es revisora. Solo el propietario puede suspender a una persona revisora, o levantar su suspensión, después de quitarle ese rol.",
+    "PHONE_OPTED_OUT": "Este número respondió STOP a nuestros mensajes, así que no podemos enviarle un código. Entra con tu correo electrónico, o responde START a uno de nuestros mensajes para volver a recibirlos."
   },
   "a11y": {
     "openExchange": "Abre este yup.",

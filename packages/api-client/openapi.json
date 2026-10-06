@@ -1119,6 +1119,148 @@
         }
       }
     },
+    "/v1/exchanges/{id}/sms-updates": {
+      "get": {
+        "tags": [
+          "sms"
+        ],
+        "summary": "Where the signed-in party stands on text updates for this agreement.",
+        "operationId": "sms_updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The exchange",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Where the caller stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsUpdates"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange, or the caller is not a party to it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "sms"
+        ],
+        "summary": "Turns text updates for this agreement on or off. Turning them on records\nthe consent (the account, the agreement, the number, the time, the\nwording's version and language, the client, and the request's address\nand user agent) and queues a confirmation text; turning them off is\nrecorded too. Repeating either changes nothing.",
+        "operationId": "set_sms_updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The exchange",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSmsUpdates"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Where the caller now stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsUpdates"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange, or the caller is not a party to it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The agreement is a draft or closed, or the account has no phone number (`ACTION_NOT_ALLOWED`); the wording shown is not the current one (`CONSENT_OUTDATED`); the number replied STOP (`PHONE_OPTED_OUT`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "No consent given, or a language not supported (`INVALID_REQUEST`); a number of a country not texted (`PHONE_COUNTRY_NOT_SERVED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Text messages are not sent here",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/exchanges/{id}/wallet/apple": {
       "post": {
         "tags": [
@@ -1924,6 +2066,41 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/sms/inbound": {
+      "post": {
+        "tags": [
+          "sms"
+        ],
+        "summary": "Twilio's webhook for a text sent to our number. Refused with 403, and\nnothing read, unless `X-Twilio-Signature` is Twilio's signature, under\nthe account's auth token, of this URL as Twilio requested it (the web\norigin and this path) and the posted parameters. A stop keyword puts the\nnumber on the opt-out list and turns off every agreement's updates to\nit; a start keyword takes it off the list. Answered at once, with an\nempty TwiML document: Twilio's Advanced Opt-Out sends the replies.",
+        "operationId": "inbound",
+        "requestBody": {
+          "description": "Twilio's parameters for a message received: From, Body, OptOutType and the rest",
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Taken: an empty TwiML document",
+            "content": {
+              "text/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not signed by Twilio, or no auth token to check it with"
           }
         }
       }
@@ -3168,6 +3345,7 @@
           "INVALID_REQUEST",
           "INVALID_IDENTIFIER",
           "PHONE_COUNTRY_NOT_SERVED",
+          "PHONE_OPTED_OUT",
           "INVALID_CODE",
           "TOO_MANY_REQUESTS",
           "TOO_MANY_GUESSES",
@@ -3568,7 +3746,8 @@
           "push_notifications",
           "wallet_platforms",
           "sign_in_channels",
-          "sms_country_codes"
+          "sms_country_codes",
+          "sms_updates"
         ],
         "properties": {
           "built_at": {
@@ -3613,6 +3792,10 @@
               "type": "string"
             },
             "description": "The country calling codes, such as `+1`, of the phone numbers codes\ncan be sent to (`PHONE_COUNTRY_NOT_SERVED` refuses any other). Empty\nwhen `sign_in_channels` has no `phone`."
+          },
+          "sms_updates": {
+            "type": "boolean",
+            "description": "Whether a party may turn on text updates for an agreement\n(`GET`/`PUT /v1/exchanges/{id}/sms-updates`): while text messages are\nsent. A client shows no \"Text updates\" control otherwise."
           },
           "version": {
             "type": "string",
@@ -5004,6 +5187,29 @@
           }
         }
       },
+      "SetSmsUpdates": {
+        "type": "object",
+        "required": [
+          "on"
+        ],
+        "properties": {
+          "consent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SmsConsent",
+                "description": "Required to turn them on: the wording shown beside the box."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "on": {
+            "type": "boolean",
+            "description": "`true` to turn updates on, `false` to turn them off."
+          }
+        }
+      },
       "SettlementDto": {
         "type": "string",
         "enum": [
@@ -5185,6 +5391,59 @@
           "A",
           "B"
         ]
+      },
+      "SmsConsent": {
+        "type": "object",
+        "description": "What a party ticked, when turning updates on.",
+        "required": [
+          "version",
+          "language"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "The language it was shown in, as a language tag."
+          },
+          "version": {
+            "type": "string",
+            "description": "The version of the consent wording shown, `consent_version`."
+          }
+        }
+      },
+      "SmsUpdates": {
+        "type": "object",
+        "description": "Where the signed-in party stands on text updates for one agreement.",
+        "required": [
+          "on",
+          "available",
+          "opted_out",
+          "consent_version"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Whether they can be turned on here: text messages are sent, and the\nagreement has been sent and is not closed. Turning them off is always\npossible."
+          },
+          "consent_version": {
+            "type": "string",
+            "description": "The version of the consent wording a client must show beside the\nbox, and name when it turns updates on."
+          },
+          "on": {
+            "type": "boolean",
+            "description": "Whether updates are on for this agreement, to the account's phone\nnumber as it is now."
+          },
+          "opted_out": {
+            "type": "boolean",
+            "description": "The number replied STOP to our texts, so nothing is texted to it\nuntil it replies START."
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account's phone number, in international form, or null when it\nhas none; one must be added (`POST /v1/me/identifiers`) first."
+          }
+        }
       },
       "StaffNote": {
         "type": "object",

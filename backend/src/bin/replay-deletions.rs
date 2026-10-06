@@ -31,6 +31,9 @@ use yuppers_backend::{db, deletion_log, telemetry};
 async fn main() -> anyhow::Result<ExitCode> {
     telemetry::init()?;
     dotenvy::dotenv().ok();
+    // A deletion asks to close the account's agreements, which the other
+    // party may have turned text updates on for.
+    yuppers_backend::config::configure_sms_updates_from_env()?;
 
     let mut args = std::env::args().skip(1);
     let (Some(file), None) = (args.next(), args.next()) else {

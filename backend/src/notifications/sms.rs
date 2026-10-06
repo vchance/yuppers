@@ -1,10 +1,14 @@
 //! One-time codes by text message (DESIGN.md §8, §12): the SMS adapter at
 //! the edge.
 //!
-//! SMS carries one-time codes and nothing else. A code for a phone number
-//! goes through an [`SmsSender`]; a code for an email address goes on as
-//! before. [`CodeRouter`] makes that choice, so the rest of the service
-//! still sees one [`CodeSender`].
+//! SMS carries one-time codes, and the agreement updates a person turns on
+//! (`super::sms_updates`, which the worker sends through the same
+//! [`SmsSender`]). A code for a phone number goes through an [`SmsSender`];
+//! a code for an email address goes on as before. [`CodeRouter`] makes that
+//! choice, so the rest of the service still sees one [`CodeSender`].
+//!
+//! Texts people send back reach the service through Twilio's webhook,
+//! whose requests are signed ([`twilio_signature_valid`]).
 //!
 //! Each message costs money, so it is kept to one segment in every language
 //! (`encoding` below, and the tests), and the service caps how many it sends
@@ -229,6 +233,59 @@ impl SmsSender for TwilioSmsSender {
     }
 }
 
+// ---- Twilio's webhook signature ---------------------------------------------
+
+/// The signature Twilio puts in `X-Twilio-Signature` on a request it makes
+/// to a webhook: HMAC-SHA1, keyed with the account's auth token, over the
+/// whole URL Twilio requested (query included) followed by every POST
+/// parameter's name and value, sorted by name (and by value, for a name
+/// given more than once), base64. Twilio signs with the auth token even
+/// when the service sends with an API key, whose secret cannot check it.
+pub fn twilio_signature(auth_token: &str, url: &str, params: &[(String, String)]) -> String {
+    use hmac::Mac;
+    base64::engine::general_purpose::STANDARD.encode(
+        signature_mac(auth_token, url, params)
+            .finalize()
+            .into_bytes(),
+    )
+}
+
+fn signature_mac(
+    auth_token: &str,
+    url: &str,
+    params: &[(String, String)],
+) -> hmac::Hmac<sha1::Sha1> {
+    use hmac::{KeyInit, Mac};
+    let mut sorted: Vec<&(String, String)> = params.iter().collect();
+    sorted.sort();
+    let mut mac = hmac::Hmac::<sha1::Sha1>::new_from_slice(auth_token.as_bytes())
+        .expect("HMAC accepts any key length");
+    mac.update(url.as_bytes());
+    for (name, value) in sorted {
+        mac.update(name.as_bytes());
+        mac.update(value.as_bytes());
+    }
+    mac
+}
+
+/// Whether `header`, the request's `X-Twilio-Signature`, is Twilio's
+/// signature of `url` and `params` under `auth_token`. Compared in
+/// constant time.
+pub fn twilio_signature_valid(
+    auth_token: &str,
+    url: &str,
+    params: &[(String, String)],
+    header: &str,
+) -> bool {
+    use hmac::Mac;
+    let Ok(given) = base64::engine::general_purpose::STANDARD.decode(header.trim()) else {
+        return false;
+    };
+    signature_mac(auth_token, url, params)
+        .verify_slice(&given)
+        .is_ok()
+}
+
 // ---- Choosing the channel ---------------------------------------------------
 
 /// Sends a code for a phone number by SMS, and any other code the way it
@@ -371,6 +428,40 @@ mod tests {
             wording.code_sms("tlh", Purpose::SignIn, "1"),
             wording.code_sms(languages::default(), Purpose::SignIn, "1")
         );
+    }
+
+    #[test]
+    fn twilios_signature_is_checked_as_its_documentation_computes_it() {
+        // The example in Twilio's documentation ("Webhooks security"):
+        // this URL, these parameters and this auth token sign as below.
+        let token = "12345";
+        let url = "https://example.com/myapp.php?foo=1&bar=2";
+        let params: Vec<(String, String)> = [
+            ("CallSid", "CA1234567890ABCDE"),
+            ("Caller", "+14158675310"),
+            ("Digits", "1234"),
+            ("From", "+14158675310"),
+            ("To", "+18005551212"),
+        ]
+        .into_iter()
+        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+        .collect();
+        let signature = twilio_signature(token, url, &params);
+        assert_eq!(signature, "L/OH5YylLD5NRKLltdqwSvS0BnU=");
+        assert!(twilio_signature_valid(token, url, &params, &signature));
+        // The order they arrive in does not matter.
+        let mut reversed = params.clone();
+        reversed.reverse();
+        assert!(twilio_signature_valid(token, url, &reversed, &signature));
+        // Anything else does.
+        assert!(!twilio_signature_valid("54321", url, &params, &signature));
+        let bare = "https://example.com/myapp.php";
+        assert!(!twilio_signature_valid(token, bare, &params, &signature));
+        let mut changed = params.clone();
+        changed[2].1 = "1235".to_owned();
+        assert!(!twilio_signature_valid(token, url, &changed, &signature));
+        assert!(!twilio_signature_valid(token, url, &params, "not base64!"));
+        assert!(!twilio_signature_valid(token, url, &params, ""));
     }
 
     #[test]

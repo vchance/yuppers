@@ -19,6 +19,7 @@ use yuppers_backend::exchanges::service::{purge_network_metadata, run_timers};
 use yuppers_backend::metrics::{self, Text, WorkerMetrics};
 use yuppers_backend::notifications::outbox::{self, Delivery, DeliveryRules};
 use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
+use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
 use yuppers_backend::{db, shutdown, telemetry};
@@ -47,6 +48,30 @@ async fn main() -> anyhow::Result<()> {
         sender: config.push_sender,
         wording: Wording::embedded()?,
         rules: DeliveryRules::default(),
+    };
+    // Agreement updates by text: queued wherever an exchange changes, the
+    // worker's timers included, and sent from here.
+    sms_updates::configure(config.sms.is_some(), config.sms_updates_per_day);
+    let sms_delivery = match config.sms {
+        Some(sms) => SmsDelivery {
+            sender: Some(sms.sender),
+            wording: Wording::embedded()?,
+            web_origin: delivery.web_origin.clone(),
+            rules: DeliveryRules::default(),
+            auth: sms.auth,
+            secret: sms.app_secret,
+        },
+        None => {
+            tracing::info!("agreement updates by text are off (SMS_DELIVERY)");
+            SmsDelivery {
+                sender: None,
+                wording: Wording::embedded()?,
+                web_origin: delivery.web_origin.clone(),
+                rules: DeliveryRules::default(),
+                auth: Default::default(),
+                secret: Vec::new(),
+            }
+        }
     };
     let receipt_rules = ReceiptRules::default();
     // When the push service was last asked for receipts.
@@ -134,6 +159,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(removed) => tracing::info!(removed, "network metadata purged"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "network metadata purge failed"),
                 }
+                match sms_updates::purge_consent(&db, &rules, OffsetDateTime::now_utc()).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "text update consent records past retention removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "consent record purge failed"),
+                }
                 match purge_sign_in_limits(&db).await {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "old sign-in limit counts removed"),
@@ -200,6 +230,30 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
                     Err(error) => tracing::error!(error = %Redacted(&error), "push delivery failed"),
+                }
+                // Agreement updates by text, to those who turned them on.
+                let texted = sms_updates::deliver_sms_due_until(
+                    &db,
+                    &sms_delivery,
+                    OffsetDateTime::now_utc(),
+                    || stopping.load(Ordering::Relaxed),
+                )
+                .await;
+                match texted {
+                    Ok(texted) if texted.is_empty() => {}
+                    Ok(texted) => {
+                        tracing::info!(
+                            sent = texted.sent,
+                            failed = texted.failed,
+                            given_up = texted.given_up,
+                            dropped = texted.dropped,
+                            "update texts delivered"
+                        );
+                        if texted.handled() >= sms_delivery.rules.batch || texted.cut_short {
+                            ticker.reset_immediately();
+                        }
+                    }
+                    Err(error) => tracing::error!(error = %Redacted(&error), "update text delivery failed"),
                 }
                 let receipts_due = last_receipts
                     .is_none_or(|last: std::time::Instant| last.elapsed() >= receipt_rules.every);

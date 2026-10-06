@@ -108,10 +108,11 @@ pub const NO_LONGER_A_PARTY: &str = "not sent: the recipient is no longer a part
 /// and nothing from the agreement.
 ///
 /// One row per channel the recipient can be reached on (DESIGN.md §12): an
-/// email for an account with an email address, and a push notification for
-/// one with a device registered under a live session. An account with only
-/// a phone number gets push or nothing, since SMS carries one-time codes and
-/// nothing else; one that is suspended or deleted gets nothing.
+/// email for an account with an email address, a push notification for one
+/// with a device registered under a live session, and a text for one who
+/// turned on text updates for this agreement, if the notice is a status
+/// change those are sent for (`super::sms_updates`). One that is suspended
+/// or deleted gets nothing.
 pub async fn enqueue(
     conn: &mut PgConnection,
     exchange: Uuid,
@@ -120,7 +121,8 @@ pub async fn enqueue(
     notice: Notice,
 ) -> Result<(), sqlx::Error> {
     let payload = json!({ "notice": notice.as_str() });
-    insert(conn, exchange, Some(event_sequence), recipient, payload).await
+    insert(conn, exchange, Some(event_sequence), recipient, payload).await?;
+    super::sms_updates::enqueue_update(conn, exchange, event_sequence, recipient, notice).await
 }
 
 /// Queues an email reminding `recipient` of contributions that are due soon

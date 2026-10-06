@@ -341,6 +341,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges/{id}/sms-updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where the signed-in party stands on text updates for this agreement. */
+        get: operations["sms_updates"];
+        /**
+         * Turns text updates for this agreement on or off. Turning them on records
+         *     the consent (the account, the agreement, the number, the time, the
+         *     wording's version and language, the client, and the request's address
+         *     and user agent) and queues a confirmation text; turning them off is
+         *     recorded too. Repeating either changes nothing.
+         */
+        put: operations["set_sms_updates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges/{id}/wallet/apple": {
         parameters: {
             query?: never;
@@ -617,6 +641,31 @@ export interface paths {
         get: operations["meta"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sms/inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Twilio's webhook for a text sent to our number. Refused with 403, and
+         *     nothing read, unless `X-Twilio-Signature` is Twilio's signature, under
+         *     the account's auth token, of this URL as Twilio requested it (the web
+         *     origin and this path) and the posted parameters. A stop keyword puts the
+         *     number on the opt-out list and turns off every agreement's updates to
+         *     it; a start keyword takes it off the list. Answered at once, with an
+         *     empty TwiML document: Twilio's Advanced Opt-Out sends the replies.
+         */
+        post: operations["inbound"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1061,7 +1110,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1242,6 +1291,12 @@ export interface components {
              *     when `sign_in_channels` has no `phone`.
              */
             sms_country_codes: string[];
+            /**
+             * @description Whether a party may turn on text updates for an agreement
+             *     (`GET`/`PUT /v1/exchanges/{id}/sms-updates`): while text messages are
+             *     sent. A client shows no "Text updates" control otherwise.
+             */
+            sms_updates: boolean;
             /** @description The package version, such as `0.1.0`. */
             version: string;
             /**
@@ -1781,6 +1836,11 @@ export interface components {
             /** @description Present for `TOKEN` delivery only. */
             token?: string | null;
         };
+        SetSmsUpdates: {
+            consent?: components["schemas"]["SmsConsent"] | null;
+            /** @description `true` to turn updates on, `false` to turn them off. */
+            on: boolean;
+        };
         /** @enum {string} */
         SettlementDto: "OFF_PLATFORM" | "PROCESSOR";
         /**
@@ -1848,6 +1908,42 @@ export interface components {
          * @enum {string}
          */
         Slot: "A" | "B";
+        /** @description What a party ticked, when turning updates on. */
+        SmsConsent: {
+            /** @description The language it was shown in, as a language tag. */
+            language: string;
+            /** @description The version of the consent wording shown, `consent_version`. */
+            version: string;
+        };
+        /** @description Where the signed-in party stands on text updates for one agreement. */
+        SmsUpdates: {
+            /**
+             * @description Whether they can be turned on here: text messages are sent, and the
+             *     agreement has been sent and is not closed. Turning them off is always
+             *     possible.
+             */
+            available: boolean;
+            /**
+             * @description The version of the consent wording a client must show beside the
+             *     box, and name when it turns updates on.
+             */
+            consent_version: string;
+            /**
+             * @description Whether updates are on for this agreement, to the account's phone
+             *     number as it is now.
+             */
+            on: boolean;
+            /**
+             * @description The number replied STOP to our texts, so nothing is texted to it
+             *     until it replies START.
+             */
+            opted_out: boolean;
+            /**
+             * @description The account's phone number, in international form, or null when it
+             *     has none; one must be added (`POST /v1/me/identifiers`) first.
+             */
+            phone?: string | null;
+        };
         /** @description A reviewer's note, required for lifting a suspension. */
         StaffNote: {
             /** @description At most 1,000 characters. */
@@ -2845,6 +2941,119 @@ export interface operations {
             };
         };
     };
+    sms_updates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The exchange */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where the caller stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SmsUpdates"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange, or the caller is not a party to it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_sms_updates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The exchange */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSmsUpdates"];
+            };
+        };
+        responses: {
+            /** @description Where the caller now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SmsUpdates"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange, or the caller is not a party to it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The agreement is a draft or closed, or the account has no phone number (`ACTION_NOT_ALLOWED`); the wording shown is not the current one (`CONSENT_OUTDATED`); the number replied STOP (`PHONE_OPTED_OUT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No consent given, or a language not supported (`INVALID_REQUEST`); a number of a country not texted (`PHONE_COUNTRY_NOT_SERVED`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Text messages are not sent here */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     apple_pass: {
         parameters: {
             query?: never;
@@ -3538,6 +3747,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Meta"];
                 };
+            };
+        };
+    };
+    inbound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Twilio's parameters for a message received: From, Body, OptOutType and the rest */
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": string;
+            };
+        };
+        responses: {
+            /** @description Taken: an empty TwiML document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/xml": string;
+                };
+            };
+            /** @description Not signed by Twilio, or no auth token to check it with */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

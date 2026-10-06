@@ -194,6 +194,25 @@ fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
     }
 }
 
+/// The auth token that checks the signature on Twilio's requests to the
+/// inbound-message webhook (`POST /v1/sms/inbound`): `SMS_WEBHOOK_AUTH_TOKEN`
+/// or, when the service sends with the auth token itself, `SMS_AUTH_TOKEN`.
+/// Twilio signs those requests with the account's auth token whatever the
+/// service sends with, so with an API key the token must be given here.
+/// `None` when there is none, and the webhook then refuses every request.
+fn sms_webhook_token(get: Lookup<'_>) -> anyhow::Result<Option<Secret>> {
+    if let Some(token) = optional(get, "SMS_WEBHOOK_AUTH_TOKEN") {
+        return Ok(Some(Secret::new(token.trim().to_owned())));
+    }
+    if optional(get, "SMS_DELIVERY").as_deref() != Some("twilio") {
+        return Ok(None);
+    }
+    Ok(match twilio_account(get)?.1 {
+        TwilioCredential::AuthToken(token) => Some(token),
+        TwilioCredential::ApiKey { .. } => None,
+    })
+}
+
 /// Whether `value` is a Twilio SID of the kind `prefix` names: the prefix
 /// and 32 hexadecimal digits.
 fn is_twilio_sid(value: &str, prefix: &str) -> bool {
@@ -401,6 +420,30 @@ fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
     })
 }
 
+/// `SMS_UPDATES_PER_PERSON_PER_DAY`: how many update texts one person may
+/// be queued a day (`notifications::sms_updates`).
+fn sms_updates_per_day(get: Lookup<'_>) -> anyhow::Result<i64> {
+    limit(
+        get,
+        "SMS_UPDATES_PER_PERSON_PER_DAY",
+        crate::notifications::sms_updates::DEFAULT_TEXTS_PER_PERSON_PER_DAY,
+    )
+}
+
+/// Whether text messages are sent at all (`SMS_DELIVERY` is not `off`), and
+/// so whether agreement updates are, for a process that changes exchanges
+/// but sends nothing itself, such as `staff` and `replay-deletions`.
+pub fn configure_sms_updates_from_env() -> anyhow::Result<()> {
+    load_env();
+    let get: Lookup<'_> = &environment;
+    let on = !matches!(
+        optional(get, "SMS_DELIVERY").as_deref().unwrap_or("off"),
+        "off"
+    );
+    crate::notifications::sms_updates::configure(on, sms_updates_per_day(get)?);
+    Ok(())
+}
+
 /// `SMS_ALLOWED_COUNTRY_CODES`: country calling codes, `+1,+52`, as digits.
 /// `None` when unset, for the default.
 fn country_codes(get: Lookup<'_>) -> anyhow::Result<Option<Vec<String>>> {
@@ -544,6 +587,20 @@ pub struct WorkerConfig {
     pub metrics_addr: Option<SocketAddr>,
     /// Wallet passes, for the platforms configured (`crate::wallet::config`).
     pub wallet: crate::wallet::WalletConfig,
+    /// Agreement updates by text, while `SMS_DELIVERY` is on.
+    pub sms: Option<WorkerSms>,
+    /// Update texts one person may be queued a day.
+    pub sms_updates_per_day: i64,
+}
+
+/// What the worker needs to send agreement updates by text.
+pub struct WorkerSms {
+    pub sender: Arc<dyn SmsSender>,
+    /// `APP_SECRET`, which keys the hourly caps' counts as the API keys
+    /// them: codes and update texts count against the same caps.
+    pub app_secret: Vec<u8>,
+    /// The countries texted and the hourly caps.
+    pub auth: AuthRules,
 }
 
 impl WorkerConfig {
@@ -557,8 +614,29 @@ impl WorkerConfig {
             push_sender: push_sender(get)?,
             metrics_addr: metrics_addr(get)?,
             wallet: crate::wallet::WalletConfig::from_lookup(get)?,
+            sms: match sms_sender(get)? {
+                Some(sender) => Some(WorkerSms {
+                    sender,
+                    app_secret: app_secret(get).context(
+                        "the worker sends agreement updates by text while SMS_DELIVERY is on, \
+                         and counts them under the API's hourly caps with APP_SECRET",
+                    )?,
+                    auth: auth_rules(get)?,
+                }),
+                None => None,
+            },
+            sms_updates_per_day: sms_updates_per_day(get)?,
         })
     }
+}
+
+/// `APP_SECRET`: at least 32 bytes.
+fn app_secret(get: Lookup<'_>) -> anyhow::Result<Vec<u8>> {
+    let secret = required(get, "APP_SECRET")?.into_bytes();
+    if secret.len() < 32 {
+        bail!("APP_SECRET must be at least 32 bytes");
+    }
+    Ok(secret)
 }
 
 /// An optional `MIN_CLIENT_VERSION_*` value: unset or empty means no minimum,
@@ -638,8 +716,15 @@ pub struct ApiConfig {
     /// Whether the worker sends push notifications (`PUSH_DELIVERY`), which
     /// the API tells the apps so they offer them only then.
     pub push_notifications: bool,
-    /// Whether codes for phone numbers go by text message (`SMS_DELIVERY`).
+    /// Whether codes for phone numbers go by text message (`SMS_DELIVERY`),
+    /// and with it whether agreement updates can be turned on.
     pub sms: bool,
+    /// Update texts one person may be queued a day
+    /// (`SMS_UPDATES_PER_PERSON_PER_DAY`).
+    pub sms_updates_per_day: i64,
+    /// The auth token that checks Twilio's signature on the inbound-message
+    /// webhook, if there is one ([`sms_webhook_token`]).
+    pub sms_webhook_token: Option<Secret>,
     /// Wallet passes, for the platforms configured (`crate::wallet::config`).
     pub wallet: crate::wallet::WalletConfig,
 }
@@ -654,10 +739,7 @@ impl ApiConfig {
             .parse()
             .context("BIND_ADDR is not a valid socket address")?;
 
-        let app_secret = required(get, "APP_SECRET")?.into_bytes();
-        if app_secret.len() < 32 {
-            bail!("APP_SECRET must be at least 32 bytes");
-        }
+        let app_secret = app_secret(get)?;
 
         let metrics_addr = metrics_addr(get)?;
         if metrics_addr.is_some_and(|metrics| metrics.port() == bind_addr.port()) {
@@ -678,6 +760,8 @@ impl ApiConfig {
             auth: auth_rules(get)?,
             push_notifications: push_mode(get)? != PushMode::Off,
             sms: sms_sender(get)?.is_some(),
+            sms_updates_per_day: sms_updates_per_day(get)?,
+            sms_webhook_token: sms_webhook_token(get)?,
             wallet: crate::wallet::WalletConfig::from_lookup(get)?,
         })
     }
@@ -964,6 +1048,40 @@ mod tests {
         let upper = "ACABCDEF0123456789ABCDEF0123456789";
         let pairs = table(&[("SMS_ACCOUNT_SID", upper), token]);
         assert_eq!(twilio_account(&lookup(&pairs)).unwrap().0, upper);
+    }
+
+    #[test]
+    fn the_webhook_is_checked_with_the_auth_token_given_for_it_or_sent_with() {
+        let read = |pairs: &[(&str, &str)]| {
+            sms_webhook_token(&lookup(&table(pairs)))
+                .unwrap()
+                .map(|token| token.expose().to_owned())
+        };
+        let twilio = [
+            ("SMS_DELIVERY", "twilio"),
+            ("SMS_ACCOUNT_SID", ACCOUNT_SID),
+            ("SMS_FROM", "+15550000000"),
+        ];
+        let with_token = [&twilio[..], &[("SMS_AUTH_TOKEN", "hunter2-token")]].concat();
+        assert_eq!(read(&with_token).as_deref(), Some("hunter2-token"));
+        let with_key = [
+            &twilio[..],
+            &[
+                ("SMS_API_KEY_SID", KEY_SID),
+                ("SMS_API_KEY_SECRET", "hunter2-key"),
+            ],
+        ]
+        .concat();
+        // An API key's secret cannot check Twilio's signature.
+        assert_eq!(read(&with_key), None);
+        let named = [
+            &with_key[..],
+            &[("SMS_WEBHOOK_AUTH_TOKEN", " hunter2-webhook ")],
+        ]
+        .concat();
+        assert_eq!(read(&named).as_deref(), Some("hunter2-webhook"));
+        assert_eq!(read(&[("SMS_DELIVERY", "log")]), None);
+        assert!(!format!("{:?}", sms_webhook_token(&lookup(&table(&named)))).contains("hunter2"));
     }
 
     #[test]

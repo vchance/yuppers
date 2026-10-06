@@ -34,6 +34,7 @@ pub mod extract;
 pub mod health;
 pub mod record;
 pub mod safety;
+pub mod sms;
 pub mod staff;
 pub mod v1;
 pub mod wallet;
@@ -64,6 +65,12 @@ pub struct Settings {
     /// Which build this is, for `GET /v1/meta` and the `X-Yuppers-Version`
     /// header (`crate::build_info`).
     pub build: BuildInfo,
+    /// Whether text messages are sent (`SMS_DELIVERY`), and so whether
+    /// agreement updates by text can be turned on (`sms::updates`).
+    pub sms_updates: bool,
+    /// The auth token that checks Twilio's signature on its requests to
+    /// `POST /v1/sms/inbound`. With none, every such request is refused.
+    pub sms_webhook_token: Option<crate::notifications::smtp::Secret>,
 }
 
 #[derive(Clone)]
@@ -252,6 +259,9 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         deletion::delete_account,
         devices::register_device,
         devices::remove_device,
+        sms::sms_updates,
+        sms::set_sms_updates,
+        sms::inbound,
         exchanges::create,
         exchanges::list,
         exchanges::get,

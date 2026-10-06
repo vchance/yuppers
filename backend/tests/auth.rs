@@ -121,6 +121,8 @@ impl App {
                 app_links: Default::default(),
                 push_notifications: false,
                 build: Default::default(),
+                sms_updates: false,
+                sms_webhook_token: None,
             }),
             code_sender: outbox.clone(),
             metrics: Default::default(),

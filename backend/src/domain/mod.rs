@@ -55,6 +55,12 @@ pub struct Rules {
     /// How long a signature\'s network address and user agent are kept
     /// (DESIGN.md §14). The signature itself is permanent.
     pub network_metadata_retention: Duration,
+    /// How long the record of consent to text updates is kept after the
+    /// updates it covers have ended (README, "Text updates"): proof that a
+    /// person asked for the texts they were sent. Four years, the time
+    /// within which a claim about unwanted texts can usually be brought in
+    /// the US. A placeholder for counsel to confirm.
+    pub sms_consent_retention: Duration,
     /// Size limits on what a revision may contain. Placeholders.
     pub limits: Limits,
 }
@@ -103,6 +109,7 @@ impl Default for Rules {
             invitations_per_day: 5,
             due_date_horizon: Duration::days(3650),
             network_metadata_retention: Duration::days(90),
+            sms_consent_retention: Duration::days(365 * 4),
             limits: Limits::default(),
         }
     }

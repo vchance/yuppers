@@ -98,6 +98,8 @@ fn service_with_build(
             app_links,
             push_notifications: false,
             build,
+            sms_updates: false,
+            sms_webhook_token: None,
         }),
         code_sender: Arc::new(LogSender),
         metrics: Default::default(),

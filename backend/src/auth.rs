@@ -631,6 +631,13 @@ pub async fn request_code(
         return Err(ErrorCode::PhoneCountryNotServed.into());
     }
 
+    // A number that replied STOP gets no text, a code included, until it
+    // replies START (`crate::notifications::sms_updates`). Refused before
+    // anything is counted, with an answer that points to email instead.
+    if charged && is_opted_out(db, identifier).await? {
+        return Err(ErrorCode::PhoneOptedOut.into());
+    }
+
     let mut tx = db.begin().await?;
 
     // The requester first, and then the identifier, always in that order.
@@ -801,6 +808,78 @@ pub async fn request_code(
         return Err(ErrorCode::ServiceUnavailable.into());
     }
     Ok(())
+}
+
+/// Whether `identifier` is a phone number that replied STOP to our texts
+/// and has not replied START since.
+pub async fn is_opted_out(db: &PgPool, identifier: &Identifier) -> Result<bool, sqlx::Error> {
+    let Identifier::Phone(phone) = identifier else {
+        return Ok(false);
+    };
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
+        .bind(phone)
+        .fetch_one(db)
+        .await
+}
+
+/// A place taken under the hourly caps on text messages for one text that
+/// is not a code: an agreement update (`crate::notifications::sms_updates`).
+/// Update texts and codes share the caps, the whole service's and the one
+/// per number prefix, since they cost the same.
+pub struct SmsPlace {
+    taken: [(Counter, OffsetDateTime); 2],
+}
+
+impl SmsPlace {
+    /// Takes a place for a text to `identifier` under both hourly caps, or
+    /// `None` if either is reached, which is counted for the metrics as a
+    /// code refused at the cap is. Run it in the transaction that sends the
+    /// text: the counts stay locked until it ends.
+    pub async fn take(
+        conn: &mut PgConnection,
+        secret: &[u8],
+        rules: &AuthRules,
+        identifier: &Identifier,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let prefix = Counter::new(
+            secret,
+            Counted::SmsSentByPrefix,
+            &rules.sms_prefix(identifier),
+        );
+        let everyone = Counter::new(secret, Counted::SmsSent, EVERYONE);
+        let refusal = if prefix.hold(conn).await? >= rules.sms_codes_per_prefix_per_hour {
+            Some(Counted::SmsRefusedPrefix)
+        } else if everyone.hold(conn).await? >= rules.sms_codes_per_hour {
+            Some(Counted::SmsRefused)
+        } else {
+            None
+        };
+        if let Some(counted) = refusal {
+            Counter::new(secret, counted, EVERYONE).add(conn, 1).await?;
+            return Ok(None);
+        }
+        let prefix_window = prefix.take(conn).await?;
+        let everyone_window = everyone.take(conn).await?;
+        Ok(Some(Self {
+            taken: [(prefix, prefix_window), (everyone, everyone_window)],
+        }))
+    }
+
+    /// Gives the place back because the provider did not take the text,
+    /// and counts that for the metrics.
+    pub async fn give_back(
+        self,
+        conn: &mut PgConnection,
+        secret: &[u8],
+    ) -> Result<(), sqlx::Error> {
+        for (counter, window) in &self.taken {
+            counter.release(conn, *window).await?;
+        }
+        Counter::new(secret, Counted::SmsFailed, EVERYONE)
+            .add(conn, 1)
+            .await?;
+        Ok(())
+    }
 }
 
 /// Checks a code against every live code for the identifier and purpose,

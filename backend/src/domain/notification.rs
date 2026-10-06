@@ -147,6 +147,37 @@ impl Notice {
     pub fn parse(text: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|notice| notice.as_str() == text)
     }
+
+    /// Whether this notice is a status change that a party who turned on
+    /// text updates for the agreement is texted about ("Yuppers.app
+    /// agreement updates", DESIGN.md §12): a signature, a revision sent, the
+    /// agreement coming into force, an item marked delivered, confirmed,
+    /// disputed or waived, a request to close, and the closing itself. The
+    /// rest (joining, statements, reminders, retractions and the like) go by
+    /// email and push only, so that the texts stay what the terms describe.
+    pub fn texted_as_update(self) -> bool {
+        matches!(
+            self,
+            Notice::AcceptanceWaiting
+                | Notice::RevisionSent
+                | Notice::RevisionSentUnconfirmed
+                | Notice::AmendmentProposed
+                | Notice::AgreementInForce
+                | Notice::AmendmentInForce
+                | Notice::DeliveryClaimed
+                | Notice::DeliveryConfirmed
+                | Notice::DisputeOpened
+                | Notice::ContributionWaived
+                | Notice::CloseRequested
+                | Notice::ClosedWithdrawn
+                | Notice::ClosedDeclined
+                | Notice::ClosedExpired
+                | Notice::ClosedCompleted
+                | Notice::ClosedEndedByAgreement
+                | Notice::ClosedUnresolved
+                | Notice::ClosedInactive
+        )
+    }
 }
 
 /// The message a decision calls for.
@@ -662,5 +693,40 @@ mod tests {
             assert_eq!(Notice::parse(notice.as_str()), Some(notice));
         }
         assert_eq!(Notice::parse("NO_SUCH_NOTICE"), None);
+    }
+
+    #[test]
+    fn the_status_changes_texted_as_updates_are_the_ones_the_terms_name() {
+        let texted: Vec<&str> = Notice::ALL
+            .into_iter()
+            .filter(|notice| notice.texted_as_update())
+            .map(Notice::as_str)
+            .collect();
+        assert_eq!(
+            texted,
+            [
+                "REVISION_SENT",
+                "REVISION_SENT_UNCONFIRMED",
+                "AMENDMENT_PROPOSED",
+                "ACCEPTANCE_WAITING",
+                "AGREEMENT_IN_FORCE",
+                "AMENDMENT_IN_FORCE",
+                "DELIVERY_CLAIMED",
+                "DELIVERY_CONFIRMED",
+                "DISPUTE_OPENED",
+                "CONTRIBUTION_WAIVED",
+                "CLOSE_REQUESTED",
+                "CLOSED_WITHDRAWN",
+                "CLOSED_DECLINED",
+                "CLOSED_EXPIRED",
+                "CLOSED_COMPLETED",
+                "CLOSED_ENDED_BY_AGREEMENT",
+                "CLOSED_UNRESOLVED",
+                "CLOSED_INACTIVE",
+            ]
+        );
+        // Never a reminder: those are not status changes.
+        assert!(!Notice::DueSoon.texted_as_update());
+        assert!(!Notice::OverdueToDeliver.texted_as_update());
     }
 }

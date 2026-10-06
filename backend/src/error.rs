@@ -38,6 +38,10 @@ pub enum ErrorCode {
     /// A phone number of a country the service does not send codes to
     /// (`SMS_ALLOWED_COUNTRY_CODES`). An email address still works.
     PhoneCountryNotServed,
+    /// The phone number replied STOP to our texts, so nothing is texted to
+    /// it, one-time codes included, until it replies START. An email address
+    /// still works.
+    PhoneOptedOut,
     /// The one-time code is wrong, expired or used up. Deliberately one code
     /// for all three, so a guesser learns nothing.
     InvalidCode,
@@ -124,6 +128,7 @@ impl From<ErrorCode> for ApiError {
             | CounterpartyNotConfirmed
             | AwaitingConfirmation
             | IdentifierInUse
+            | PhoneOptedOut
             | VersionConflict
             | ProfileIncomplete
             | ConsentOutdated

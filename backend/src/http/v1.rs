@@ -6,7 +6,9 @@ use axum::{Extension, Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{AppState, account, auth, deletion, devices, exchanges, record, safety, staff, wallet};
+use super::{
+    AppState, account, auth, deletion, devices, exchanges, record, safety, sms, staff, wallet,
+};
 use crate::auth::{SignInChannel, sign_in_channels};
 use crate::client_version::MinimumClientVersions;
 use crate::wallet::{Wallet, WalletPlatform};
@@ -38,6 +40,11 @@ pub fn router() -> Router<AppState> {
             "/exchanges/{id}/invitation",
             post(exchanges::reissue_invitation),
         )
+        .route(
+            "/exchanges/{id}/sms-updates",
+            get(sms::sms_updates).put(sms::set_sms_updates),
+        )
+        .route("/sms/inbound", post(sms::inbound))
         .route("/invitations/preview", post(exchanges::preview_invitation))
         .route("/invitations/claim", post(exchanges::claim_invitation))
         .merge(safety::routes())
@@ -85,6 +92,10 @@ pub struct Meta {
     /// email from an address of the service's own (the development log).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_sender: Option<String>,
+    /// Whether a party may turn on text updates for an agreement
+    /// (`GET`/`PUT /v1/exchanges/{id}/sms-updates`): while text messages are
+    /// sent. A client shows no "Text updates" control otherwise.
+    pub sms_updates: bool,
 }
 
 /// Identifies the service and its build, and says how old a client may be.
@@ -115,5 +126,6 @@ pub async fn meta(
         },
         sign_in_channels: channels,
         code_sender: state.code_sender.email_sender(),
+        sms_updates: state.settings.sms_updates,
     })
 }

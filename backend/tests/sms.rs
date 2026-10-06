@@ -29,6 +29,7 @@ use yuppers_backend::metrics::{self, Text};
 use yuppers_backend::notifications::sms::{
     CodeRouter, LogSmsSender, Sms, SmsSender, TwilioCredential, TwilioSmsSender, encoding,
 };
+use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::telemetry::{self, LogFormat};
@@ -394,6 +395,97 @@ async fn with_sms_off_a_code_for_a_phone_number_is_refused_as_before_and_costs_n
             .await
             .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 0")
     );
+}
+
+/// With text messages off, agreement updates are neither offered nor
+/// queued, even for someone who turned them on while they were sent, and
+/// the worker closes whatever was queued before unsent. This binary never
+/// says texts are sent (`sms_updates::configure`), as a process with
+/// `SMS_DELIVERY=off` does not.
+#[tokio::test]
+async fn with_sms_off_no_update_text_is_offered_queued_or_sent() {
+    let (app, _turn) = start(50, Arc::new(LogSender)).await;
+    let meta = app
+        .call(None, Method::GET, "/v1/meta", None, &[])
+        .await
+        .ok();
+    assert_eq!(meta["sms_updates"], false);
+
+    let deal = app.active().await;
+    let phone = number();
+    sqlx::query("UPDATE account SET phone = $2 WHERE id = $1")
+        .bind(deal.ben.id)
+        .bind(&phone)
+        .execute(&app.db)
+        .await
+        .unwrap();
+    let path = format!("/v1/exchanges/{}/sms-updates", deal.exchange);
+    let view = app.get(&deal.ben, &path).await.ok();
+    assert_eq!(view["available"], false);
+    app.call(
+        Some(&deal.ben),
+        Method::PUT,
+        &path,
+        Some(json!({ "on": true, "consent": { "version": "2026-10-05", "language": "en" } })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
+
+    // Turned on while texts were sent: still nothing is queued now.
+    let exchange: Uuid = deal.exchange.parse().unwrap();
+    sqlx::query("INSERT INTO sms_update (account_id, exchange_id, phone) VALUES ($1, $2, $3)")
+        .bind(deal.ben.id)
+        .bind(exchange)
+        .bind(&phone)
+        .execute(&app.db)
+        .await
+        .unwrap();
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    let queued: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM outbox WHERE kind = 'SMS' AND recipient_account_id = $1",
+    )
+    .bind(deal.ben.id)
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+    assert_eq!(queued, 0);
+
+    // One queued before texts were turned off is closed unsent.
+    sqlx::query(
+        "INSERT INTO outbox (kind, recipient_account_id, exchange_id, payload)
+         VALUES ('SMS', $1, $2, '{\"sms\": \"OPT_IN_CONFIRMATION\"}')",
+    )
+    .bind(deal.ben.id)
+    .bind(exchange)
+    .execute(&app.db)
+    .await
+    .unwrap();
+    let off = SmsDelivery {
+        sender: None,
+        wording: Wording::embedded().unwrap(),
+        web_origin: "https://app.test".to_owned(),
+        rules: Default::default(),
+        auth: AuthRules::default(),
+        secret: Vec::new(),
+    };
+    let delivered =
+        sms_updates::deliver_sms_due_until(&app.db, &off, time::OffsetDateTime::now_utc(), || {
+            false
+        })
+        .await
+        .unwrap();
+    assert!(delivered.dropped >= 1);
+    let reason: Option<String> = sqlx::query_scalar(
+        "SELECT last_error FROM outbox WHERE kind = 'SMS' AND recipient_account_id = $1",
+    )
+    .bind(deal.ben.id)
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+    assert_eq!(reason.as_deref(), Some(sms_updates::SMS_OFF));
 }
 
 #[tokio::test]

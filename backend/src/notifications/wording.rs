@@ -43,6 +43,12 @@ struct SmsWording {
     sign_in: String,
     #[serde(rename = "deleteAccount")]
     delete_account: String,
+    /// An agreement update ("Yuppers.app agreement updates"): only that
+    /// something changed, and the link. No terms, names, amounts or code.
+    update: String,
+    /// The confirmation texted when someone turns updates on.
+    #[serde(rename = "optInConfirmation")]
+    opt_in_confirmation: String,
 }
 
 #[derive(Deserialize)]
@@ -306,6 +312,23 @@ impl Wording {
             template,
             &[("productName", file.product_name.as_str()), ("code", code)],
         )
+    }
+
+    /// The text message telling someone who turned on text updates for an
+    /// agreement that its status changed, with `link` to the exchange
+    /// (`crate::notifications::sms_updates`). The same for every change and
+    /// every agreement: it names no term, amount, person or code, as the
+    /// terms promise.
+    pub fn update_sms(&self, language: &str, link: &str) -> String {
+        let file = self.file_for(language);
+        fill(&file.sms.update, &[("link", link)])
+    }
+
+    /// The text message confirming that text updates were turned on for an
+    /// agreement, as the carriers ask: the program, how often, that rates
+    /// may apply, and HELP and STOP.
+    pub fn opt_in_sms(&self, language: &str) -> String {
+        self.file_for(language).sms.opt_in_confirmation.clone()
     }
 
     /// The email that carries a one-time code, in `language` where that
@@ -619,7 +642,12 @@ mod tests {
                 "staffAlert": { "subject": format!("{product} review"), "body": "Waiting.\n\nOpen: {link}" },
             },
             "push": { "body": format!("{product} news") },
-            "sms": { "signIn": "{code} in", "deleteAccount": "{code} out" },
+            "sms": {
+                "signIn": "{code} in",
+                "deleteAccount": "{code} out",
+                "update": "changed: {link}",
+                "optInConfirmation": "on",
+            },
         })
         .to_string()
     }

@@ -174,7 +174,9 @@
   },
   "sms": {
     "signIn": "{code} is your {productName} sign-in code. Do not share it with anyone.",
-    "deleteAccount": "{code} is your code to delete your {productName} account. Do not share it with anyone."
+    "deleteAccount": "{code} is your code to delete your {productName} account. Do not share it with anyone.",
+    "update": "Yuppers.app: an agreement you turned on updates for has changed. See it: {link}. Reply STOP to opt out.",
+    "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
   },
   "common": {
     "loading": "Loading…",
@@ -691,8 +693,8 @@
       "turnOn": "Turn on notifications",
       "notNow": "Not now",
       "channel": "Updates to your yups",
-      "phoneOnly": "Text messages carry only sign-in codes, and your account has no email address, so notifications on this phone are the only way we can tell you about your yups.",
-      "phoneOnlyNoPush": "Text messages carry only sign-in codes, and your account has no email address, so nothing tells you when one of your yups changes. Check them here."
+      "phoneOnly": "Your account has no email address, so notifications on this phone are how we tell you about your yups. Text messages carry sign-in codes and, for an agreement you turn them on for, its updates.",
+      "phoneOnlyNoPush": "Your account has no email address, so nothing tells you when one of your yups changes unless you turn on text updates for it. Check them here."
     }
   },
   "exchange": {
@@ -846,6 +848,26 @@
       "nov": "Nov",
       "dec": "Dec"
     }
+  },
+  "smsUpdates": {
+    "heading": "Text updates",
+    "intro": "Get a text message each time this agreement’s status changes. The texts say only that something changed, with a link to see it.",
+    "addPhoneIntro": "First add your US mobile number to your account. We’ll text it a one-time code to check it’s yours.",
+    "phoneLabel": "Mobile number",
+    "phoneHint": "A US number, such as +1 555 123 4567.",
+    "phoneInvalid": "Enter a US mobile number: 10 digits, or +1 and 10 digits.",
+    "sendCode": "Text me a code",
+    "codeSent": "We texted a code to {phone}.",
+    "codeLabel": "Code from the text",
+    "addPhone": "Add this number",
+    "changePhone": "Use a different number",
+    "phoneAdded": "{phone} is now on your account.",
+    "consent": "Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.",
+    "save": "Save",
+    "on": "Text updates are on for this agreement. You’ll get one text per status change at {phone}. Reply STOP to opt out.",
+    "off": "Text updates are off for this agreement.",
+    "optedOut": "{phone} replied STOP to our texts, so we don’t text it any more. To get texts again, reply START to any text from us, then turn updates on here.",
+    "howItWorks": "How we text you"
   },
   "record": {
     "historyHeading": "History",
@@ -1092,7 +1114,8 @@
     "SESSION_TOO_OLD": "This page needs a sign-in from the last 12 hours. Sign out and sign in again.",
     "CONTENT_HIDDEN": "Part of this yup has been hidden by review, so its terms can’t be signed or changed.",
     "REPORT_RESOLVED": "This report has already been resolved.",
-    "SUBJECT_IS_REVIEWER": "The person reported is a reviewer. Only the owner can suspend a reviewer, or lift a reviewer’s suspension, after taking their reviewer role away."
+    "SUBJECT_IS_REVIEWER": "The person reported is a reviewer. Only the owner can suspend a reviewer, or lift a reviewer’s suspension, after taking their reviewer role away.",
+    "PHONE_OPTED_OUT": "This number replied STOP to our texts, so we can’t text it a code. Sign in with your email address instead, or reply START to one of our texts to get them again."
   },
   "a11y": {
     "openExchange": "Opens this yup.",

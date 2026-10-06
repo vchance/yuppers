@@ -28,6 +28,7 @@ use yuppers_backend::db;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
 use yuppers_backend::metrics::HttpMetrics;
+use yuppers_backend::notifications::smtp::Secret;
 use yuppers_backend::wallet::Wallet;
 
 pub const CONSENT_VERSION: &str = "test-1";
@@ -261,6 +262,28 @@ impl App {
         .await
     }
 
+    /// Texting agreement updates, with these sign-in rules and code sender,
+    /// and checking Twilio's signature on the inbound-message webhook with
+    /// `webhook_token`. The service's web origin is `https://app.test`.
+    pub async fn start_texting(
+        database_name: &'static str,
+        auth: AuthRules,
+        code_sender: Arc<dyn CodeSender>,
+        webhook_token: &str,
+    ) -> Self {
+        Self::start_full(
+            database_name,
+            Rules::default(),
+            code_sender,
+            TrustedProxies::none(),
+            MinimumClientVersions::default(),
+            (auth, false),
+            None,
+            Some(webhook_token),
+        )
+        .await
+    }
+
     async fn start_configured(
         database_name: &'static str,
         rules: Rules,
@@ -287,8 +310,35 @@ impl App {
         code_sender: Arc<dyn CodeSender>,
         proxies: TrustedProxies,
         min_client_versions: MinimumClientVersions,
+        messaging: (AuthRules, bool),
+        wallet: Option<Arc<Wallet>>,
+    ) -> Self {
+        Self::start_full(
+            database_name,
+            rules,
+            code_sender,
+            proxies,
+            min_client_versions,
+            messaging,
+            wallet,
+            None,
+        )
+        .await
+    }
+
+    /// With every setting. `webhook_token` set means text messages are sent:
+    /// agreement updates can be turned on, and the inbound webhook checks
+    /// signatures with it.
+    #[allow(clippy::too_many_arguments)]
+    async fn start_full(
+        database_name: &'static str,
+        rules: Rules,
+        code_sender: Arc<dyn CodeSender>,
+        proxies: TrustedProxies,
+        min_client_versions: MinimumClientVersions,
         (auth, push_notifications): (AuthRules, bool),
         wallet: Option<Arc<Wallet>>,
+        webhook_token: Option<&str>,
     ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
@@ -306,6 +356,8 @@ impl App {
                 app_links: Default::default(),
                 push_notifications,
                 build: Default::default(),
+                sms_updates: webhook_token.is_some(),
+                sms_webhook_token: webhook_token.map(|token| Secret::new(token.to_owned())),
             }),
             code_sender,
             metrics: metrics.clone(),
@@ -386,6 +438,37 @@ impl App {
         }
         .unwrap();
 
+        let response = self.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        Reply {
+            status,
+            headers,
+            body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+            bytes: bytes.to_vec(),
+        }
+    }
+
+    /// A request with a body of any type and no session, such as a
+    /// provider's webhook makes, with at most one extra header.
+    pub async fn raw(
+        &self,
+        method: Method,
+        path: &str,
+        content_type: &str,
+        body: Vec<u8>,
+        header: Option<(&'static str, &str)>,
+    ) -> Reply {
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
+            .extension(ConnectInfo(PEER))
+            .header(CONTENT_TYPE, content_type);
+        if let Some((name, value)) = header {
+            request = request.header(HeaderName::from_static(name), value);
+        }
+        let request = request.body(Body::from(body)).unwrap();
         let response = self.router.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let headers = response.headers().clone();

@@ -14,6 +14,7 @@ use crate::auth::{self, Requester};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
+use crate::notifications::sms_updates;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Account {
@@ -197,7 +198,21 @@ pub async fn add_identifier(
 
     match result {
         Ok(done) if done.rows_affected() == 0 => Err(ErrorCode::Unauthenticated.into()),
-        Ok(_) => Ok(Json(load(&state.db, session.account_id).await?)),
+        Ok(_) => {
+            // Text updates were turned on for a number; a new one has not
+            // agreed to them, so those for the old number end.
+            if let Identifier::Phone(phone) = &identifier {
+                let mut conn = state.db.acquire().await?;
+                sms_updates::forget_numbers(
+                    &mut conn,
+                    session.account_id,
+                    Some(phone),
+                    sms_updates::Source::PhoneChanged,
+                )
+                .await?;
+            }
+            Ok(Json(load(&state.db, session.account_id).await?))
+        }
         Err(error) if is_unique_violation(&error) => Err(ErrorCode::IdentifierInUse.into()),
         Err(error) => Err(error.into()),
     }

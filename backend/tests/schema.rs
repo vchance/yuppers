@@ -1348,6 +1348,143 @@ async fn text_messages_are_counted_for_the_whole_service_by_keyed_hash() {
     );
 }
 
+/// Text updates for an agreement (migration 0020): the subscription, the
+/// record of consent the service may add to and the worker purge but never
+/// rewrite, the opt-out list, and update texts as their own outbox channel.
+#[tokio::test]
+async fn text_updates_keep_a_record_of_consent_the_service_cannot_rewrite() {
+    let mut tx = app().await;
+    let agreement = agreement(&mut tx).await;
+    let (account, exchange) = (agreement.account_b, agreement.exchange);
+    let phone = format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000);
+
+    let subscribe = |phone: String| {
+        sqlx::query("INSERT INTO sms_update (account_id, exchange_id, phone) VALUES ($1, $2, $3)")
+            .bind(account)
+            .bind(exchange)
+            .bind(phone)
+    };
+    refused!(tx, CHECK, subscribe("5551234567".to_owned()));
+    subscribe(phone.clone()).execute(&mut *tx).await.unwrap();
+    // One subscription per person and agreement.
+    refused!(tx, UNIQUE, subscribe(phone.clone()));
+
+    let consent =
+        |action: &'static str, version: Option<&'static str>, keyword: Option<&'static str>| {
+            sqlx::query(
+                "INSERT INTO sms_consent
+                 (action, account_id, exchange_id, phone, source, keyword,
+                  consent_version, consent_language)
+             VALUES ($1, $2, $3, $4, 'WEB', $5, $6, $7)",
+            )
+            .bind(action)
+            .bind(account)
+            .bind(exchange)
+            .bind(phone.clone())
+            .bind(keyword)
+            .bind(version)
+            .bind(version.map(|_| "en"))
+        };
+    // An opt-in names the wording shown; nothing else does.
+    refused!(tx, CHECK, consent("OPT_IN", None, None));
+    refused!(tx, CHECK, consent("OPT_OUT", Some("v1"), None));
+    // STOP and START keep the word received, and only they do.
+    refused!(tx, CHECK, consent("STOP", None, None));
+    refused!(tx, CHECK, consent("OPT_OUT", None, Some("STOP")));
+    refused!(tx, CHECK, consent("MAYBE", None, None));
+    consent("OPT_IN", Some("v1"), None)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    consent("STOP", None, Some("STOP"))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // An opt-in or opt-out names the person and the agreement.
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO sms_consent (action, phone, source, consent_version, consent_language)
+             VALUES ('OPT_IN', $1, 'WEB', 'v1', 'en')",
+        )
+        .bind(&phone)
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO sms_consent (action, phone, source, keyword)
+             VALUES ('STOP', $1, 'SOMEWHERE', 'STOP')",
+        )
+        .bind(&phone)
+    );
+
+    let id: i64 =
+        sqlx::query_scalar("SELECT id FROM sms_consent WHERE phone = $1 AND action = 'OPT_IN'")
+            .bind(&phone)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO sms_consent_network (consent_id, ip_address, user_agent)
+         VALUES ($1, '192.0.2.1', 'test')",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    // The record is never rewritten by the service.
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("UPDATE sms_consent SET phone = '+15550000000' WHERE id = $1").bind(id)
+    );
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("UPDATE sms_consent_network SET user_agent = 'other' WHERE consent_id = $1")
+            .bind(id)
+    );
+    // The worker's purge removes it, and its address and agent with it.
+    sqlx::query("DELETE FROM sms_consent WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let network: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sms_consent_network WHERE consent_id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert_eq!(network, 0);
+
+    // The opt-out list: one row a number.
+    let stop = || sqlx::query("INSERT INTO sms_opt_out (phone) VALUES ($1)").bind(phone.clone());
+    stop().execute(&mut *tx).await.unwrap();
+    refused!(tx, UNIQUE, stop());
+
+    // An update text is an outbox row of its own kind.
+    sqlx::query(
+        "INSERT INTO outbox (kind, recipient_account_id, exchange_id, payload)
+         VALUES ('SMS', $1, $2, '{\"sms\": \"OPT_IN_CONFIRMATION\"}')",
+    )
+    .bind(account)
+    .bind(exchange)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO outbox (kind, recipient_account_id, payload) VALUES ('FAX', $1, '{}')",
+        )
+        .bind(account)
+    );
+}
+
 #[tokio::test]
 async fn a_wallet_pass_and_its_devices_hold_only_what_the_service_needs() {
     let mut tx = app().await;

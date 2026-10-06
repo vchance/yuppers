@@ -12,7 +12,8 @@
     "gen:api": "cargo run --quiet --manifest-path backend/Cargo.toml --bin openapi > packages/api-client/openapi.json && npm run generate -w @yuppers/api-client",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "e2e": "cargo build --manifest-path backend/Cargo.toml --bin api --bin staff && npm run build:web && npm run e2e -w @yuppers/web --",
+    "e2e": "cargo build --manifest-path backend/Cargo.toml --bin api --bin staff --bin worker && npm run build:web && npm run e2e -w @yuppers/web --",
+    "screenshots:sms": "cargo build --manifest-path backend/Cargo.toml --bin api && npm run screenshots:sms -w @yuppers/web",
     "e2e:mobile": "cargo build --manifest-path backend/Cargo.toml --bin api && npm run e2e:export -w @yuppers/mobile && npm run e2e -w @yuppers/mobile --"
   }
 }

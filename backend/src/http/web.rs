@@ -11,7 +11,8 @@
 //!   language's page directly, without a redirect that would change the link
 //!   a messaging app previews;
 //! * `/{document}` and `/{language}/{document}`, for the privacy policy
-//!   (`privacy`) and the terms (`terms`), with or without a trailing slash,
+//!   (`privacy`), the terms (`terms`) and the page on how people opt in to
+//!   texts (`sms-opt-in`, which has no script), with or without a trailing slash,
 //!   are answered with that document's static page in that language
 //!   (`{document}/index.html`, `{language}/{document}/index.html`): the
 //!   app's entry page with the document written into it, so that it reads
@@ -51,9 +52,11 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::error::{ApiError, ErrorCode};
 use crate::http::AppState;
 
-/// The documents the build writes a static page for in each language
-/// (`apps/web/build/legal-pages.ts`): the privacy policy and the terms.
-const LEGAL_DOCUMENTS: &[&str] = &["privacy", "terms"];
+/// The pages the build writes in each language that are answered at their
+/// own address: the privacy policy and the terms
+/// (`apps/web/build/legal-pages.ts`), and the page on how people opt in to
+/// texts (`apps/web/build/sms-opt-in.ts`).
+const LEGAL_DOCUMENTS: &[&str] = &["privacy", "terms", "sms-opt-in"];
 
 /// Paths that belong to the API, whatever is or is not routed under them.
 const API_PATHS: &[&str] = &["/v1", "/healthz", "/readyz"];

@@ -9,6 +9,9 @@
 // list's entries are keys like any other (`blocks.3.ul.0`), so every language
 // must have the same pieces in the same order.
 //
+// The page on opting in to texts, `wording/sms-opt-in/`, is checked the same
+// way, as a set of its own.
+//
 // The privacy policy's text, in `wording/privacy/`, and the terms', in
 // `wording/terms/`, are two more sets, checked the same way: every language
 // has the same sections, under the same anchors, with the same pieces in the
@@ -100,6 +103,7 @@ const messages = check('')
 const helpMessages = check('help/')
 const privacyMessages = check('privacy/')
 const termsMessages = check('terms/')
+const optInMessages = check('sms-opt-in/')
 
 if (problems.length > 0) {
   console.error(problems.join('\n'))
@@ -107,5 +111,6 @@ if (problems.length > 0) {
 }
 console.log(
   `wording: ${codes.length} languages, ${messages} messages each, ${helpMessages} in help, ` +
-    `${privacyMessages} in the privacy policy and ${termsMessages} in the terms`,
+    `${privacyMessages} in the privacy policy, ${termsMessages} in the terms and ` +
+    `${optInMessages} on the page on opting in to texts`,
 )

@@ -408,7 +408,7 @@ jobs:
 
       - name: Build the backend
         working-directory: backend
-        run: cargo build --locked --bin api --bin migrate --bin staff
+        run: cargo build --locked --bin api --bin migrate --bin staff --bin worker
 
       # With a commit, so the update check below runs with the header the
       # deployed app sends (web/<version>+<commit>).
@@ -432,6 +432,11 @@ jobs:
           # Every browser connects from 127.0.0.1, so the sign-in limit per
           # address is raised out of the way (signInLimits in env.ts).
           SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: "1000000"
+          # Texts written to the log, so agreement updates are offered and
+          # read back (textMessages in env.ts).
+          SMS_DELIVERY: log
+          SMS_MAX_PER_HOUR: "1000000"
+          SMS_MAX_PER_PREFIX_PER_HOUR: "1000000"
         run: |
           mkdir -p "$(dirname "$E2E_API_LOG")"
           nohup backend/target/debug/api > "$E2E_API_LOG" 2>&1 &

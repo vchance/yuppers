@@ -27,6 +27,7 @@ import { Consent } from '../components/Consent';
 import { InvitationFor, InvitationLink } from '../components/InvitationLink';
 import { ContentHidden, OtherPartyLeft } from '../components/OtherPartyLeft';
 import { TermsView } from '../components/TermsView';
+import { SmsUpdates } from '../components/SmsUpdates';
 import { WalletButton } from '../components/WalletButton';
 import {
   Actions,
@@ -271,6 +272,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <SmsUpdates exchange={exchange} />
 
       <History exchange={exchange} reading={history} money={money} />
 

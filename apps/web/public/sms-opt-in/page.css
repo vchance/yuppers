@@ -1,0 +1,62 @@
+/*
+ * The page on how people opt in to texts (`build/sms-opt-in.ts`), on top of
+ * the app's own stylesheet, whose colours and type it uses. Served from this
+ * origin, so the Content-Security-Policy needs nothing more.
+ */
+
+.sms-opt-in .step {
+  margin-block: 2.5rem;
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--line);
+}
+
+.sms-opt-in .shot {
+  margin-block: 1rem;
+}
+
+.sms-opt-in .shot img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
+.sms-opt-in .wording h3 {
+  font-size: 1rem;
+  margin-block: 1rem 0.5rem;
+}
+
+.sms-opt-in .wording ul {
+  padding-inline-start: 1.25rem;
+}
+
+.sms-opt-in .wording li {
+  margin-block: 0.35rem;
+}
+
+/* A text message, as a phone shows it: the service's on one side, a reply on the other. */
+.sms-opt-in .sms {
+  max-inline-size: 22rem;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem 1rem 1rem 0.25rem;
+  background: var(--raised);
+}
+
+.sms-opt-in .sms-reply {
+  margin-inline-start: auto;
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  border-color: var(--accent);
+}
+
+.sms-opt-in .sms figcaption {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.sms-opt-in .sms p {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}

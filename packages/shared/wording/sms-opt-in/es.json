@@ -1,0 +1,54 @@
+{
+  "title": "Cómo se suscribe la gente a los mensajes de texto de Yuppers.app",
+  "description": "Cada paso que da una persona para recibir mensajes de texto de Yuppers.app, con el texto exacto de cada pantalla y de cada mensaje.",
+  "intro": "Yuppers.app (https://yuppers.app) envía mensajes de texto en dos programas, códigos de Yuppers.app para entrar (Yuppers.app sign-in codes) y actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates), y para nada más: nada de marketing. Esta página muestra cada paso que da una persona para recibirlos, con una imagen de cada pantalla y el texto exacto que muestra.",
+  "note": "En yuppers.app, entrar con un número de teléfono y la sección “Actualizaciones por mensaje” de un acuerdo solo aparecen mientras el envío de mensajes está activado en el servicio. Las pantallas de abajo se muestran como aparecen cuando el envío de mensajes está activado. Se tomaron del sitio web de Yuppers en una pantalla del tamaño de un teléfono; la app de Yuppers muestra el mismo texto.",
+  "wordingHeading": "Texto exacto",
+  "messageFrom": "Mensaje de Yuppers.app",
+  "messageTo": "Respuesta de la persona",
+  "programsHeading": "Los dos programas",
+  "programs": [
+    "Códigos de Yuppers.app para entrar: un mensaje por cada código que pide una persona, para entrar o para confirmar la eliminación de su cuenta.",
+    "Actualizaciones de acuerdos de Yuppers.app: un mensaje por cada cambio de estado de un acuerdo para el que la persona activó las actualizaciones. La frecuencia de los mensajes varía; no hay un máximo fijo."
+  ],
+  "steps": {
+    "signIn": {
+      "title": "Paso 1. Escribir un número de teléfono para entrar",
+      "caption": "El formulario para entrar acepta un correo electrónico o un número de teléfono. Debajo del botón dice que pueden aplicarse tarifas por mensajes y datos y cómo detener los mensajes, y enlaza a la sección sobre mensajes de texto de la política de privacidad, a la política de privacidad y a los términos. Escribir un número y pulsar “Enviar código” pide un mensaje con un código para entrar.",
+      "alt": "El formulario para entrar de Yuppers en un teléfono, con un número de teléfono escrito, el botón Enviar código, la línea sobre tarifas por mensajes y datos y STOP, y enlaces a la política de privacidad y a los términos."
+    },
+    "codeSent": {
+      "title": "Paso 2. Después de pedir un código",
+      "caption": "La pantalla dice adónde se envió el código y lo pide. El mensaje que lleva el código se muestra debajo de la imagen.",
+      "alt": "El formulario para entrar de Yuppers después de enviar un código: el número al que se envió y un campo para el código de seis dígitos."
+    },
+    "textUpdates": {
+      "title": "Paso 3. Activar las actualizaciones por mensaje de un acuerdo",
+      "caption": "En un acuerdo del que la persona es parte, “Actualizaciones por mensaje” muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. Si la cuenta aún no tiene número de teléfono, la persona primero escribe un número de EE. UU., que comprobamos con un código de un solo uso que le enviamos.",
+      "alt": "La sección Actualizaciones por mensaje de un acuerdo en un teléfono: una casilla sin marcar junto al texto de consentimiento, con enlaces a los términos y a la política de privacidad, y un botón Guardar."
+    },
+    "confirmation": {
+      "title": "Paso 4. Después de marcar la casilla y guardar",
+      "caption": "La pantalla confirma que las actualizaciones por mensaje están activadas para este acuerdo, dice con qué frecuencia y a qué número llegan, y cómo detenerlas.",
+      "alt": "La sección Actualizaciones por mensaje después de guardar: la casilla marcada y la confirmación de que las actualizaciones están activadas, con el número en parte oculto."
+    },
+    "confirmationText": {
+      "title": "Paso 5. El mensaje que confirma la suscripción",
+      "caption": "Se envía de inmediato al número, tal como llega:"
+    },
+    "replies": {
+      "title": "Paso 6. HELP y STOP",
+      "caption": "Responder HELP o STOP a cualquiera de nuestros mensajes recibe de inmediato estas respuestas, que están en inglés. STOP termina todos los mensajes de Yuppers.app a ese número, incluidos los códigos para entrar, hasta que responda START; la persona todavía puede entrar con un correo electrónico. Cada actualización de estado después se ve como el último mensaje de abajo."
+    }
+  },
+  "codeText": "El mensaje con el código para entrar:",
+  "updateText": "Una actualización de un acuerdo, tal como llega:",
+  "moreHeading": "Los términos y la política de privacidad",
+  "more": "Los dos programas se describen en la sección sobre mensajes de texto de los {terms} y de la {privacy}.",
+  "termsLink": "Términos y condiciones",
+  "privacyLink": "Política de privacidad",
+  "replies": {
+    "help": "Yuppers.app: Text updates about your agreements and sign-in codes. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
+    "stop": "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
+  }
+}

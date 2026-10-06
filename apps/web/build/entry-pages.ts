@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { Plugin } from 'vite'
 
 import { readLegalPages, withDocument } from './legal-pages.ts'
+import { asSmsOptInPage, readSmsOptInPages } from './sms-opt-in.ts'
 
 /*
  * One static entry page per language (DESIGN.md §4.2, §13.5).
@@ -144,6 +145,7 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
           .slice(1)
           .map((page) => invitationPath(page.lang)),
         ...readLegalPages(wordingDirectory).map((page) => page.path),
+        ...readSmsOptInPages(wordingDirectory).map((page) => page.path),
       ])
       server.middlewares.use((request, _response, next) => {
         const [path, query] = (request.url ?? '').split('?')
@@ -172,6 +174,14 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
           type: 'asset',
           fileName: page.fileName,
           source: withDocument(renderEntryPage(template, page), page),
+        })
+      }
+      // How people opt in to texts, a page of its own (`sms-opt-in.ts`).
+      for (const page of readSmsOptInPages(wordingDirectory)) {
+        this.emitFile({
+          type: 'asset',
+          fileName: page.fileName,
+          source: asSmsOptInPage(renderEntryPage(template, page), page),
         })
       }
     },

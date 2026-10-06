@@ -88,6 +88,11 @@ envVarGroups:
         sync: false
       - key: SMS_API_KEY_SECRET
         sync: false
+      # The account's auth token, which checks Twilio's signature on texts
+      # people send back (STOP, START) at /v1/sms/inbound. Twilio signs with
+      # it whatever the service sends with; nothing is sent with it.
+      - key: SMS_WEBHOOK_AUTH_TOKEN
+        sync: false
       # The application role's password, generated once by Render. migrate
       # creates exchange_app with it; the api and the worker sign in with it.
       - key: APP_DB_PASSWORD
@@ -169,6 +174,14 @@ services:
         fromDatabase:
           name: yuppers-db
           property: connectionString
+      # The api's. While SMS_DELIVERY is on, the worker sends agreement
+      # updates by text and counts them under the same hourly caps as the
+      # api's codes, whose counts are keyed with it.
+      - key: APP_SECRET
+        fromService:
+          type: web
+          name: yuppers
+          envVarKey: APP_SECRET
 
 databases:
   - name: yuppers-db

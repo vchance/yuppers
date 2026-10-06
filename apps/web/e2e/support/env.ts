@@ -26,6 +26,11 @@ export const apiBinary = resolve(
 )
 export const webDir = resolve(process.env.E2E_WEB_DIR ?? resolve(webRoot, 'dist'))
 
+/** The worker, started by the test that waits for an agreement update to be texted. */
+export const workerBinary = resolve(
+  process.env.E2E_WORKER_BIN ?? resolve(repoRoot, 'backend/target/debug/worker'),
+)
+
 /**
  * The API's log. With CODE_DELIVERY=log the service writes each one-time
  * code there, and the tests read it back instead of receiving email.
@@ -42,6 +47,18 @@ export const signInLimits = {
   SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: '1000000',
 }
 
+/**
+ * Text messages, written to the log rather than sent (`SMS_DELIVERY=log`),
+ * so that agreement updates are offered and their texts can be read back;
+ * with the hourly caps out of the way, since every run's texts count. CI
+ * starts its API with the same values.
+ */
+export const textMessages = {
+  SMS_DELIVERY: 'log',
+  SMS_MAX_PER_HOUR: '1000000',
+  SMS_MAX_PER_PREFIX_PER_HOUR: '1000000',
+}
+
 /** The settings every API process the tests start runs with, beside the database from `.env`. */
 export function apiEnvironment(listenPort: number): Record<string, string> {
   return {
@@ -56,6 +73,7 @@ export function apiEnvironment(listenPort: number): Record<string, string> {
     // per-identifier limits stay as they are: every person has an address
     // of their own.
     ...signInLimits,
+    ...textMessages,
     // Plain lines, so the codes can be read back.
     NO_COLOR: '1',
   }

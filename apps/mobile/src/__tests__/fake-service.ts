@@ -166,6 +166,12 @@ export interface FakeService {
   proposed: boolean;
   /** The devices registered for push, by ID, with what was registered. */
   devices: Map<string, unknown>;
+  /** Whether the service texts agreement updates (`sms_updates` in its meta). */
+  texting: boolean;
+  /** The agreements the account has turned text updates on for. */
+  textUpdates: Set<string>;
+  /** Whether the account's number replied STOP. */
+  optedOut: boolean;
   fetch: typeof fetch;
 }
 
@@ -183,6 +189,9 @@ export function fakeService(): FakeService {
     refuseCodes: null,
     proposed: false,
     devices: new Map(),
+    texting: true,
+    textUpdates: new Set(),
+    optedOut: false,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const text = await request.text();
@@ -229,6 +238,7 @@ function respond(
         wallet_platforms: ['APPLE', 'GOOGLE'],
         sign_in_channels: service.phone ? ['email', 'phone'] : ['email'],
         sms_country_codes: service.phone ? ['+1'] : [],
+        sms_updates: service.texting,
         ...(service.codeSender ? { code_sender: service.codeSender } : {}),
       },
     ];
@@ -266,6 +276,32 @@ function respond(
   }
 
   if (call === 'GET /v1/me') return [200, service.account];
+  if (call === 'POST /v1/me/identifiers') {
+    const { code, identifier } = body as { code: string; identifier: string };
+    if (code !== '123456') return [401, { code: 'INVALID_CODE' }];
+    service.account = identifier.includes('@')
+      ? { ...service.account, email: identifier }
+      : { ...service.account, phone: identifier };
+    return [200, service.account];
+  }
+  for (const exchange of [service.exchange]) {
+    const at = `/v1/exchanges/${exchange.id}/sms-updates`;
+    const standing = () => ({
+      on: service.textUpdates.has(exchange.id),
+      available: service.texting && ['NEGOTIATING', 'ACTIVE'].includes(exchange.state),
+      phone: service.account?.phone ?? null,
+      opted_out: service.optedOut,
+      consent_version: '2026-10-05',
+    });
+    if (call === `GET ${at}`) return [200, standing()];
+    if (call === `PUT ${at}`) {
+      const { on } = body as { on: boolean };
+      if (on && service.optedOut) return [409, { code: 'PHONE_OPTED_OUT' }];
+      if (on) service.textUpdates.add(exchange.id);
+      else service.textUpdates.delete(exchange.id);
+      return [200, standing()];
+    }
+  }
   if (call === 'POST /v1/invitations/claim') {
     const { only_if_yours } = body as { token: string; only_if_yours?: boolean };
     if (service.invitation === 'yours') return [200, service.exchange];

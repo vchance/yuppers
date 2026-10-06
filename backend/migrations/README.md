@@ -164,6 +164,18 @@ Replaying the deletion log deletes an account that the restored copy holds suspe
 
 `backend/tests/schema.rs` checks the new rule; `backend/tests/deletion.rs` the replay that uses it.
 
+## 0020_sms_updates
+
+Text updates for an agreement, "Yuppers.app agreement updates" (README, "Text updates"; `DESIGN.md` §12).
+
+- **`sms_update`**: an agreement a person turned text updates on for, with the number they were turned on with, one row per person and agreement while they are on. Removed when they are turned off, by the person, by a STOP reply, by a change of the account's number or by deleting the account.
+- **`sms_consent`**: the record of consent, kept as proof of opt-in. Every opt-in (who, which agreement, the number, the time, the version and language of the consent wording, and from which client), every opt-out and why, and every STOP and START received, with the word. Checks hold an opt-in to its wording and an opt-in or opt-out to a person and an agreement. The application role may read it and add to it, never change it; it may remove rows only because the worker's retention purge does, four years after the updates they cover ended.
+- **`sms_consent_network`**: an opt-in's IP address and user agent, apart, removed with the signatures' after 90 days; and with its record, by cascade.
+- **`sms_opt_out`**: the numbers that replied STOP and not START since. Nothing is texted to them.
+- **`outbox`** takes a fourth kind, `SMS`, and an index on its recipient and time for the daily cap on update texts.
+
+Working data and the record both name a phone number in full, as `account` does: the number is what consent was given for. `backend/tests/schema.rs` checks the checks and grants; `backend/tests/sms_updates.rs` everything through the API, the webhook and the worker.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

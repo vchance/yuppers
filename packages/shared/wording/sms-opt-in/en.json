@@ -1,0 +1,54 @@
+{
+  "title": "How people opt in to texts from Yuppers.app",
+  "description": "Each step a person takes to receive text messages from Yuppers.app, with the exact wording of every screen and message.",
+  "intro": "Yuppers.app (https://yuppers.app) sends text messages in two programs, Yuppers.app sign-in codes and Yuppers.app agreement updates, and for nothing else: no marketing. This page shows each step a person takes to receive them, with a picture of each screen and the exact wording it shows.",
+  "note": "On yuppers.app, signing in with a phone number and the “Text updates” control on an agreement appear only while texting is turned on for the service. The screens below show them as they appear when texting is enabled. They were captured from the Yuppers website on a phone-sized screen; the Yuppers app shows the same wording.",
+  "wordingHeading": "Exact wording",
+  "messageFrom": "Text from Yuppers.app",
+  "messageTo": "Reply from the person",
+  "programsHeading": "The two programs",
+  "programs": [
+    "Yuppers.app sign-in codes: one text for each code a person asks for, to sign in or to confirm deleting their account.",
+    "Yuppers.app agreement updates: one text per status change of an agreement the person turned updates on for. Message frequency varies; there is no fixed maximum."
+  ],
+  "steps": {
+    "signIn": {
+      "title": "Step 1. Entering a phone number to sign in",
+      "caption": "The sign-in form takes an email address or a phone number. Under the button it says that message and data rates may apply and how to stop texts, and links to the section on text messages in the privacy policy, to the privacy policy and to the terms. Entering a number and pressing “Send code” asks for one text with a sign-in code.",
+      "alt": "The Yuppers sign-in form on a phone, with a phone number entered, the Send code button, the line about message and data rates and STOP, and links to the privacy policy and the terms."
+    },
+    "codeSent": {
+      "title": "Step 2. After asking for a code",
+      "caption": "The screen says where the code went and asks for it. The text that carries the code is shown below the picture.",
+      "alt": "The Yuppers sign-in form after a code was sent: the number it went to, and a field for the six-digit code."
+    },
+    "textUpdates": {
+      "title": "Step 3. Turning on text updates for an agreement",
+      "caption": "On an agreement the person is a party to, “Text updates” shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save. If the account has no phone number yet, the person first enters a US number, which we check with a one-time code sent to it.",
+      "alt": "The Text updates section of an agreement on a phone: an unticked box beside the consent wording, with links to the terms and the privacy policy, and a Save button."
+    },
+    "confirmation": {
+      "title": "Step 4. After ticking the box and saving",
+      "caption": "The screen confirms that text updates are on for this agreement, says how often and to which number they go, and how to stop them.",
+      "alt": "The Text updates section after saving: the box ticked, and the confirmation that text updates are on, with the number partly hidden."
+    },
+    "confirmationText": {
+      "title": "Step 5. The opt-in confirmation text",
+      "caption": "Sent at once to the number, as received:"
+    },
+    "replies": {
+      "title": "Step 6. HELP and STOP",
+      "caption": "Replying HELP or STOP to any of our texts is answered at once with these texts. STOP ends every text from Yuppers.app to that number, sign-in codes included, until it replies START; the person can still sign in with an email address. Each status update afterwards looks like the last text below."
+    }
+  },
+  "codeText": "The sign-in code text:",
+  "updateText": "An agreement update, as received:",
+  "moreHeading": "The terms and the privacy policy",
+  "more": "Both programs are described in the section on text messages of the {terms} and of the {privacy}.",
+  "termsLink": "Terms and Conditions",
+  "privacyLink": "Privacy policy",
+  "replies": {
+    "help": "Yuppers.app: Text updates about your agreements and sign-in codes. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
+    "stop": "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
+  }
+}

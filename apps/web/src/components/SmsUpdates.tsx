@@ -158,9 +158,10 @@ export function SmsUpdates({ exchange }: Props) {
             <span>
               {consentPieces(w.consent).map((piece, index) =>
                 'url' in piece ? (
+                  // The box's name is the consent wording and nothing else,
+                  // so these say only the address, though they open a tab.
                   <a key={index} href={piece.url} target="_blank" rel="noopener">
                     {piece.url}
-                    <span className="visually-hidden"> {wording.help.newTab}</span>
                   </a>
                 ) : (
                   piece.text

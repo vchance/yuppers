@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "e2e": "playwright test -c e2e/playwright.config.ts"
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "screenshots:sms": "playwright test -c e2e/screenshots/playwright.config.ts"
   },
   "dependencies": {
     "@yuppers/api-client": "*",

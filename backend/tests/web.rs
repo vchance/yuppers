@@ -29,6 +29,9 @@ const PRIVACY: &str = "<!doctype html><html lang=\"en\"><title>Privacy policy</t
 const PRIVACY_ES: &str = "<!doctype html><html lang=\"es\"><title>Política de privacidad</title><h2 id=\"text-messages\">Mensajes</h2></html>";
 const TERMS: &str = "<!doctype html><html lang=\"en\"><title>Terms and Conditions</title><h2 id=\"text-messages\">Text messages</h2></html>";
 const TERMS_ES: &str = "<!doctype html><html lang=\"es\"><title>Términos y condiciones</title><h2 id=\"text-messages\">Mensajes</h2></html>";
+const OPT_IN: &str = "<!doctype html><html lang=\"en\"><title>How people opt in to texts from Yuppers.app</title><img src=\"/sms-opt-in/1-sign-in.webp\"></html>";
+const OPT_IN_ES: &str = "<!doctype html><html lang=\"es\"><title>Cómo se suscribe la gente</title><img src=\"/sms-opt-in/es/1-sign-in.webp\"></html>";
+const PICTURE: &[u8] = b"RIFF\x10\x00\x00\x00WEBPVP8 ";
 const SCRIPT: &str = "console.log('hashed')";
 const ICON: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
 
@@ -54,6 +57,9 @@ impl Build {
         write("es/privacy/index.html", PRIVACY_ES);
         write("terms/index.html", TERMS);
         write("es/terms/index.html", TERMS_ES);
+        write("sms-opt-in/index.html", OPT_IN);
+        write("es/sms-opt-in/index.html", OPT_IN_ES);
+        std::fs::write(directory.join("sms-opt-in/1-sign-in.webp"), PICTURE).unwrap();
         write("assets/index-DCaXBRW7.js", SCRIPT);
         write("favicon.svg", ICON);
         Self(directory)
@@ -202,7 +208,14 @@ async fn the_privacy_policy_and_the_terms_are_pages_of_their_own_in_each_languag
     let web = WebApp::open(build.path()).unwrap();
     assert_eq!(
         web.legal_pages().collect::<Vec<_>>(),
-        ["/privacy", "/es/privacy", "/terms", "/es/terms"]
+        [
+            "/privacy",
+            "/es/privacy",
+            "/terms",
+            "/es/terms",
+            "/sms-opt-in",
+            "/es/sms-opt-in"
+        ]
     );
     let app = service("https://app.example.test", Some(web));
 
@@ -215,6 +228,10 @@ async fn the_privacy_policy_and_the_terms_are_pages_of_their_own_in_each_languag
         ("/terms/", TERMS),
         ("/es/terms", TERMS_ES),
         ("/es/terms/", TERMS_ES),
+        // How people opt in to texts, for the carriers' review.
+        ("/sms-opt-in", OPT_IN),
+        ("/sms-opt-in/", OPT_IN),
+        ("/es/sms-opt-in", OPT_IN_ES),
     ] {
         let page = get(&app, path).await;
         assert_eq!(page.status, StatusCode::OK, "{path}");
@@ -258,12 +275,17 @@ async fn the_privacy_policy_and_the_terms_are_pages_of_their_own_in_each_languag
     let head = fetch(&app, Method::HEAD, "/es/terms").await;
     assert_eq!(head.status, StatusCode::OK);
     assert_eq!(head.body, "");
+
+    // Its pictures come from this origin, as images.
+    let picture = get(&app, "/sms-opt-in/1-sign-in.webp").await;
+    assert_eq!(picture.status, StatusCode::OK);
+    assert_eq!(picture.header(CONTENT_TYPE), "image/webp");
 }
 
 #[tokio::test]
 async fn a_build_without_the_documents_pages_still_serves_the_app_there() {
     let build = Build::write();
-    for document in ["privacy", "terms"] {
+    for document in ["privacy", "terms", "sms-opt-in"] {
         std::fs::remove_dir_all(build.path().join(document)).unwrap();
         std::fs::remove_dir_all(build.path().join("es").join(document)).unwrap();
     }

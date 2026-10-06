@@ -78,11 +78,11 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   const box = control.querySelector<HTMLInputElement>('input[type="checkbox"]')!
   expect(box.checked).toBe(false)
   const label = box.closest('label')!
-  expect(label.textContent!.replaceAll(` ${wording.help.newTab}`, '')).toBe(w.consent)
+  expect(label.textContent).toBe(w.consent)
   expect(
     [...label.querySelectorAll('a')].map((link) => [
       link.getAttribute('href'),
-      link.firstChild?.textContent,
+      link.textContent,
     ]),
   ).toEqual([
     ['https://yuppers.app/terms', 'https://yuppers.app/terms'],
@@ -150,7 +150,7 @@ test('in Spanish the box shows the Spanish wording the terms quote', async () =>
   const box = document.querySelector<HTMLInputElement>('.sms-updates input[type="checkbox"]')
   await until(() => document.querySelector('.sms-updates input[type="checkbox"]') !== null, 'the box')
   const label = (box ?? document.querySelector<HTMLInputElement>('.sms-updates input[type="checkbox"]')!).closest('label')!
-  expect(label.textContent!.replaceAll(` ${wording.help.newTab}`, '')).toBe(
+  expect(label.textContent).toBe(
     'Recibir actualizaciones por mensaje de texto de yuppers.app sobre este acuerdo, un mensaje por cada cambio de estado. La frecuencia de los mensajes varía; no hay un máximo fijo. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.',
   )
   const learn = document.querySelector('.sms-updates .learn-more a')!

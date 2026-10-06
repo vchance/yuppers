@@ -422,6 +422,23 @@ describe('the exchange', () => {
     await waitFor(() => expect(focused).toHaveBeenCalledWith(expect.anything(), 'focus'));
   });
 
+  test('text updates: the number to add, then the box, each named and stating its state', async () => {
+    await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
+    await screen.findByLabelText(w.smsUpdates.phoneLabel);
+    expect(screen.getByRole('header', { name: w.smsUpdates.heading }).props['aria-level']).toBe(2);
+    expect(audit()).toEqual([]);
+
+    await open(`/exchanges/${EXCHANGE}`, {
+      signedIn: true,
+      prepare: (service) => {
+        service.account = { ...ana, phone: '+15552345678' };
+      },
+    });
+    const box = await screen.findByRole('checkbox', { name: w.smsUpdates.consent });
+    expect(box.props.accessibilityState).toMatchObject({ checked: false });
+    expect(audit()).toEqual([]);
+  });
+
   test('a panel’s heading sits under the part of the screen it opens in', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
     await screen.findByText('Yup with Ben Ortiz');

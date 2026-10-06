@@ -245,6 +245,10 @@ export function renderSmsOptInMarkup(
     `<a class="skip" href="#content">${escapeHtml(product.common.skipToContent)}</a>`,
     `<header class="site"><a href="/" class="brand">${escapeHtml(product.productName)}</a></header>`,
     '<main id="content" tabindex="-1">',
+    // Cloudflare's email obfuscation would turn the support address in the
+    // HELP reply into "[email protected]" for anyone reading without
+    // scripts, which is everyone here; it leaves this part alone.
+    '<!--email_off-->',
     '<article class="sms-opt-in">',
     `<h1>${escapeHtml(page.title)}</h1>`,
     `<p>${escapeHtml(page.intro)}</p>`,
@@ -259,6 +263,7 @@ export function renderSmsOptInMarkup(
     step('help-and-stop', null, steps.replies.title, steps.replies.caption, replies + update),
     `<section aria-labelledby="more"><h2 id="more">${escapeHtml(page.moreHeading)}</h2><p>${more}</p></section>`,
     '</article>',
+    '<!--/email_off-->',
     '</main>',
     `<footer class="site"><a href="/help?lang=${encodeURIComponent(language)}">${escapeHtml(product.help.link)}</a><a href="${legal('privacy')}">${escapeHtml(product.privacy.link)}</a><a href="${legal('terms')}">${escapeHtml(product.termsOfUse.link)}</a></footer>`,
   ].join('')

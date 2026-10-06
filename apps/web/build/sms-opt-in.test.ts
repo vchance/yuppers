@@ -134,6 +134,17 @@ describe('the page on how people opt in to texts', () => {
     }
   })
 
+  test('keeps the support address in the HELP reply readable without scripts', () => {
+    for (const language of ['en', 'es']) {
+      const page = html(language)
+      const start = page.indexOf('<!--email_off-->')
+      const end = page.indexOf('<!--/email_off-->')
+      const at = page.indexOf('support@yuppers.app')
+      expect(start).toBeGreaterThan(0)
+      expect(at > start && at < end).toBe(true)
+    }
+  })
+
   test('runs no script, has nothing inline, and keeps the app’s stylesheet with its own', () => {
     for (const language of ['en', 'es']) {
       const page = html(language)

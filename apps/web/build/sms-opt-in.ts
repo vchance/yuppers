@@ -37,19 +37,25 @@ export const SAMPLE_PHONE = '+12015550123'
 /** An exchange's address as an update links to it, with an ID made up for the page. */
 export const SAMPLE_LINK = 'https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e'
 
-/** The pictures, by step, as `public/sms-opt-in/` holds them for the default language. */
+/**
+ * The pictures, by step, as `public/sms-opt-in/` holds them for the default
+ * language: the sign-in form with a number entered and the box beside it
+ * unticked, the same with the box ticked and "Send code" enabled, the code
+ * sent, and an agreement's "Text updates" before and after.
+ */
 export const SCREENSHOTS = {
   signIn: '1-sign-in.webp',
-  codeSent: '2-code-sent.webp',
-  textUpdates: '3-text-updates.webp',
-  confirmation: '4-confirmation.webp',
+  boxTicked: '2-box-ticked.webp',
+  codeSent: '3-code-sent.webp',
+  textUpdates: '4-text-updates.webp',
+  confirmation: '5-confirmation.webp',
 } as const
 
 export type Screen = keyof typeof SCREENSHOTS
 
 /**
  * Where the pictures come from: the website (`npm run screenshots:sms`) or
- * the mobile app (`npm run screenshots:sms:mobile`), which has the same four
+ * the mobile app (`npm run screenshots:sms:mobile`), which has the same five
  * steps under the same file names in `mobile/`.
  */
 export type Surface = 'web' | 'mobile'
@@ -96,7 +102,7 @@ export interface SmsOptInWording {
   mobileIntro: string
   /** What the app's release state is, and so where its pictures come from. */
   mobileRelease: string
-  /** That the app's consent and confirmation are the website's, with links to steps 5 and 6. */
+  /** That the app's consent and confirmation are the website's, with links to steps 6 and 7. */
   mobileSame: string
   confirmationTextLink: string
   repliesLink: string
@@ -106,7 +112,7 @@ export interface SmsOptInWording {
   programsHeading: string
   programs: string[]
   steps: Record<Screen | 'confirmationText' | 'replies', Step>
-  /** The same four screens in the mobile app. */
+  /** The same five screens in the mobile app. */
   mobileSteps: Record<Screen, Step>
   codeText: string
   updateText: string
@@ -123,7 +129,7 @@ interface ProductWording {
   productName: string
   common: { skipToContent: string }
   help: { link: string }
-  privacy: { link: string; policy: string; sms: string; smsLink: string }
+  privacy: { link: string; policy: string; smsLink: string }
   termsOfUse: { link: string; document: string }
   signIn: {
     title: string
@@ -146,6 +152,7 @@ interface ProductWording {
     on: string
     howItWorks: string
   }
+  smsCode: { signIn: string; verifyNumber: string; tickToSend: string }
   sms: { signIn: string; update: string; optInConfirmation: string }
 }
 
@@ -220,6 +227,7 @@ export function renderSmsOptInMarkup(
     `${language === defaultLanguage ? `/${document}` : `/${language}/${document}`}${section ? `#${section}` : ''}`
   const s = product.signIn
   const u = product.smsUpdates
+  const c = product.smsCode
   const steps = page.steps
   const mobileSteps = page.mobileSteps
 
@@ -242,16 +250,22 @@ export function renderSmsOptInMarkup(
   const part = (id: string, heading: string, body: string) =>
     `<section class="part" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(heading)}</h2>${body}</section>`
 
-  const signIn = quoted(page.wordingHeading, [
+  // The form with a number entered: the box beside it, unticked, and "Send
+  // code" waiting for it; then the box ticked.
+  const signInLines = [
     s.title,
     s.intro,
     s.identifierLabel,
     fill(s.identifierHintCountries, { codes: '+1' }),
+    c.signIn,
+    c.tickToSend,
     s.sendCode,
-    `${product.privacy.sms} ${product.privacy.smsLink}`,
+    product.privacy.smsLink,
     product.privacy.policy,
     product.termsOfUse.document,
-  ])
+  ]
+  const signIn = quoted(page.wordingHeading, signInLines, true)
+  const boxTicked = quoted(page.wordingHeading, [c.signIn, s.sendCode], true)
   const codeSent =
     quoted(page.wordingHeading, [
       fill(s.codeSent, { identifier: SAMPLE_PHONE }),
@@ -263,7 +277,12 @@ export function renderSmsOptInMarkup(
     ]) +
     `<p>${escapeHtml(page.codeText)}</p>` +
     bubble(fill(product.sms.signIn, { code: '123456', productName: product.productName }), page.messageFrom)
-  const textUpdates = quoted(page.wordingHeading, [u.heading, u.intro, u.consent, u.save], true)
+  // Last, the box beside a number being added, before the code that checks it.
+  const textUpdates = quoted(
+    page.wordingHeading,
+    [u.heading, u.intro, u.consent, u.save, c.verifyNumber],
+    true,
+  )
   const confirmation = quoted(page.wordingHeading, [fill(u.on, { phone: masked(SAMPLE_PHONE) })])
   const confirmationText = bubble(product.sms.optInConfirmation, page.messageFrom)
   const replies = [
@@ -274,19 +293,10 @@ export function renderSmsOptInMarkup(
   ].join('')
   const update = `<p>${escapeHtml(page.updateText)}</p>${bubble(fill(product.sms.update, { link: SAMPLE_LINK }), page.messageFrom)}`
 
-  // The app's screens say what the website's do, but for its own links: the
-  // line on texts is a link of its own, and "How we text you" opens this page.
-  const mobileSignIn = quoted(page.wordingHeading, [
-    s.title,
-    s.intro,
-    s.identifierLabel,
-    fill(s.identifierHintCountries, { codes: '+1' }),
-    s.sendCode,
-    product.privacy.sms,
-    product.privacy.smsLink,
-    product.privacy.policy,
-    product.termsOfUse.document,
-  ])
+  // The app's screens say what the website's do, but for its own links:
+  // "How we text you" opens this page.
+  const mobileSignIn = quoted(page.wordingHeading, signInLines, true)
+  const mobileBoxTicked = quoted(page.wordingHeading, [c.signIn, s.sendCode], true)
   const mobileCodeSent = quoted(page.wordingHeading, [
     fill(s.codeSent, { identifier: SAMPLE_PHONE }),
     s.codeLabel,
@@ -297,7 +307,7 @@ export function renderSmsOptInMarkup(
   ])
   const mobileTextUpdates = quoted(
     page.wordingHeading,
-    [u.heading, u.intro, u.consent, u.save, u.howItWorks],
+    [u.heading, u.intro, u.consent, u.save, u.howItWorks, c.verifyNumber],
     true,
   )
   const mobileConfirmation = quoted(page.wordingHeading, [fill(u.on, { phone: masked(SAMPLE_PHONE) })])
@@ -312,6 +322,7 @@ export function renderSmsOptInMarkup(
     [
       `<p>${linked(page.websiteIntro)}</p>`,
       step('sign-in', 'signIn', steps.signIn, signIn),
+      step('box-ticked', 'boxTicked', steps.boxTicked, boxTicked),
       step('code-sent', 'codeSent', steps.codeSent, codeSent),
       step('text-updates', 'textUpdates', steps.textUpdates, textUpdates),
       step('confirmation', 'confirmation', steps.confirmation, confirmation),
@@ -327,6 +338,7 @@ export function renderSmsOptInMarkup(
       `<p class="notice">${escapeHtml(page.mobileRelease)}</p>`,
       `<p>${mobileSame}</p>`,
       step('mobile-sign-in', 'signIn', mobileSteps.signIn, mobileSignIn, 'mobile'),
+      step('mobile-box-ticked', 'boxTicked', mobileSteps.boxTicked, mobileBoxTicked, 'mobile'),
       step('mobile-code-sent', 'codeSent', mobileSteps.codeSent, mobileCodeSent, 'mobile'),
       step('mobile-text-updates', 'textUpdates', mobileSteps.textUpdates, mobileTextUpdates, 'mobile'),
       step('mobile-confirmation', 'confirmation', mobileSteps.confirmation, mobileConfirmation, 'mobile'),

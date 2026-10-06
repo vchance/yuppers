@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import type { Wording } from '@yuppers/shared'
 
+import { SMS_CODE_CONSENT_VERSION } from '../../../../packages/shared/src/sms-code-consent.ts'
 import {
   SAMPLE_PHONE,
   SCREENSHOT_WIDTH,
@@ -18,14 +19,16 @@ import { en, es, fill } from '../support/wording'
 import { apiURL, screenshotsLog, webURL } from './playwright.config'
 
 /*
- * Takes the four pictures of the mobile app on the page on how people opt in
+ * Takes the five pictures of the mobile app on the page on how people opt in
  * to texts, in each language, as a person on an iPhone goes through the
  * steps in the app:
  *
- *   1. the sign-in screen with a phone number entered;
- *   2. the screen after asking for a code;
- *   3. "Text updates" on an agreement, the box not yet ticked;
- *   4. the same once ticked and saved, with the confirmation.
+ *   1. the sign-in screen with a phone number entered, the box beside it not
+ *      yet ticked and "Send code" waiting for it;
+ *   2. the same with the box ticked and "Send code" enabled;
+ *   3. the screen after asking for a code;
+ *   4. "Text updates" on an agreement, the box not yet ticked;
+ *   5. the same once ticked and saved, with the confirmation.
  *
  * Each is the whole screen, with the app's navigation bar, as the phone
  * shows it below its status bar. The screens are the app's own, run in the
@@ -157,7 +160,15 @@ async function deleteAccount(page: Page) {
   const token = await page.evaluate(() => window.sessionStorage.getItem('yuppers.harness.session'))
   if (!token) throw new Error('no session in the harness')
   const code = await phoneCodeFrom('delete', () =>
-    call('POST', '/v1/me/deletion/codes', { channel: 'PHONE' }, token),
+    call(
+      'POST',
+      '/v1/me/deletion/codes',
+      {
+        channel: 'PHONE',
+        sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
+      },
+      token,
+    ),
   )
   await call('POST', '/v1/me/deletion', { channel: 'PHONE', code }, token)
 }
@@ -183,20 +194,32 @@ for (const [language, locale, w] of [
     })
     const page = await context.newPage()
 
-    // 1. The sign-in screen, offering phone numbers, with a number entered.
+    // 1. The sign-in screen, offering phone numbers, with a number entered:
+    // the consentBox beside it, unticked, and "Send code" waiting for it.
     await page.goto('/')
     await expect(shown(page.getByRole('heading', { name: w.signIn.title, level: 1 }))).toBeVisible()
     await expect(shown(page.getByText(fill(w.signIn.identifierHintCountries, { codes: '+1' })))).toBeVisible()
-    await expect(shown(page.getByText(w.privacy.sms, { exact: true }))).toBeVisible()
     const field = shown(page.getByLabel(w.signIn.identifierLabel))
     await field.fill(SAMPLE_PHONE)
     await field.blur()
+    const consentBox = shown(page.getByRole('checkbox', { name: w.smsCode.signIn, exact: true }))
+    const send = shown(page.getByRole('button', { name: w.signIn.sendCode, exact: true }))
+    await expect(consentBox).not.toBeChecked()
+    await expect(send).toBeDisabled()
+    await expect(shown(page.getByText(w.smsCode.tickToSend, { exact: true }))).toBeVisible()
+    // The form from its heading to the button, the consentBox in the middle.
+    await consentBox.evaluate((element) => element.scrollIntoView({ block: 'center' }))
     await save(browser, await page.screenshot(), 'signIn', language)
 
-    // 2. After asking for a code.
-    const code = await phoneCodeFrom('sign-in', () =>
-      shown(page.getByRole('button', { name: w.signIn.sendCode, exact: true })).click(),
-    )
+    // 2. The consentBox ticked: "Send code" enabled.
+    await consentBox.click()
+    await expect(consentBox).toBeChecked()
+    await expect(send).toBeEnabled()
+    await consentBox.blur()
+    await save(browser, await page.screenshot(), 'boxTicked', language)
+
+    // 3. After asking for a code.
+    const code = await phoneCodeFrom('sign-in', () => send.click())
     await expect(shown(page.getByText(fill(w.signIn.codeSent, { identifier: SAMPLE_PHONE })))).toBeVisible()
     const codeField = shown(page.getByLabel(w.signIn.codeLabel))
     await expect(codeField).toBeFocused()
@@ -219,7 +242,7 @@ for (const [language, locale, w] of [
     ).click()
     await page.waitForURL(/\/exchanges\/[0-9a-f-]{36}$/)
 
-    // 3. "Text updates", the box not yet ticked, at the top of the screen.
+    // 4. "Text updates", the box not yet ticked, at the top of the screen.
     const heading = shown(page.getByRole('heading', { name: w.smsUpdates.heading, level: 2 }))
     const box = shown(page.getByRole('checkbox', { name: w.smsUpdates.consent, exact: true }))
     await expect(box).not.toBeChecked()
@@ -232,7 +255,7 @@ for (const [language, locale, w] of [
     })
     await save(browser, await page.screenshot(), 'textUpdates', language)
 
-    // 4. Ticked and saved.
+    // 5. Ticked and saved.
     await box.click()
     await expect(box).toBeChecked()
     const saveButton = shown(page.getByRole('button', { name: w.smsUpdates.save, exact: true }))

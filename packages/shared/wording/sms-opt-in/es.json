@@ -9,65 +9,75 @@
   "mobileHeading": "En la app móvil de Yuppers",
   "mobileIntro": "La app de Yuppers para iPhone y Android tiene los mismos pasos: entrar con un número de teléfono y la sección “Actualizaciones por mensaje” de un acuerdo. Cada imagen es la pantalla entera, bajo la barra de navegación de la propia app.",
   "mobileRelease": "La app de Yuppers todavía no está publicada en el App Store ni en Google Play, así que estas imágenes se tomaron de las propias pantallas de la app, construidas a partir de su código y mostradas al tamaño de la pantalla de un iPhone, y no de una descarga de la tienda.",
-  "mobileSame": "En el sitio web y en la app se usan el mismo texto de consentimiento y la misma confirmación, y también los mismos mensajes que siguen: el mensaje de confirmación del {confirmationText} y las respuestas a HELP y STOP del {replies}.",
-  "confirmationTextLink": "paso 5 de arriba",
-  "repliesLink": "paso 6 de arriba",
+  "mobileSame": "Los mismos textos de consentimiento y la misma confirmación se usan en el sitio web y en la app, y también los mensajes que siguen: el mensaje de confirmación en el {confirmationText} y las respuestas a HELP y STOP en el {replies}.",
+  "confirmationTextLink": "paso 6 de arriba",
+  "repliesLink": "paso 7 de arriba",
   "wordingHeading": "Texto exacto",
   "messageFrom": "Mensaje de Yuppers.app",
   "messageTo": "Respuesta de la persona",
   "programsHeading": "Los dos programas",
   "programs": [
-    "Códigos de Yuppers.app para entrar: un mensaje por cada código que pide una persona, para entrar o para confirmar la eliminación de su cuenta.",
+    "Códigos de Yuppers.app para entrar: un mensaje por cada código que pide una persona, para entrar, para confirmar la eliminación de su cuenta o para agregar un número a su cuenta, y solo después de que marque una casilla junto al número.",
     "Actualizaciones de acuerdos de Yuppers.app: un mensaje por cada cambio de estado de un acuerdo para el que la persona activó las actualizaciones. La frecuencia de los mensajes varía; no hay un máximo fijo."
   ],
   "steps": {
     "signIn": {
       "title": "Paso 1. Escribir un número de teléfono para entrar",
-      "caption": "El formulario para entrar acepta un correo electrónico o un número de teléfono. Debajo del botón dice que pueden aplicarse tarifas por mensajes y datos y cómo detener los mensajes, y enlaza a la sección sobre mensajes de texto de la política de privacidad, a la política de privacidad y a los términos. Escribir un número y pulsar “Enviar código” pide un mensaje con un código para entrar.",
-      "alt": "El formulario para entrar de Yuppers en un teléfono, con un número de teléfono escrito, el botón Enviar código, la línea sobre tarifas por mensajes y datos y STOP, y enlaces a la política de privacidad y a los términos."
+      "caption": "El formulario para entrar acepta un correo electrónico o un número de teléfono. En cuanto lo que se escribe parece un número de teléfono, aparece una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. “Enviar código” sigue desactivado hasta que se marca la casilla, y el formulario dice por qué. Debajo del botón hay enlaces a la sección sobre mensajes de texto de la política de privacidad, a la política de privacidad y a los términos.",
+      "alt": "El formulario para entrar de Yuppers en un teléfono, con un número de teléfono escrito, una casilla sin marcar junto al texto de consentimiento con enlaces a los términos y a la política de privacidad, el botón Enviar código desactivado y la línea que dice que primero hay que marcar la casilla."
+    },
+    "boxTicked": {
+      "title": "Paso 2. Marcar la casilla",
+      "caption": "Cuando la persona marca la casilla, “Enviar código” se activa. Pulsarlo pide un mensaje con un código para entrar; antes no se envía nada.",
+      "alt": "El mismo formulario para entrar con la casilla junto al texto de consentimiento marcada y el botón Enviar código activado."
     },
     "codeSent": {
-      "title": "Paso 2. Después de pedir un código",
+      "title": "Paso 3. Después de pedir un código",
       "caption": "La pantalla dice adónde se envió el código y lo pide. El mensaje que lleva el código se muestra debajo de la imagen.",
       "alt": "El formulario para entrar de Yuppers después de enviar un código: el número al que se envió y un campo para el código de seis dígitos."
     },
     "textUpdates": {
-      "title": "Paso 3. Activar las actualizaciones por mensaje de un acuerdo",
-      "caption": "En un acuerdo del que la persona es parte, “Actualizaciones por mensaje” muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. Si la cuenta aún no tiene número de teléfono, la persona primero escribe un número de EE. UU., que comprobamos con un código de un solo uso que le enviamos.",
+      "title": "Paso 4. Activar las actualizaciones por mensaje de un acuerdo",
+      "caption": "En un acuerdo del que la persona es parte, “Actualizaciones por mensaje” muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. Si la cuenta aún no tiene número de teléfono, la persona primero escribe un número de EE. UU., que comprobamos con un código de un solo uso que le enviamos solo después de que marque una casilla junto al último texto de abajo.",
       "alt": "La sección Actualizaciones por mensaje de un acuerdo en un teléfono: una casilla sin marcar junto al texto de consentimiento, con enlaces a los términos y a la política de privacidad, y un botón Guardar."
     },
     "confirmation": {
-      "title": "Paso 4. Después de marcar la casilla y guardar",
+      "title": "Paso 5. Después de marcar la casilla y guardar",
       "caption": "La pantalla confirma que las actualizaciones por mensaje están activadas para este acuerdo, dice con qué frecuencia y a qué número llegan, y cómo detenerlas.",
       "alt": "La sección Actualizaciones por mensaje después de guardar: la casilla marcada y la confirmación de que las actualizaciones están activadas, con el número en parte oculto."
     },
     "confirmationText": {
-      "title": "Paso 5. El mensaje que confirma la suscripción",
+      "title": "Paso 6. El mensaje que confirma la suscripción",
       "caption": "Se envía de inmediato al número, tal como llega:"
     },
     "replies": {
-      "title": "Paso 6. HELP y STOP",
+      "title": "Paso 7. HELP y STOP",
       "caption": "Responder HELP o STOP a cualquiera de nuestros mensajes recibe de inmediato estas respuestas, que están en inglés. STOP termina todos los mensajes de Yuppers.app a ese número, incluidos los códigos para entrar, hasta que responda START; la persona todavía puede entrar con un correo electrónico. Cada actualización de estado después se ve como el último mensaje de abajo."
     }
   },
   "mobileSteps": {
     "signIn": {
       "title": "Paso 1. Escribir un número de teléfono para entrar, en la app",
-      "caption": "La pantalla para entrar de la app acepta un correo electrónico o un número de teléfono. Debajo del botón dice que pueden aplicarse tarifas por mensajes y datos y cómo detener los mensajes, y luego enlaza a la sección sobre mensajes de texto de la política de privacidad, a la política de privacidad y a los términos, que se abren en el navegador. Escribir un número y pulsar “Enviar código” pide un mensaje con un código para entrar.",
-      "alt": "La pantalla para entrar de la app de Yuppers, del tamaño de un teléfono, con un número de teléfono escrito, el botón Enviar código, la línea sobre tarifas por mensajes y datos y STOP, y enlaces a los mensajes de texto, la política de privacidad y los términos."
+      "caption": "La pantalla para entrar de la app acepta un correo electrónico o un número de teléfono. En cuanto lo que se escribe parece un número de teléfono, aparece una casilla sin marcar junto al mismo texto de consentimiento que en el sitio web, cuyas dos direcciones son enlaces que se abren en el navegador. “Enviar código” sigue desactivado hasta que se marca la casilla, y la pantalla dice por qué. Debajo del botón hay enlaces a la sección sobre mensajes de texto de la política de privacidad, a la política de privacidad y a los términos, que se abren en el navegador.",
+      "alt": "La pantalla para entrar de la app de Yuppers, del tamaño de un teléfono, con un número de teléfono escrito, una casilla sin marcar junto al texto de consentimiento con enlaces a los términos y a la política de privacidad, el botón Enviar código desactivado y la línea que dice que primero hay que marcar la casilla."
+    },
+    "boxTicked": {
+      "title": "Paso 2. Marcar la casilla, en la app",
+      "caption": "También en la app, cuando la persona marca la casilla, “Enviar código” se activa. Pulsarlo pide un mensaje con un código para entrar, el mismo mensaje que en el sitio web; antes no se envía nada.",
+      "alt": "La pantalla para entrar de la app de Yuppers con la casilla junto al texto de consentimiento marcada y el botón Enviar código activado."
     },
     "codeSent": {
-      "title": "Paso 2. Después de pedir un código, en la app",
+      "title": "Paso 3. Después de pedir un código, en la app",
       "caption": "La app dice adónde se envió el código y lo pide. El código llega en el mismo mensaje que en el sitio web.",
       "alt": "La pantalla para entrar de la app de Yuppers después de enviar un código: el número al que se envió y un campo para el código de seis dígitos."
     },
     "textUpdates": {
-      "title": "Paso 3. Activar las actualizaciones por mensaje de un acuerdo, en la app",
-      "caption": "En un acuerdo del que la persona es parte, la sección “Actualizaciones por mensaje” de la app muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. “Cómo te enviamos mensajes” abre esta página.",
+      "title": "Paso 4. Activar las actualizaciones por mensaje de un acuerdo, en la app",
+      "caption": "En un acuerdo del que la persona es parte, la sección “Actualizaciones por mensaje” de la app muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. “Cómo te enviamos mensajes” abre esta página. Si la cuenta aún no tiene número de teléfono, la persona primero escribe un número de EE. UU., que comprobamos con un código de un solo uso que le enviamos solo después de que marque una casilla junto al último texto de abajo.",
       "alt": "La sección Actualizaciones por mensaje de un acuerdo en la app de Yuppers: una casilla sin marcar junto al texto de consentimiento, con enlaces a los términos y a la política de privacidad, y un botón Guardar."
     },
     "confirmation": {
-      "title": "Paso 4. Después de marcar la casilla y guardar, en la app",
+      "title": "Paso 5. Después de marcar la casilla y guardar, en la app",
       "caption": "La app confirma que las actualizaciones por mensaje están activadas para este acuerdo, dice con qué frecuencia y a qué número llegan, y cómo detenerlas.",
       "alt": "La sección Actualizaciones por mensaje en la app de Yuppers después de guardar: la casilla marcada y la confirmación de que las actualizaciones están activadas, con el número en parte oculto."
     }

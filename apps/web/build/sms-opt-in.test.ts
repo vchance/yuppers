@@ -47,7 +47,7 @@ describe('the page on how people opt in to texts', () => {
     ])
   })
 
-  test.each(['en', 'es'])('in %s shows the six steps, each with what it says word for word', (language) => {
+  test.each(['en', 'es'])('in %s shows the seven steps, each with what it says word for word', (language) => {
     const page = parse(language)
     const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
     const product = read(`${language}.json`)
@@ -62,6 +62,7 @@ describe('the page on how people opt in to texts', () => {
     const steps = [...website.querySelectorAll('section.step')]
     expect(steps.map((step) => step.querySelector('h3')?.id)).toEqual([
       'sign-in',
+      'box-ticked',
       'code-sent',
       'text-updates',
       'confirmation',
@@ -70,37 +71,48 @@ describe('the page on how people opt in to texts', () => {
     ])
     const quoted = (index: number) =>
       [...steps[index].querySelectorAll('q, .sms p')].map((element) => element.textContent)
+    const links = (index: number) =>
+      [...steps[index].querySelectorAll('q a')].map((link) => link.getAttribute('href'))
+    const addresses = ['https://yuppers.app/terms', 'https://yuppers.app/privacy']
 
-    // (a) The sign-in form, with what texts cost and how to stop them.
+    // (a) The sign-in form with a number entered: the box beside it, with
+    // the words the terms quote, and "Send code" waiting for it.
     expect(quoted(0)).toEqual(
       expect.arrayContaining([
         product.signIn.identifierLabel,
+        product.smsCode.signIn,
+        product.smsCode.tickToSend,
         product.signIn.sendCode,
-        `${product.privacy.sms} ${product.privacy.smsLink}`,
+        product.privacy.smsLink,
         product.privacy.policy,
         product.termsOfUse.document,
       ]),
     )
-    // (b) After asking for a code, and the code's text.
-    expect(quoted(1)).toEqual(
+    expect(quoted(0)).not.toContain('Message and data rates may apply. Reply STOP to opt out.')
+    expect(links(0)).toEqual(addresses)
+    // (b) The box ticked, and "Send code".
+    expect(quoted(1)).toEqual([product.smsCode.signIn, product.signIn.sendCode])
+    expect(links(1)).toEqual(addresses)
+    // (c) After asking for a code, and the code's text.
+    expect(quoted(2)).toEqual(
       expect.arrayContaining([
         fill(product.signIn.codeSent, { identifier: SAMPLE_PHONE }),
         fill(product.sms.signIn, { code: '123456', productName: 'Yuppers' }),
       ]),
     )
-    // (c) The box beside the consent wording, its addresses links.
-    expect(quoted(2)).toContain(product.smsUpdates.consent)
-    expect(
-      [...steps[2].querySelectorAll('q a')].map((link) => link.getAttribute('href')),
-    ).toEqual(['https://yuppers.app/terms', 'https://yuppers.app/privacy'])
-    // (d) The confirmation on screen.
-    expect(quoted(3)).toEqual([
+    // (d) The box beside the consent wording, its addresses links, and the
+    // box beside a number being added.
+    expect(quoted(3)).toContain(product.smsUpdates.consent)
+    expect(quoted(3)).toContain(product.smsCode.verifyNumber)
+    expect(links(3)).toEqual([...addresses, ...addresses])
+    // (e) The confirmation on screen.
+    expect(quoted(4)).toEqual([
       fill(product.smsUpdates.on, { phone: `+1 •••-•••-${SAMPLE_PHONE.slice(-4)}` }),
     ])
-    // (e) The opt-in confirmation text.
-    expect(quoted(4)).toEqual([product.sms.optInConfirmation])
-    // (f) HELP and STOP, and an update as it arrives.
-    expect(quoted(5)).toEqual([
+    // (f) The opt-in confirmation text.
+    expect(quoted(5)).toEqual([product.sms.optInConfirmation])
+    // (g) HELP and STOP, and an update as it arrives.
+    expect(quoted(6)).toEqual([
       'HELP',
       wording.replies.help,
       'STOP',
@@ -130,7 +142,7 @@ describe('the page on how people opt in to texts', () => {
   })
 
   test.each(['en', 'es'])(
-    'in %s shows the four steps in the mobile app, each with its caption and what it says word for word',
+    'in %s shows the five steps in the mobile app, each with its caption and what it says word for word',
     (language) => {
       const page = parse(language)
       const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
@@ -155,6 +167,7 @@ describe('the page on how people opt in to texts', () => {
       const steps = [...part.querySelectorAll('section.step')]
       expect(steps.map((step) => step.querySelector('h3')?.id)).toEqual([
         'mobile-sign-in',
+        'mobile-box-ticked',
         'mobile-code-sent',
         'mobile-text-updates',
         'mobile-confirmation',
@@ -170,32 +183,42 @@ describe('the page on how people opt in to texts', () => {
       const quoted = (index: number) =>
         [...steps[index].querySelectorAll('q')].map((element) => element.textContent)
 
-      // (m1) The app's sign-in screen, with the line on texts and the links.
+      const addresses = ['https://yuppers.app/terms', 'https://yuppers.app/privacy']
+      const links = (index: number) =>
+        [...steps[index].querySelectorAll('q a')].map((link) => link.getAttribute('href'))
+      // (m1) The app's sign-in screen with a number entered: the box, the
+      // button waiting for it, and the links.
       expect(quoted(0)).toEqual(
         expect.arrayContaining([
           product.signIn.title,
           product.signIn.identifierLabel,
+          product.smsCode.signIn,
+          product.smsCode.tickToSend,
           product.signIn.sendCode,
-          product.privacy.sms,
           product.privacy.smsLink,
           product.privacy.policy,
           product.termsOfUse.document,
         ]),
       )
-      // (m2) After asking for a code.
-      expect(quoted(1)).toEqual(
+      expect(links(0)).toEqual(addresses)
+      // (m2) The box ticked.
+      expect(quoted(1)).toEqual([product.smsCode.signIn, product.signIn.sendCode])
+      // (m3) After asking for a code.
+      expect(quoted(2)).toEqual(
         expect.arrayContaining([fill(product.signIn.codeSent, { identifier: SAMPLE_PHONE })]),
       )
-      // (m3) The same consent wording as the website's, its addresses links.
-      expect(quoted(2)).toEqual(
-        expect.arrayContaining([product.smsUpdates.consent, product.smsUpdates.save]),
+      // (m4) The same consent wording as the website's, its addresses links.
+      expect(quoted(3)).toEqual(
+        expect.arrayContaining([
+          product.smsUpdates.consent,
+          product.smsUpdates.save,
+          product.smsCode.verifyNumber,
+        ]),
       )
-      expect(
-        [...steps[2].querySelectorAll('q a')].map((link) => link.getAttribute('href')),
-      ).toEqual(['https://yuppers.app/terms', 'https://yuppers.app/privacy'])
-      // (m4) The same confirmation as the website's.
+      expect(links(3)).toEqual([...addresses, ...addresses])
+      // (m5) The same confirmation as the website's.
       const on = fill(product.smsUpdates.on, { phone: `+1 •••-•••-${SAMPLE_PHONE.slice(-4)}` })
-      expect(quoted(3)).toEqual([on])
+      expect(quoted(4)).toEqual([on])
       const website = page.getElementById('confirmation')!.parentElement!
       expect([...website.querySelectorAll('q')].map((element) => element.textContent)).toEqual([on])
     },

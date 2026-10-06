@@ -416,6 +416,51 @@ describe('help', () => {
   })
 })
 
+describe('the privacy policy and the terms', () => {
+  test.each([
+    ['privacy', 'en'],
+    ['privacy', 'es'],
+    ['terms', 'en'],
+    ['terms', 'es'],
+  ] as const)('the whole %s, with its contents, in %s', async (document, language) => {
+    const { loadLegal } = await import('./app/wording')
+    const legal = await loadLegal(document, language)
+    const { wording } = await start(
+      language === 'en' ? `/${document}` : `/${language}/${document}`,
+      null,
+      language,
+    )
+    await heading(legal.title)
+    expect(window.document.documentElement.lang).toBe(language)
+    expect(window.document.title).toBe(`${legal.title} · ${wording.productName}`)
+    expect(await violations()).toEqual([])
+    // Headings go down one level at a time.
+    const levels = [...window.document.querySelectorAll('main h1, main h2, main h3')].map(
+      (h) => h.tagName,
+    )
+    expect(levels[0]).toBe('H1')
+    for (let i = 1; i < levels.length; i += 1) {
+      expect(Number(levels[i][1]) - Number(levels[i - 1][1])).toBeLessThanOrEqual(1)
+    }
+    // Each language's version is named in its own language.
+    for (const other of window.document.querySelectorAll<HTMLAnchorElement>('nav.legal-languages a')) {
+      expect(other.lang).toBeTruthy()
+    }
+  })
+
+  test('the sign-in form with what text messages cost', async () => {
+    const { wording } = await start('/', null, 'en', (service) => {
+      service.phone = true
+    })
+    await heading(wording.signIn.title)
+    await until(
+      () => document.querySelector('main')!.textContent!.includes(wording.privacy.sms),
+      'the text message terms',
+    )
+    expect(await violations()).toEqual([])
+  })
+})
+
 describe('the other screens', () => {
   test('the list of exchanges', async () => {
     const { wording } = await start('/', ana)

@@ -42,6 +42,8 @@ describe('the pages built from the real wording', () => {
       expect(html).toContain(`<meta property="og:title" content="${page.title}" />`)
       expect(html).toContain(`<meta property="og:description" content="${page.description}" />`)
       expect(html).toContain(`<meta name="description" content="${page.description}" />`)
+      // An invitation is nobody's business but the two people's.
+      expect(html).toContain('<meta name="robots" content="noindex" />')
       expect(html).not.toMatch(/\{\{\w+\}\}/)
     }
   })
@@ -80,6 +82,7 @@ test('a language added to the wording gets its page with no change here', () => 
     dir: 'rtl',
     title: 'title ar',
     description: 'description ar',
+    robots: 'noindex',
   })
   expect(renderEntryPage(template, pages[2])).toContain('<html lang="ar" dir="rtl">')
 })
@@ -91,6 +94,7 @@ test('wording is escaped, so it cannot break out of the page', () => {
     dir: 'ltr',
     title: 'Tom & "Jerry" <script>',
     description: 'a "quoted" line',
+    robots: 'noindex',
   })
   expect(html).toContain('<title>Tom &amp; &quot;Jerry&quot; &lt;script&gt;</title>')
   expect(html).toContain('content="a &quot;quoted&quot; line"')

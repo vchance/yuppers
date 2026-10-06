@@ -1,8 +1,22 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import type { Page } from '@playwright/test'
+import {
+  LEGAL_DOCUMENTS,
+  LEGAL_SECTIONS,
+  type LegalWording,
+} from '../../../packages/shared/src/legal-text.ts'
 
 import { expect, test } from './support/fixtures'
 import { confirmClaimant, propose, signIn, signUp, stateTag } from './support/flows'
+import { repoRoot } from './support/env'
 import { es, fill } from './support/wording'
+
+const legalEs = (document: string) =>
+  JSON.parse(
+    readFileSync(resolve(repoRoot, `packages/shared/wording/${document}/es.json`), 'utf8'),
+  ) as LegalWording
 
 /*
  * The main screens in Spanish, which runs longer than English, in a window
@@ -127,6 +141,16 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   await page.getByRole('button', { name: es.deletion.open }).click()
   await expect(page.getByRole('heading', { name: es.deletion.heading })).toBeVisible()
   await check('deleting the account')
+
+  // The privacy policy and the terms, as the app shows them.
+  for (const document of LEGAL_DOCUMENTS) {
+    await page.goto(`/es/${document}`)
+    await expect(
+      page.getByRole('heading', { name: legalEs(document).title, level: 1 }),
+    ).toBeVisible()
+    await expect(page.locator('section > h2')).toHaveCount(LEGAL_SECTIONS[document].length)
+    await check(`the ${document} page`)
+  }
 
   // Writing a proposal, and the signing step.
   await page.goto('/')

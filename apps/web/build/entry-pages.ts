@@ -3,6 +3,8 @@ import { join } from 'node:path'
 
 import type { Plugin } from 'vite'
 
+import { readLegalPages, withDocument } from './legal-pages.ts'
+
 /*
  * One static entry page per language (DESIGN.md §4.2, §13.5).
  *
@@ -26,6 +28,8 @@ export interface EntryPage {
   dir: string
   title: string
   description: string
+  /** What search engines are asked to do with the page. */
+  robots: string
 }
 
 interface LanguageEntry {
@@ -61,6 +65,7 @@ export function entryPages(
       dir: first.direction,
       title: home.productName,
       description: home.tagline,
+      robots: 'noindex',
     },
     ...languages.map((language) => {
       const { linkPreview } = wordingOf(language.code)
@@ -70,6 +75,7 @@ export function entryPages(
         dir: language.direction,
         title: linkPreview.title,
         description: linkPreview.description,
+        robots: 'noindex',
       }
     }),
   ]
@@ -90,6 +96,7 @@ export function renderEntryPage(template: string, page: EntryPage): string {
     dir: page.dir,
     title: page.title,
     description: page.description,
+    robots: page.robots,
   }
   return template.replace(/\{\{(\w+)\}\}/g, (marker, name: string) =>
     name in values ? escapeHtml(values[name]) : marker,
@@ -121,6 +128,8 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
       if (!context.server) return html
       const pages = readEntryPages(wordingDirectory)
       const path = (context.originalUrl ?? '/').split(/[?#]/)[0].replace(/\/$/, '')
+      const legal = readLegalPages(wordingDirectory).find((candidate) => candidate.path === path)
+      if (legal) return withDocument(renderEntryPage(html, legal), legal)
       const page = pages.find((candidate) => `/${candidate.fileName}` === `${path}/index.html`)
       return renderEntryPage(html, page ?? pages[0])
     },
@@ -130,11 +139,12 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
     // `vite preview` does not do that unasked, so it is told to here, which
     // keeps a local preview of the build honest about what a link previews as.
     configurePreviewServer(server) {
-      const paths = new Set(
-        readEntryPages(wordingDirectory)
+      const paths = new Set([
+        ...readEntryPages(wordingDirectory)
           .slice(1)
           .map((page) => invitationPath(page.lang)),
-      )
+        ...readLegalPages(wordingDirectory).map((page) => page.path),
+      ])
       server.middlewares.use((request, _response, next) => {
         const [path, query] = (request.url ?? '').split('?')
         const page = path.replace(/\/$/, '')
@@ -154,6 +164,14 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
           type: 'asset',
           fileName: page.fileName,
           source: renderEntryPage(template, page),
+        })
+      }
+      // The privacy policy and the terms, written into their pages (`legal-pages.ts`).
+      for (const page of readLegalPages(wordingDirectory)) {
+        this.emitFile({
+          type: 'asset',
+          fileName: page.fileName,
+          source: withDocument(renderEntryPage(template, page), page),
         })
       }
     },

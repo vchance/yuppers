@@ -9,7 +9,10 @@
     <!--
       A template, not a page. `build/entry-pages.ts` fills the markers from the
       wording files and writes one copy per language, so an invitation link
-      previews in the sender's language (DESIGN.md §4.2, §13.5).
+      previews in the sender's language (DESIGN.md §4.2, §13.5), and a page per
+      language for the privacy policy and for the terms, with the document
+      written into #root (`build/legal-pages.ts`). Only those two are open to
+      search engines.
 
       Link previews. Messaging apps fetch a shared link without verifying, so
       nothing here may ever name a person, a term or an amount.
@@ -18,7 +21,7 @@
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
     <meta property="og:type" content="website" />
-    <meta name="robots" content="noindex" />
+    <meta name="robots" content="{{robots}}" />
     <meta name="referrer" content="no-referrer" />
   </head>
   <body>

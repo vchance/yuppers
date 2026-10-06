@@ -1049,6 +1049,17 @@
       "record": "Más información sobre el registro"
     }
   },
+  "privacy": {
+    "link": "Privacidad",
+    "policy": "Política de privacidad",
+    "sms": "Pueden aplicarse tarifas por mensajes y datos. Responde STOP para dejar de recibirlos.",
+    "smsLink": "Sobre los mensajes de texto",
+    "deletion": "Qué guardamos después de que eliminas tu cuenta"
+  },
+  "termsOfUse": {
+    "link": "Términos",
+    "document": "Términos y condiciones"
+  },
   "errors": {
     "STALE_REVISION": "Los términos cambiaron mientras los revisabas. Revisa la versión más reciente.",
     "WRONG_ACTOR": "Solo la otra parte puede hacer esto.",

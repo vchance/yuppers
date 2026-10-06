@@ -29,6 +29,19 @@ test('help is /help, and each topic /help/{topic}', () => {
   expect(matchRoute('/help/no-such-topic')).toEqual({ name: 'help', topic: 'no-such-topic' })
 })
 
+test('the privacy policy and the terms are /{document}, and /{language}/{document} in the others', () => {
+  expect(paths.legal('privacy', 'en')).toBe('/privacy')
+  expect(paths.legal('terms', 'es')).toBe('/es/terms')
+  for (const document of ['privacy', 'terms'] as const) {
+    for (const path of [`/${document}`, `/${document}/`, `/es/${document}`, `/en/${document}`]) {
+      expect(matchRoute(path), path).toEqual({ name: 'legal', document })
+    }
+    for (const path of [`/fr/${document}`, `/${document}/more`, `/es/${document}/more`]) {
+      expect(matchRoute(path), path).toEqual({ name: 'notFound' })
+    }
+  }
+})
+
 test('staff review is /staff, and one report /staff/reports/{id}', () => {
   expect(matchRoute(paths.staff)).toEqual({ name: 'staff' })
   expect(matchRoute('/staff/')).toEqual({ name: 'staff' })

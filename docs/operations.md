@@ -271,7 +271,7 @@ MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
 - A connection string with a password in it is visible to other users of the same machine while the command runs. On a shared machine leave the password out of the URL and put it in `PGPASSWORD` or a `.pgpass` file.
 - Managed databases take their own snapshots and point-in-time recovery; keep those on. These files are the copy that does not depend on the provider, that can be restored anywhere, and that the drill below proves.
 - **What the file holds**: every account's email address and phone number, every agreement, signature and the network addresses recorded with signatures. Encrypt it at rest, keep it where access is as narrow as the database's, and never in the repository (`.gitignore` refuses `*.dump`).
-- **How long to keep them**: the service forgets network metadata after 90 days and deleted accounts' contact details at once (`DESIGN.md` §14); a backup keeps whatever it held when it was taken. Keep backups no longer than the retention the privacy policy states, and see "Restoring" for what a restore brings back.
+- **How long to keep them**: the service forgets network metadata after 90 days and deleted accounts' contact details at once (`DESIGN.md` §14); a backup keeps whatever it held when it was taken. Keep backups no longer than the retention the privacy policy states (`/privacy#how-long-we-keep-it`: up to 7 days for Render's own recovery copies, and "for a limited time" for ours, until a number is decided, "Decisions still open"), and see "Restoring" for what a restore brings back.
 
 ## Restoring
 

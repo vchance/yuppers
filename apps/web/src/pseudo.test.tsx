@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { HELP_TOPICS, languages, timeZoneCity } from '@yuppers/shared'
+import { HELP_TOPICS, languages, PRIVACY_EMAIL, SUPPORT_EMAIL, timeZoneCity } from '@yuppers/shared'
 import {
   formattedWords,
   pseudoHelp,
+  pseudoPrivacy,
+  pseudoTerms,
   pseudoWording,
   untranslated,
 } from '@yuppers/shared/testing/pseudo'
@@ -44,8 +46,13 @@ import { button, field, press, settle, start, stop, type, until } from './test/h
 
 const pseudo = pseudoWording()
 const pseudoHelpPages = pseudoHelp()
+const pseudoLegal = { privacy: pseudoPrivacy(), terms: pseudoTerms() }
 const ALLOWED = [
   ...STAND_IN_TEXT,
+  // The addresses to write to, which the privacy policy and the terms link to.
+  PRIVACY_EMAIL,
+  SUPPORT_EMAIL,
+
   ...formattedWords('en', ['America/Chicago']),
   // The exchange's time zone by its city, beside a due date for a device elsewhere.
   timeZoneCity('America/Chicago'),
@@ -278,6 +285,28 @@ describe('every word on the main web screens comes from the wording', () => {
         await start('/help/nothing-here', null, pseudo)
         await h1(pseudo.common.notFoundTitle)
         await check()
+      })
+      expect(found).toEqual([])
+    } finally {
+      vi.doUnmock('./app/wording')
+    }
+  })
+
+  test('the privacy policy and the terms', async () => {
+    // Their text is a file of its own, fetched by their page; here it comes
+    // in the pseudo-language too.
+    vi.doMock('./app/wording', async (original) => ({
+      ...(await original<typeof import('./app/wording')>()),
+      loadLegal: async (document: 'privacy' | 'terms') => pseudoLegal[document],
+      loadedLegal: () => null,
+    }))
+    try {
+      const found = await screens(async (check) => {
+        for (const document of ['privacy', 'terms'] as const) {
+          await start(`/${document}`, null, pseudo)
+          await h1(pseudoLegal[document].title)
+          await check()
+        }
       })
       expect(found).toEqual([])
     } finally {

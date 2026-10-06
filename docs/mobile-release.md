@@ -99,6 +99,8 @@ Also true, and relevant to how the owner answers some questions:
 - **Deletion.** A person can delete their account inside the app (account screen) and on the web (README, "Deleting an account"; `backend/src/deletion.rs` says exactly what goes and what stays).
 - **Payments:** none. The app never handles money; any payment between the parties happens outside it.
 
+The privacy policy (README, "Privacy policy and terms") tells people the same facts; a change here is a change there.
+
 ## Universal links and app links
 
 Two kinds of link are claimed (`DESIGN.md` §4.1): an invitation link, `https://<domain>/{language}/i#<token>`, and an exchange's own pages, `https://<domain>/exchanges/<id>` and `https://<domain>/exchanges/<id>/record`, which is where notification emails link to. With the app installed, iOS and Android can open such a link in the app instead of the browser, once three things agree:
@@ -147,7 +149,7 @@ In this order. Each step needs only what the steps before it set up.
    ```
 
    Google's checker: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://<domain>&relation=delegate_permission/common.handle_all_urls`. On an Android device with a build installed: `adb shell pm verify-app-links --re-verify app.yuppers`, then `adb shell pm get-app-links app.yuppers` should show the domain as `verified`. On iOS, tap an invitation link in Notes or Messages (not typed into Safari, which never opens an app).
-8. **Store listings.** Create the App Store Connect record and the Play Console listing from the drafts below; fill the App Privacy label and the data-safety form from "What the app collects"; answer the content rating questionnaires (the app has user content, reporting and blocking, and is for people 18 and over); publish the privacy policy and support pages and put their addresses in both stores.
+8. **Store listings.** Create the App Store Connect record and the Play Console listing from the drafts below; fill the App Privacy label and the data-safety form from "What the app collects"; answer the content rating questionnaires (the app has user content, reporting and blocking, and is for people 18 and over); publish the support page, and put its address, the privacy policy's, `https://<domain>/privacy` (`/es/privacy` in Spanish), and the terms', `https://<domain>/terms`, in both stores.
 9. **Wallet passes.** With the Apple and Google accounts, the pass type certificate and the Wallet issuer: [docs/wallet.md](wallet.md), "Once the accounts exist". The app needs nothing more for them; the service's settings turn the buttons on.
 10. **Production builds.** `eas build --profile production --platform all`. The build number starts at 1 and goes up by one each time; `eas build:version:set` sets it if a store already has a higher one. Upload through each store's own console or `eas submit`, when the owner decides to.
 
@@ -163,7 +165,7 @@ Drafts for the owner to edit. Lengths are counted in characters and are within e
 - **Keywords** (App Store, 100): agreement,deal,trade,swap,promise,sign,record,handshake,deposit,job,service,barter,IOU,contract
 - **Category:** Productivity (App Store and Google Play); Business as the App Store's secondary category.
 - **Support URL:** `https://<domain>/support` (placeholder; no such page exists yet)
-- **Privacy policy URL:** `https://<domain>/privacy` (placeholder; no such page exists yet)
+- **Privacy policy URL:** `https://<domain>/privacy` (README, "Privacy policy and terms")
 
 **Full description:**
 
@@ -197,7 +199,7 @@ Drafts for the owner to edit. Lengths are counted in characters and are within e
 - **Palabras clave** (App Store, 100): acuerdo,trato,intercambio,trueque,firma,registro,promesa,servicio,encargo,contrato,compromiso
 - **Categoría:** Productividad (App Store y Google Play); Negocios como categoría secundaria en el App Store.
 - **URL de soporte:** `https://<domain>/es/support` (provisional; la página aún no existe)
-- **URL de la política de privacidad:** `https://<domain>/es/privacy` (provisional; la página aún no existe)
+- **URL de la política de privacidad:** `https://<domain>/es/privacy` (README, "Privacy policy and terms")
 
 **Descripción completa:**
 

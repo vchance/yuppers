@@ -4,6 +4,7 @@ import { useI18n, useSession } from '../app/context'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { BuildVersion } from '../components/BuildVersion'
+import { LegalLink } from '../components/LegalLink'
 import { PageHeading } from '../components/ui'
 import { api } from '../lib/api'
 import { BlockedPeople } from './BlockedPeople'
@@ -57,6 +58,10 @@ export default function AccountPage() {
         </button>
       </div>
       <DeleteAccount account={account} />
+      <p className="learn-more legal-links">
+        <LegalLink document="privacy" />
+        <LegalLink document="terms" />
+      </p>
       <BuildVersion />
     </>
   )

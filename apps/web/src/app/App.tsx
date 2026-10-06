@@ -5,9 +5,19 @@ import {
   languages,
   pickLanguage,
   type Language,
+  type LegalDocument,
   type Wording,
 } from '@yuppers/shared'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createElement,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 
 import { AccountDeleted } from '../components/AccountDeleted'
 import { LiveRegions } from '../components/LiveRegions'
@@ -24,6 +34,7 @@ import {
   type Session,
 } from './context'
 import { Link } from './Link'
+import { loadedLegalPage, loadLegalPage } from './legal-page'
 import { usePathname } from './router'
 import { matchRoute, paths } from './routes'
 import { loadWording, rememberLanguage } from './wording'
@@ -38,6 +49,7 @@ const DeleteAccount = lazy(() => import('../screens/DeleteAccount'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
 const RecordPage = lazy(() => import('../screens/RecordPage'))
 const HelpPage = lazy(() => import('../screens/HelpPage'))
+const LazyLegalPage = lazy(loadLegalPage)
 // Reviewers only, and English only is acceptable for it (DESIGN.md §9).
 const StaffPage = lazy(() => import('../screens/StaffPage'))
 
@@ -222,6 +234,10 @@ function Shell({ outdated }: { outdated: boolean }) {
       // Open to anyone, signed in or not.
       page = <HelpPage key={route.topic ?? ''} topic={route.topic} />
       break
+    case 'legal':
+      // Open to anyone, signed in or not.
+      page = <LegalRoute key={route.document} document={route.document} />
+      break
     case 'staff':
     case 'staffReport':
       // For reviewers only: to anyone else the service answers "not found",
@@ -280,10 +296,33 @@ function Shell({ outdated }: { outdated: boolean }) {
         <Link to={paths.help()} aria-current={current('help')}>
           {wording.help.link}
         </Link>
+        <Link
+          to={paths.legal('privacy', language)}
+          aria-current={route.name === 'legal' && route.document === 'privacy' ? 'page' : undefined}
+        >
+          {wording.privacy.link}
+        </Link>
+        <Link
+          to={paths.legal('terms', language)}
+          aria-current={route.name === 'legal' && route.document === 'terms' ? 'page' : undefined}
+        >
+          {wording.termsOfUse.link}
+        </Link>
       </footer>
       <LiveRegions />
     </>
   )
+}
+
+/**
+ * The privacy policy's or the terms' page: drawn at once if `main.tsx`
+ * fetched it before the app first drew, over the same document the service
+ * wrote into the page, and otherwise loaded like any other page.
+ */
+function LegalRoute({ document }: { document: LegalDocument }) {
+  const loaded = loadedLegalPage()
+  // The component the module exports, made once by it, not here.
+  return loaded ? createElement(loaded, { document }) : <LazyLegalPage document={document} />
 }
 
 /** Shows a page only to a signed-in account that is ready to act; otherwise, the way to become one. */

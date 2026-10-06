@@ -29,6 +29,7 @@ import {
   Screen,
   TextField,
 } from '../components/ui';
+import { LegalLinks } from '../components/LegalLinks';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
 import { DeleteAccount } from './DeleteAccount';
@@ -212,6 +213,20 @@ function SignIn() {
             onPress={() => void requestCode(identifier.trim(), false)}
           />
         </Actions>
+        {/* What a text message costs and how to stop them, said wherever a
+            code can go to a phone number, before one is asked for. */}
+        {phone ? (
+          <>
+            <Hint>{wording.privacy.sms}</Hint>
+            <LegalLinks
+              documents={['privacy']}
+              testID="privacy-sms"
+              section="text-messages"
+              label={wording.privacy.smsLink}
+            />
+          </>
+        ) : null}
+        <LegalLinks />
         {/* Before anyone is signed in, the language is this device's to choose. */}
         <Choice<Language>
           label={wording.nav.language}

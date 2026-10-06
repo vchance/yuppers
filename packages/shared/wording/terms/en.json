@@ -1,0 +1,220 @@
+{
+  "title": "Terms and Conditions",
+  "description": "The terms on which Yuppers.app offers Yuppers, including the terms of its text messages.",
+  "note": "These terms describe how Yuppers.app works today.",
+  "effective": "Effective date: {effectiveDate}",
+  "contents": "Contents",
+  "otherLanguages": "These terms in other languages",
+  "links": {
+    "privacy": "Privacy policy",
+    "privacyTexts": "the section on text messages in our privacy policy"
+  },
+  "sections": {
+    "who-runs-yuppers": {
+      "title": "Who runs Yuppers",
+      "blocks": [
+        {
+          "p": "These terms are an agreement between you and Yuppers.app (https://yuppers.app), which runs Yuppers on the website yuppers.app and in the Yuppers app. By using Yuppers, you agree to these terms."
+        },
+        {
+          "p": "How we handle your information is in our {privacy}."
+        },
+        {
+          "p": "For questions about these terms, or for help with Yuppers, write to {supportEmail}."
+        }
+      ]
+    },
+    "who-can-use-it": {
+      "title": "Who can use Yuppers",
+      "blocks": [
+        {
+          "p": "Yuppers is for adults 18 and over in the United States. You confirm that you are 18 or over when you set up your account. Don’t use Yuppers if you are under 18."
+        }
+      ]
+    },
+    "what-yuppers-is": {
+      "title": "What Yuppers is, and what it isn’t",
+      "blocks": [
+        {
+          "p": "Yuppers is a way for two people to write down an agreement, sign it, and keep a shared record of it and of what each of them says they delivered."
+        },
+        {
+          "ul": [
+            "Yuppers.app is not a party to the agreements you make with Yuppers. An agreement is between the two people who sign it.",
+            "We don’t hold or move money. Any payment happens between you, outside Yuppers; Yuppers only records what each of you says about it.",
+            "We don’t decide disputes. When you disagree, we record what each of you says. We don’t decide who is right.",
+            "We don’t guarantee that anyone delivers, and we can’t make anyone do their part.",
+            "We don’t check what you record. Marking something delivered, confirming it, disputing it or waiving it, and every note you write, are your own statements.",
+            "We don’t verify anyone’s identity beyond the one-time code they enter to sign in. That code is the only check of who signed, and the record says so."
+          ]
+        },
+        {
+          "p": "When you sign, you agree to the exact terms shown. Your signature is electronic and is meant to bind you in the same way a handwritten one would. You also agree to sign electronically, and to receive the agreement and its records electronically."
+        }
+      ]
+    },
+    "your-account": {
+      "title": "Your account",
+      "blocks": [
+        {
+          "ul": [
+            "You sign in with a one-time code sent to your email address or phone number. Anyone who can read those codes can sign in as you, so keep your email and your phone to yourself, and don’t share a code with anyone.",
+            "An account is for one person: you. Don’t make an account for someone else, and don’t share yours.",
+            "Use your own name, as you want it shown on your agreements. The other person sees it, and it is written into what you both sign.",
+            "If you think someone else has used your account, or you need to change your email address or phone number, write to {supportEmail}."
+          ]
+        }
+      ]
+    },
+    "acceptable-use": {
+      "title": "Acceptable use",
+      "blocks": [
+        {
+          "p": "Don’t use Yuppers to:"
+        },
+        {
+          "ul": [
+            "agree to anything illegal;",
+            "harass, threaten or abuse anyone;",
+            "scam or cheat anyone;",
+            "pretend to be someone else;",
+            "involve anyone under 18;",
+            "send spam, or send invitation links to people who didn’t ask for them;",
+            "get around a block, a suspension or the service’s limits, or interfere with how the service works."
+          ]
+        },
+        {
+          "p": "Anyone can report a yup or a proposal for these reasons, and we review every report."
+        }
+      ]
+    },
+    "reports-and-review": {
+      "title": "Reports, blocks and review",
+      "blocks": [
+        {
+          "ul": [
+            "You can report a yup or a proposal, and block someone. The person you report or block isn’t told.",
+            "People we name review reports. A reviewer may dismiss a report, hide what was written in the yup from the person reported, suspend that person’s account, or both hide and suspend.",
+            "If content is hidden from you, what was written in that yup reads “Hidden by review”, and you can no longer sign or send terms there. You can still decline, withdraw, mark items and close it.",
+            "If your account is suspended, you are signed out everywhere and can’t sign in, you get no notifications, and your Wallet passes stop updating. Invitation links you made that nobody used stop working, and offers of yours waiting to be signed are withdrawn. Agreements already in force stay as they are, and the other person can still end them.",
+            "A suspension can be lifted, and hidden content shown again. Neither the person who reported nor the person reported is told the outcome."
+          ]
+        }
+      ]
+    },
+    "your-content": {
+      "title": "Your content",
+      "blocks": [
+        {
+          "p": "What you write in Yuppers stays yours. You allow Yuppers.app to store it, to show it to the other person in the yup and, while a report about it is open, to the people who review reports, and to keep it in the yup’s record, as the service needs to work and as our {privacy} describes."
+        },
+        {
+          "p": "You are responsible for what you write. The other person can download or print the record, and what they do with their copy is up to them."
+        }
+      ]
+    },
+    "records-and-deletion": {
+      "title": "Records and deleting your account",
+      "blocks": [
+        {
+          "ul": [
+            "Each person in a yup can read its whole record, and download or print a copy.",
+            "You can delete your account at any time from your account page. Yups that were sent stay with the other person, as the signed record of what was proposed and agreed, with your name as the agreement gives it.",
+            "What we keep, and for how long, is in our {privacy}."
+          ]
+        }
+      ]
+    },
+    "text-messages": {
+      "title": "Text messages",
+      "blocks": [
+        {
+          "p": "When we offer them, Yuppers.app sends text messages in two programs. These terms apply to both."
+        },
+        {
+          "h": "Yuppers.app sign-in codes"
+        },
+        {
+          "ul": [
+            "Program name: Yuppers.app sign-in codes.",
+            "Description: Yuppers.app (https://yuppers.app) texts a one-time sign-in code to the phone number you enter on the sign-in screen, only when you ask for one. If you choose your phone number to confirm deleting your account, we also text you a one-time code for that.",
+            "Message frequency: One message per code request."
+          ]
+        },
+        {
+          "h": "Yuppers.app agreement updates"
+        },
+        {
+          "ul": [
+            "Program name: Yuppers.app agreement updates.",
+            "Description: If you turn on text updates for an agreement, Yuppers.app texts you when its status changes: for example, when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it.",
+            "How you opt in: by ticking a box on that agreement, which shows this text: “Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”",
+            "Message frequency: Message frequency varies; there is no fixed maximum. One text per status change of an agreement you turned updates on for.",
+            "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
+            "Turning text updates off for an agreement stops them for that agreement only."
+          ]
+        },
+        {
+          "h": "For both programs"
+        },
+        {
+          "ul": [
+            "Message and data rates may apply.",
+            "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app, sign-in codes included. You can still sign in with an email address.",
+            "Support: write to {supportEmail}, or reply HELP to any of our texts.",
+            "Carriers are not liable for delayed or undelivered messages.",
+            "Phone numbers outside +1 are not texted: we send texts only to numbers that start with the country code +1.",
+            "We do not sell your personal information. We do not share your personal information or your SMS opt-in data and consent with third parties or affiliates for marketing or promotional purposes.",
+            "Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes."
+          ]
+        },
+        {
+          "p": "How we handle your phone number and these texts is in {privacyTexts}."
+        }
+      ]
+    },
+    "changes-and-availability": {
+      "title": "Changes and availability",
+      "blocks": [
+        {
+          "ul": [
+            "Yuppers may change: we may add, change or remove features.",
+            "Yuppers may be unavailable at times, and we may stop offering it.",
+            "When we change these terms, we post the new version on this page, with a new effective date at the top. If you keep using Yuppers after that, the new terms apply."
+          ]
+        }
+      ]
+    },
+    "disclaimer": {
+      "title": "No guarantees, and limits on our liability",
+      "blocks": [
+        {
+          "p": "Yuppers is provided “as is” and “as available”. To the extent the law allows, we make no promises about it beyond what these terms say, including that it will always be available, be free of errors, or keep any particular feature."
+        },
+        {
+          "p": "To the extent the law allows, Yuppers.app is not liable for what another person does or doesn’t do, for the agreements you make with Yuppers, or for any indirect or consequential loss arising from your use of Yuppers."
+        }
+      ]
+    },
+    "ending": {
+      "title": "Ending your use",
+      "blocks": [
+        {
+          "ul": [
+            "You can stop using Yuppers, and delete your account, at any time.",
+            "We may suspend your account if you break these terms, as described under “Reports, blocks and review”.",
+            "What happens to your yups and your information when an account is deleted is described above and in our {privacy}."
+          ]
+        }
+      ]
+    },
+    "contact": {
+      "title": "Contact",
+      "blocks": [
+        {
+          "p": "For questions about these terms, or for help with Yuppers, write to {supportEmail}. For privacy questions and requests, write to {privacyEmail}."
+        }
+      ]
+    }
+  }
+}

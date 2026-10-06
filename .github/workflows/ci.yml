@@ -289,6 +289,13 @@ jobs:
           check '404 application/json' '%{http_code} %{content_type}' http://127.0.0.1:8080/.well-known/assetlinks.json
           curl --silent --fail http://127.0.0.1:8080/es/i | grep --quiet 'lang="es"'
           curl --silent --fail http://127.0.0.1:8080/en/i | grep --quiet 'lang="en"'
+          # The privacy policy and the terms, written into their pages in each language, for readers without scripts.
+          curl --silent --fail http://127.0.0.1:8080/privacy | grep --quiet 'id="text-messages"'
+          curl --silent --fail http://127.0.0.1:8080/es/privacy | grep --quiet 'lang="es"'
+          curl --silent --fail http://127.0.0.1:8080/terms | grep --quiet '<strong>Reply STOP'
+          curl --silent --fail http://127.0.0.1:8080/es/terms | grep --quiet 'lang="es"'
+          curl --silent --fail --head http://127.0.0.1:8080/privacy | grep --ignore-case --quiet "^content-security-policy: default-src 'self'"
+          curl --silent --fail --head http://127.0.0.1:8080/terms | grep --ignore-case --quiet "^content-security-policy: default-src 'self'"
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^x-frame-options: DENY'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^cache-control: no-cache'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet "^content-security-policy: default-src 'self'"

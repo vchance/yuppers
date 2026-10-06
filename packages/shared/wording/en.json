@@ -1049,6 +1049,17 @@
       "record": "Learn more about the record"
     }
   },
+  "privacy": {
+    "link": "Privacy",
+    "policy": "Privacy policy",
+    "sms": "Message and data rates may apply. Reply STOP to opt out.",
+    "smsLink": "About text messages",
+    "deletion": "What we keep after you delete your account"
+  },
+  "termsOfUse": {
+    "link": "Terms",
+    "document": "Terms and Conditions"
+  },
   "errors": {
     "STALE_REVISION": "The terms changed while you were looking. Review the latest version.",
     "WRONG_ACTOR": "Only the other party can do this.",

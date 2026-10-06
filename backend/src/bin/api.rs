@@ -82,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!(
                 directory = %directory.display(),
                 languages = ?web.languages(),
+                legal = ?web.legal_pages().collect::<Vec<_>>(),
                 "serving the web app"
             );
             Some(web)

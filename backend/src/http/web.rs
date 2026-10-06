@@ -3,12 +3,19 @@
 //!
 //! The build is static files: `index.html`, the app's own entry page; one
 //! entry page per language at `{language}/i/index.html`, which an invitation
-//! link points at; hashed files under `assets/`; and whatever else is in the
-//! app's public directory. Three rules turn that into a site:
+//! link points at; the privacy policy's and the terms' page in each
+//! language; hashed files under `assets/`; and whatever else is in the app's public directory. Four
+//! rules turn that into a site:
 //!
 //! * `/{language}/i`, with or without a trailing slash, is answered with that
 //!   language's page directly, without a redirect that would change the link
 //!   a messaging app previews;
+//! * `/{document}` and `/{language}/{document}`, for the privacy policy
+//!   (`privacy`) and the terms (`terms`), with or without a trailing slash,
+//!   are answered with that document's static page in that language
+//!   (`{document}/index.html`, `{language}/{document}/index.html`): the
+//!   app's entry page with the document written into it, so that it reads
+//!   without scripts;
 //! * a path that is no file is answered with `index.html`, so a route the app
 //!   handles in the browser can be opened or reloaded directly;
 //! * the API's paths are never answered with a page.
@@ -44,6 +51,10 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::error::{ApiError, ErrorCode};
 use crate::http::AppState;
 
+/// The documents the build writes a static page for in each language
+/// (`apps/web/build/legal-pages.ts`): the privacy policy and the terms.
+const LEGAL_DOCUMENTS: &[&str] = &["privacy", "terms"];
+
 /// Paths that belong to the API, whatever is or is not routed under them.
 const API_PATHS: &[&str] = &["/v1", "/healthz", "/readyz"];
 
@@ -61,6 +72,9 @@ pub struct WebApp {
     directory: PathBuf,
     /// The languages that have an entry page, from the build itself.
     languages: Vec<String>,
+    /// The privacy policy's and the terms' pages the build has: the address
+    /// each answers, such as `/privacy` or `/es/terms`, and its file.
+    legal_pages: Vec<(String, String)>,
 }
 
 impl WebApp {
@@ -82,10 +96,48 @@ impl WebApp {
             .filter_map(|entry| entry.file_name().into_string().ok())
             .collect();
         languages.sort();
+        // The default language's page at `/{document}`, every other
+        // language's under its own code, as the build writes them.
+        let mut legal_pages = Vec::new();
+        for document in LEGAL_DOCUMENTS {
+            if directory.join(document).join("index.html").is_file() {
+                legal_pages.push((format!("/{document}"), format!("/{document}/index.html")));
+            }
+            for language in &languages {
+                if directory
+                    .join(language)
+                    .join(document)
+                    .join("index.html")
+                    .is_file()
+                {
+                    legal_pages.push((
+                        format!("/{language}/{document}"),
+                        format!("/{language}/{document}/index.html"),
+                    ));
+                }
+            }
+        }
         Ok(Self {
             directory: directory.to_owned(),
             languages,
+            legal_pages,
         })
+    }
+
+    /// The addresses of the privacy policy's and the terms' pages, such as
+    /// `/privacy`.
+    pub fn legal_pages(&self) -> impl Iterator<Item = &str> {
+        self.legal_pages.iter().map(|(path, _)| path.as_str())
+    }
+
+    /// The file of the privacy policy's or the terms' page that `path` names,
+    /// if it names one.
+    fn legal_page(&self, path: &str) -> Option<&str> {
+        let path = path.strip_suffix('/').unwrap_or(path);
+        self.legal_pages
+            .iter()
+            .find(|(page, _)| page == path)
+            .map(|(_, file)| file.as_str())
     }
 
     pub fn languages(&self) -> &[String] {
@@ -158,6 +210,11 @@ async fn route(
     }
     if let Some(language) = web.entry_page(path) {
         let Ok(uri) = format!("/{language}/i/index.html").parse::<Uri>() else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        *request.uri_mut() = uri;
+    } else if let Some(file) = web.legal_page(path) {
+        let Ok(uri) = file.parse::<Uri>() else {
             return StatusCode::NOT_FOUND.into_response();
         };
         *request.uri_mut() = uri;
@@ -457,6 +514,42 @@ mod tests {
         WebApp {
             directory: PathBuf::from("/nowhere"),
             languages: languages.iter().map(|code| (*code).to_owned()).collect(),
+            legal_pages: vec![
+                ("/privacy".to_owned(), "/privacy/index.html".to_owned()),
+                ("/terms".to_owned(), "/terms/index.html".to_owned()),
+                (
+                    "/es/privacy".to_owned(),
+                    "/es/privacy/index.html".to_owned(),
+                ),
+            ],
+        }
+    }
+
+    #[test]
+    fn a_legal_path_names_a_page_the_build_has() {
+        let web = web(&["en", "es"]);
+        assert_eq!(web.legal_page("/privacy"), Some("/privacy/index.html"));
+        assert_eq!(web.legal_page("/privacy/"), Some("/privacy/index.html"));
+        assert_eq!(web.legal_page("/terms"), Some("/terms/index.html"));
+        assert_eq!(
+            web.legal_page("/es/privacy"),
+            Some("/es/privacy/index.html")
+        );
+        assert_eq!(
+            web.legal_page("/es/privacy/"),
+            Some("/es/privacy/index.html")
+        );
+        for other in [
+            "/en/privacy",
+            "/fr/privacy",
+            "/privacy/index.html",
+            "/privacy//",
+            "/privacypolicy",
+            "/es/terms",
+            "/terms/x",
+            "privacy",
+        ] {
+            assert_eq!(web.legal_page(other), None, "{other:?}");
         }
     }
 

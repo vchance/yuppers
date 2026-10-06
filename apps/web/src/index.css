@@ -589,6 +589,56 @@ section + section {
   margin-block-end: 0.5rem;
 }
 
+/* ---- Privacy policy and terms ------------------------------------------- */
+
+/* The same page whether the app drew it or the service wrote it
+   (build/legal-pages.ts), so it needs nothing but these classes. */
+/* Links to both documents side by side, each still a target of its own. */
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+}
+
+.legal-note {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.legal-languages ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+}
+
+.legal-languages a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+}
+
+.legal-languages a[aria-current='page'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.legal section {
+  margin-block-start: 2rem;
+}
+
+.legal h3 {
+  margin-block: 1.25rem 0.5rem;
+}
+
+.legal li + li {
+  margin-block-start: 0.375rem;
+}
+
+/* An address to write to may be long, and must never push the page sideways. */
+.legal a[href^='mailto:'] {
+  overflow-wrap: anywhere;
+}
+
 @media print {
   .learn-more,
   footer.site {

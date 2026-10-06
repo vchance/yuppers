@@ -1,5 +1,8 @@
 import helpEn from '../../wording/help/en.json'
+import privacyEn from '../../wording/privacy/en.json'
+import termsEn from '../../wording/terms/en.json'
 import en from '../../wording/en.json'
+import type { PrivacyWording, TermsWording } from '../legal-text'
 import type { HelpWording, Wording } from '../wording/types'
 
 /*
@@ -114,6 +117,16 @@ export function pseudoWording(): Wording {
 /** The English help pages in the pseudo-language. */
 export function pseudoHelp(): HelpWording {
   return transform(helpEn as HelpWording)
+}
+
+/** The English privacy policy in the pseudo-language. */
+export function pseudoPrivacy(): PrivacyWording {
+  return transform(privacyEn as PrivacyWording)
+}
+
+/** The English terms and conditions in the pseudo-language. */
+export function pseudoTerms(): TermsWording {
+  return transform(termsEn as TermsWording)
 }
 
 /**

@@ -33,6 +33,8 @@ interface PersonOptions {
   viewport?: { width: number; height: number }
   /** The device's time zone. UTC unless given. */
   timezoneId?: string
+  /** Whether pages may run scripts. They may unless this says otherwise. */
+  javaScriptEnabled?: boolean
 }
 
 interface Fixtures {
@@ -54,6 +56,7 @@ export const test = base.extend<Fixtures>({
         locale: options.locale ?? 'en-US',
         ...(options.viewport ? { viewport: options.viewport } : {}),
         timezoneId: options.timezoneId ?? 'UTC',
+        javaScriptEnabled: options.javaScriptEnabled ?? true,
         permissions: ['clipboard-read', 'clipboard-write'],
       })
       contexts.push(context)

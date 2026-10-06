@@ -1,0 +1,305 @@
+{
+  "title": "Política de privacidad",
+  "description": "Cómo Yuppers.app recopila, usa, comparte y guarda la información de las personas que usan Yuppers.",
+  "note": "Esta política describe cómo funciona Yuppers.app hoy.",
+  "effective": "Fecha de entrada en vigor: {effectiveDate}",
+  "contents": "Contenido",
+  "otherLanguages": "Esta política en otros idiomas",
+  "links": {
+    "terms": "Términos y condiciones"
+  },
+  "sections": {
+    "who-we-are": {
+      "title": "Quiénes somos",
+      "blocks": [
+        {
+          "p": "Esta política explica cómo Yuppers.app (https://yuppers.app) recopila y usa tu información. Yuppers.app (“nosotros”) opera Yuppers, un servicio para escribir, firmar y dar seguimiento a acuerdos entre dos personas, llamados yups, en el sitio web yuppers.app y en la app de Yuppers. A continuación explicamos qué información recopilamos, cómo la usamos, quién la ve, cuánto tiempo la guardamos y qué opciones tienes."
+        },
+        {
+          "p": "Yuppers se ofrece en los Estados Unidos, a personas adultas de 18 años o más, en inglés y en español. Nuestros servidores y nuestra base de datos están en los Estados Unidos."
+        },
+        {
+          "p": "El uso de Yuppers también se rige por nuestros {terms}."
+        },
+        {
+          "p": "Para cualquier pregunta o solicitud sobre tu privacidad, escríbenos a {privacyEmail}."
+        }
+      ]
+    },
+    "what-we-collect": {
+      "title": "Qué recopilamos y cómo lo usamos",
+      "blocks": [
+        {
+          "p": "Recopilamos lo que Yuppers necesita para funcionar, y lo usamos solo para operar Yuppers. Para cada tipo de información, a continuación decimos qué es y cómo la usamos. No usamos herramientas de analítica, publicidad ni rastreo, y no armamos perfiles sobre ti. No vendemos tu información personal. No compartimos tu información personal ni tus datos y consentimiento de suscripción a SMS con terceros ni con afiliados con fines de marketing o promoción."
+        },
+        {
+          "h": "Tu cuenta"
+        },
+        {
+          "ul": [
+            "Tu correo electrónico, tu número de teléfono o los dos. Les enviamos códigos de un solo uso para entrar, te escribimos por correo cuando pasa algo en uno de tus yups y, si activas las actualizaciones por mensaje de texto para un acuerdo, te enviamos un mensaje de texto cuando cambia su estado.",
+            "Tu nombre, tal como quieres que lo vean las personas con quienes haces yups.",
+            "Tu idioma (inglés o español), para que el producto, nuestros correos y nuestros códigos te lleguen en él.",
+            "Que confirmaste tener 18 años o más, y cuándo. No te pedimos tu fecha de nacimiento.",
+            "Cuándo se creó tu cuenta, y tus sesiones: cómo demostraste que eras tú (un código por correo o por mensaje de texto), cuándo, y hasta cuándo dura cada una. Los usamos para mantener tu sesión abierta, y para cerrar tus sesiones cuando sales o eliminas tu cuenta."
+          ]
+        },
+        {
+          "h": "Tus yups"
+        },
+        {
+          "ul": [
+            "Lo que tú y la otra persona escriben y hacen en cada yup: sus términos; cada elemento, con lo que se da, cuánto, para cuándo y cómo sabrán los dos que está hecho, incluidas las cantidades de dinero que anoten; los nombres de las dos personas tal como los da la propuesta; cada versión enviada; los mensajes, notas y declaraciones; cada firma, y lo que cada uno registra sobre las entregas. Guardar esto es el propósito de Yuppers: es el registro compartido de lo que acordaron y de lo que pasó.",
+            "Los borradores que todavía estás escribiendo. Los guardamos mientras escribes para que no los pierdas.",
+            "Lo que nos dices de la otra persona. Quien escribe una propuesta da los nombres de las dos personas, y puede dar el correo electrónico o el número de teléfono al que va dirigida la invitación. Usamos esa dirección solo para comprobar que quien abre la invitación es la persona a quien iba dirigida. Nunca le enviamos nada."
+          ]
+        },
+        {
+          "h": "Firmas"
+        },
+        {
+          "p": "Cuando firmas, registramos tu cuenta, cómo demostraste que eras tú (un código de un solo uso por correo o por mensaje de texto) y cuándo, la hora en que firmaste, una huella (hash) de los términos exactos que firmaste, y qué versión del texto de consentimiento se te mostró, en qué idioma. También registramos la dirección IP desde la que llegó tu solicitud y la descripción que tu navegador o la app dan de sí mismos (su agente de usuario). Sirven como prueba de la firma. La dirección IP y el agente de usuario se borran a los {networkDays} días, y la app nunca se los muestra a nadie; el resto de la firma se queda con el acuerdo."
+        },
+        {
+          "h": "Denuncias y bloqueos"
+        },
+        {
+          "p": "Si denuncias un yup o una propuesta, guardamos tu denuncia: el motivo que elegiste, lo que escribiste, quién la envió y a qué yup y a qué persona se refiere. La usamos para revisar la denuncia y actuar. Si bloqueas a alguien, guardamos a quién bloqueaste y cuándo, y lo usamos para que esa persona no participe en yups contigo. Cuando se revisa una denuncia, guardamos un historial de lo que vieron y decidieron quienes la revisaron, para que la revisión rinda cuentas."
+        },
+        {
+          "h": "Actualizaciones por mensaje de texto de un acuerdo, si las activas"
+        },
+        {
+          "p": "Si activas las actualizaciones por mensaje de texto para un acuerdo, guardamos un registro: qué acuerdo, el número de teléfono, cuándo las activaste y el texto de consentimiento que se te mostró. Lo usamos solo para enviarte esas actualizaciones y para demostrar que aceptaste recibirlas."
+        },
+        {
+          "h": "Notificaciones en la app, si las activas"
+        },
+        {
+          "p": "Si activas las notificaciones en la app de Yuppers, guardamos el token de notificaciones de tu dispositivo, su plataforma (iOS o Android), la versión de la app y tu idioma, para poder enviar notificaciones a ese dispositivo."
+        },
+        {
+          "h": "Pases de Wallet, si agregas uno"
+        },
+        {
+          "p": "Si agregas un yup a Apple Wallet o a Google Wallet, guardamos un registro del pase: a qué yup y a qué cuenta pertenece, y cómo se actualizó por última vez. Para Apple Wallet también guardamos los identificadores y los tokens de notificaciones que Apple nos da para los dispositivos que tienen el pase, para poder mantenerlo al día. Un pase muestra el código de referencia del yup, su estado, cuántos elementos faltan y un enlace al yup. Nunca muestra los términos, los nombres ni las cantidades."
+        },
+        {
+          "h": "Registros técnicos"
+        },
+        {
+          "ul": [
+            "Registros de solicitudes. De cada solicitud que responde nuestro servicio, registramos el método y la ruta (nunca los parámetros de consulta), el estado, cuánto tardó y un identificador de la solicitud. Los usamos para operar el servicio y para encontrar y corregir problemas. Nuestros registros nunca contienen lo que se envió o se respondió, códigos, tokens, correos electrónicos, números de teléfono ni direcciones IP.",
+            "Límites para entrar. Para impedir que alguien adivine códigos o pida demasiados, contamos los códigos que se piden desde cada dirección IP y los códigos incorrectos que se escriben para cada correo electrónico o número de teléfono. Estas cuentas se guardan bajo un hash con clave, nunca la dirección ni el número.",
+            "Códigos de un solo uso. Guardamos un hash con clave de cada código que enviamos, nunca el código, junto con el correo electrónico o el número de teléfono al que se envió y cuándo. Los usamos para comprobar el código que escribes y para limitar cuántos códigos se envían."
+          ]
+        }
+      ]
+    },
+    "cookies-and-storage": {
+      "title": "Cookies y almacenamiento en tu dispositivo",
+      "blocks": [
+        {
+          "p": "El sitio web usa una cookie y dos datos guardados en el navegador, todos para que el producto funcione. No hay cookies de analítica, publicidad ni rastreo, ni scripts de nadie más."
+        },
+        {
+          "ul": [
+            "yuppers_session (una cookie): mantiene tu sesión abierta. Contiene un token aleatorio, dura {sessionDays} días o hasta que cierres la sesión, y los scripts de la página no pueden leerla.",
+            "yuppers.language (almacenamiento local): el idioma que elegiste, para que el sitio web se abra en él la próxima vez.",
+            "yuppers.invitation (almacenamiento de sesión): el código de un enlace de invitación mientras entras para leerla, para que no se pierda si la página se vuelve a cargar. Se borra en cuanto se abre la invitación o resulta que ya no es válida, y al cerrar la pestaña."
+          ]
+        },
+        {
+          "p": "En la app de Yuppers, tu sesión se guarda en el almacenamiento seguro de tu dispositivo (el llavero de iOS o el Keystore de Android), junto con tu ajuste de notificaciones para ese dispositivo. Una copia de un registro que decides compartir se guarda en la caché de la app solo hasta que hagas la siguiente copia o cierres la sesión."
+        }
+      ]
+    },
+    "who-sees-what": {
+      "title": "Quién ve tu información",
+      "blocks": [
+        {
+          "p": "Además de ti, ven tu información la otra persona de cada yup, en la medida en que el yup la muestra; quienes revisan las denuncias, mientras una denuncia está abierta, y las empresas que nos ayudan a operar el servicio."
+        },
+        {
+          "h": "La otra persona de un yup"
+        },
+        {
+          "p": "La otra persona ve lo que muestra el yup: sus términos, cada versión, los mensajes y notas, su historial, las firmas y cuándo se hicieron, y tu nombre tal como lo da el acuerdo. No ve tu correo electrónico, tu número de teléfono, tu dirección IP ni tu dispositivo. Cada uno puede descargar o imprimir el registro del yup, y lo que cada uno haga con esa copia depende de él."
+        },
+        {
+          "h": "Quienes revisan las denuncias"
+        },
+        {
+          "p": "Las personas que designamos para revisar denuncias pueden ver una denuncia, los nombres y el estado de las cuentas de las personas involucradas, y el registro completo del yup al que se refiere, pero solo mientras la denuncia está abierta. Cada denuncia que abre una revisora o un revisor, y cada decisión, queda escrita en un historial que no se puede cambiar. Nadie revisa una denuncia en la que está involucrado."
+        },
+        {
+          "p": "Las personas que operan Yuppers también pueden acceder directamente a la base de datos, para operar el servicio, hacer copias de seguridad y atender solicitudes como la tuya."
+        },
+        {
+          "h": "Proveedores de servicios"
+        },
+        {
+          "p": "Usamos estas empresas para operar Yuppers. Cada una recibe la información necesaria para la tarea descrita:"
+        },
+        {
+          "ul": [
+            "Render aloja nuestro servicio, nuestra base de datos, los registros de nuestros servidores y las copias de seguridad de la base de datos, en los Estados Unidos.",
+            "Cloudflare gestiona el DNS de nuestro dominio y lleva cada solicitud a yuppers.app por su red antes de que llegue a Render, así que maneja tu dirección IP y la solicitud. Puede pedirle a tu navegador que le informe de errores de conexión. También reenvía el correo que se envía a nuestras direcciones, como {privacyEmail}.",
+            "Postmark envía nuestros correos, así que recibe tu correo electrónico y el mensaje: un código de un solo uso, o un aviso de que pasó algo en uno de tus yups (que nunca incluye los términos).",
+            "Twilio, cuando enviamos mensajes de texto, recibe tu número de teléfono y el mensaje: un código de un solo uso o, si las activaste, una actualización de un acuerdo.",
+            "Expo, Apple y Google, si activas las notificaciones en la app: Expo recibe el token de notificaciones de tu dispositivo y la notificación, y se los pasa al servicio de notificaciones de Apple o de Google, que la entrega. Una notificación solo dice “Tu yup tiene novedades.”, con el identificador interno del yup para que la app pueda abrirlo.",
+            "Apple y Google, si agregas un pase de Wallet: Apple entrega las actualizaciones del pase a tus dispositivos, y Google guarda el pase (su estado, su código de referencia y el número de elementos) para mostrarlo en Google Wallet."
+          ]
+        },
+        {
+          "p": "No compartimos tu información con nadie más, salvo cuando la ley nos obliga. No la vendemos, no la compartimos para publicidad y no dejamos que nadie la use para su propio marketing."
+        }
+      ]
+    },
+    "text-messages": {
+      "title": "Mensajes de texto (SMS)",
+      "blocks": [
+        {
+          "p": "Cuando los ofrecemos, Yuppers.app envía mensajes de texto en dos programas, y para nada más: nada de marketing."
+        },
+        {
+          "ul": [
+            "Códigos de Yuppers.app para entrar (Yuppers.app sign-in codes): un código de un solo uso para entrar (con lo que también se crea tu cuenta la primera vez), o para confirmar que quieres eliminar tu cuenta. Lo enviamos solo cuando pides un código, y solo al número que escribiste o, para confirmar una eliminación, al número de tu cuenta. Escribir tu número y pedir un código es tu solicitud de ese mensaje. Frecuencia de los mensajes: un mensaje por cada código que pides.",
+            "Actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates): si activas las actualizaciones por mensaje de texto para un acuerdo, marcando una casilla en ese acuerdo, te enviamos un mensaje cuando cambia su estado, por ejemplo cuando la otra persona firma, marca algo como entregado, lo confirma, lo disputa o pide cerrarlo. La frecuencia de los mensajes varía; no hay un máximo fijo: un mensaje por cada cambio de estado de un acuerdo para el que activaste las actualizaciones. Una actualización solo dice que algo cambió, con un enlace para entrar y verlo. Nunca incluye los términos, las cantidades ni los nombres de lo que se entrega, igual que nuestros correos y las notificaciones de la app.",
+            "Pueden aplicarse tarifas por mensajes y datos. (Message and data rates may apply.)",
+            "**Responde HELP para obtener ayuda.** **Responde STOP para dejar de recibir nuestros mensajes.** STOP detiene todos los mensajes de Yuppers.app, incluidos los códigos para entrar, así que tendrás que entrar con un correo electrónico. Desactivar las actualizaciones de un acuerdo las detiene solo para ese acuerdo.",
+            "No enviamos mensajes a números fuera de +1: solo enviamos mensajes a números que empiezan con el código de país +1.",
+            "No vendemos tu información personal. No compartimos tu información personal ni tus datos y consentimiento de suscripción a SMS con terceros ni con afiliados con fines de marketing o promoción.",
+            "La información móvil no se compartirá con terceros ni con afiliados con fines de marketing o promoción.",
+            "La información móvil y el consentimiento de suscripción no se comparten con terceros ni con afiliados con fines de marketing o promoción.",
+            "Para entregar los mensajes, le damos tu número de teléfono y el mensaje a nuestro proveedor de SMS, Twilio, y a nadie más.",
+            "Los operadores no son responsables de los mensajes retrasados o no entregados."
+          ]
+        },
+        {
+          "p": "Para obtener ayuda con los mensajes de texto, escribe a {supportEmail} o responde HELP a cualquiera de nuestros mensajes. Para preguntas sobre privacidad, escribe a {privacyEmail}. Los términos de los dos programas están en nuestros {terms}."
+        }
+      ]
+    },
+    "how-long-we-keep-it": {
+      "title": "Cuánto tiempo lo guardamos",
+      "blocks": [
+        {
+          "ul": [
+            "Tu correo electrónico, tu número de teléfono, tu nombre y tu idioma: mientras tengas una cuenta. Al eliminar tu cuenta se borran de inmediato.",
+            "Los yups que se enviaron, con todo lo que contienen y su historial: los guardamos como el registro compartido de lo que se propuso y se acordó. No los borramos cuando una de las personas, o las dos, eliminan sus cuentas, y no hemos fijado un plazo después del cual se borren.",
+            "Los borradores que no has enviado: hasta que los envíes, los descartes o elimines tu cuenta.",
+            "La dirección IP y el agente de usuario registrados con una firma: {networkDays} días.",
+            "Los códigos de un solo uso: cada código sirve durante {codeMinutes} minutos, y una sola vez. Todavía no borramos de forma periódica los registros de los códigos (el hash, adónde se envió y cuándo); al eliminar tu cuenta se borran los de tu correo electrónico y tu número de teléfono.",
+            "Las sesiones: cada una dura {sessionDays} días, salvo que la cierres antes.",
+            "Las cuentas de los límites para entrar: dos días.",
+            "Los tokens de notificaciones: hasta que desactives las notificaciones, cierres la sesión en ese dispositivo o elimines tu cuenta, o hasta que el servicio de notificaciones nos diga que el token ya no funciona.",
+            "Los pases de Wallet: el registro de un pase se queda con su yup; cuando eliminas tu cuenta, tus pases se anulan. Los identificadores de dispositivo que nos da Apple se borran cuando un dispositivo quita el pase, y a más tardar 30 días después de que el pase se anula.",
+            "Las denuncias, y el historial de su revisión: se guardan, también después de que se elimina una cuenta, para que irse no borre una queja. Los bloqueos que haces: hasta que desbloquees a la persona o elimines tu cuenta.",
+            "Los registros de los servidores: los guarda nuestro proveedor de alojamiento, Render, hasta 30 días.",
+            "Las copias de seguridad: nuestro proveedor de alojamiento guarda copias de la base de datos para recuperarla durante hasta 7 días, y podemos guardar nuestras propias copias de seguridad durante un tiempo limitado. Si alguna vez restauramos una copia de seguridad, primero volvemos a eliminar cada cuenta que se eliminó después de hacerse la copia, así que una cuenta eliminada sigue eliminada.",
+            "El registro de eliminaciones: cuando se elimina una cuenta, guardamos su identificador y la hora, y nada más, para que una copia de seguridad restaurada no pueda devolverla."
+          ]
+        }
+      ]
+    },
+    "deleting-your-account": {
+      "title": "Eliminar tu cuenta",
+      "blocks": [
+        {
+          "p": "Puedes eliminar tu cuenta tú mismo, en cualquier momento, desde la página de tu cuenta en el sitio web o en la app. Para confirmar que eres tú, te enviamos a tu correo electrónico o a tu teléfono un código de un solo uso que solo sirve para eliminar tu cuenta. La eliminación no se puede deshacer."
+        },
+        {
+          "h": "Qué se borra"
+        },
+        {
+          "ul": [
+            "Se cierra tu sesión en todos los dispositivos.",
+            "Tu correo electrónico, tu número de teléfono, tu nombre y tu idioma se borran de la cuenta.",
+            "Tus códigos de un solo uso, los dispositivos registrados para tus notificaciones, los borradores que no has enviado, las notificaciones que esperaban enviarse y tu lista de personas bloqueadas.",
+            "Los enlaces de invitación que creaste y que nadie usó dejan de funcionar, y olvidan la dirección a la que iban dirigidos.",
+            "Tus pases de Wallet se anulan."
+          ]
+        },
+        {
+          "h": "Qué pasa con los yups que siguen abiertos"
+        },
+        {
+          "ul": [
+            "Un borrador que no has enviado se descarta.",
+            "Una propuesta que espera firma termina sin acuerdo.",
+            "Un acuerdo en curso recibe una solicitud de cierre, hecha en tu nombre. Se le avisa a la otra persona y tiene tiempo para responder, y después se cierra sin resolver."
+          ]
+        },
+        {
+          "h": "Qué se queda, y por qué"
+        },
+        {
+          "ul": [
+            "Los yups que se enviaron se quedan con la otra persona, como el registro de lo que se propuso y se acordó: los términos, el historial, tu firma y tu nombre exactamente como lo da el acuerdo. Tu nombre en esos registros no se borra ni se reemplaza.",
+            "La dirección IP y el agente de usuario registrados con tus firmas, hasta {networkDays} días después de cada firma.",
+            "Las denuncias que hiciste, o que se hicieron sobre ti, y el historial de su revisión.",
+            "Un registro de la cuenta sin datos de contacto y sin nombre: su identificador, cuándo se creó y cuándo su titular confirmó tener 18 años o más, en lo que se basan las firmas que dio; y su línea en el registro de eliminaciones.",
+            "Las copias de seguridad, hasta que caduquen como se describe arriba."
+          ]
+        },
+        {
+          "p": "Más adelante puedes volver a registrarte con el mismo correo electrónico o número de teléfono. Será una cuenta nueva, sin ninguno de tus yups anteriores."
+        }
+      ]
+    },
+    "your-choices": {
+      "title": "Tus opciones y solicitudes",
+      "blocks": [
+        {
+          "ul": [
+            "Ver tu información: la página de tu cuenta muestra tu correo electrónico, tu número de teléfono, tu nombre y tu idioma, y cada yup muestra todo lo que contiene, con su historial completo.",
+            "Corregirla: puedes cambiar tu nombre y tu idioma en la página de tu cuenta. Un nombre cambiado ahí se usa desde ese momento; los acuerdos ya enviados conservan los nombres con que se escribieron.",
+            "Llevarte una copia: puedes descargar el registro de cada yup como archivo, o imprimirlo o guardarlo como PDF.",
+            "Eliminar tu cuenta: desde la página de tu cuenta, como se describe arriba.",
+            "Notificaciones en la app: actívalas o desactívalas en la pantalla de tu cuenta en la app, o en los ajustes de tu teléfono. Los correos sobre tus yups son la forma en que te avisamos de que algo te necesita, así que no hay un ajuste para desactivarlos; nunca enviamos correos de marketing."
+          ]
+        },
+        {
+          "p": "Para lo que no puedas hacer tú mismo, como cambiar tu correo electrónico o tu número de teléfono, pedir una copia de tu información o hacer una pregunta sobre esta política, escribe a {privacyEmail}. Puede que necesitemos confirmar que la solicitud viene de ti antes de atenderla."
+        },
+        {
+          "p": "Las personas que residen en algunos estados pueden tener derechos adicionales según las leyes de su estado. Puedes hacer cualquier solicitud de privacidad en {privacyEmail}, y te responderemos."
+        }
+      ]
+    },
+    "children": {
+      "title": "Menores de edad",
+      "blocks": [
+        {
+          "p": "Yuppers es solo para personas adultas de 18 años o más. Todas las personas confirman que tienen 18 años o más al configurar su cuenta, y nadie puede firmar un yup sin esa confirmación. No recopilamos a sabiendas información sobre menores de 18 años. Si crees que alguien menor de 18 años está usando Yuppers, denúncialo desde el yup (“Participa alguien menor de 18 años”) o escribe a {privacyEmail}."
+        }
+      ]
+    },
+    "security": {
+      "title": "Seguridad",
+      "blocks": [
+        {
+          "ul": [
+            "Las conexiones con Yuppers están cifradas (HTTPS), y los navegadores reciben la instrucción de no usar otra cosa.",
+            "Guardamos los códigos de un solo uso, los tokens de sesión, los códigos de los enlaces de invitación y los tokens de Wallet solo como hashes, nunca tal cual.",
+            "El servicio usa una cuenta restringida de la base de datos que puede agregar al historial de un acuerdo pero no cambiarlo ni borrarlo, y la propia base de datos rechaza cambios en ese historial.",
+            "Solo las personas que designamos para revisar denuncias pueden ver los yups denunciados, solo mientras la denuncia está abierta y después de haber entrado en las últimas 12 horas, y queda registrada cada denuncia que abren.",
+            "Nuestros registros dejan fuera la información personal, como correos electrónicos, números de teléfono, códigos y tokens."
+          ]
+        },
+        {
+          "p": "Ningún sistema es perfectamente seguro, y no podemos prometer que nadie que no deba vaya a acceder nunca a la información. Si crees que alguien usó tu cuenta indebidamente, escribe a {privacyEmail}."
+        }
+      ]
+    },
+    "changes": {
+      "title": "Cambios en esta política",
+      "blocks": [
+        {
+          "p": "Cuando cambie la forma en que Yuppers maneja la información, actualizaremos esta política y publicaremos la nueva versión en esta página, con una nueva fecha de entrada en vigor al principio."
+        }
+      ]
+    }
+  }
+}

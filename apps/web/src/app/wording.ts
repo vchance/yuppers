@@ -1,8 +1,11 @@
 import {
   languages,
   pickLanguage,
+  legalPathOf,
   type HelpWording,
   type Language,
+  type LegalDocument,
+  type LegalWording,
   type Wording,
 } from '@yuppers/shared'
 
@@ -39,14 +42,51 @@ export function loadHelp(language: Language): Promise<HelpWording> {
   return helpFiles[path]()
 }
 
+/*
+ * The privacy policy's and the terms' text, likewise a file of its own per
+ * document and language, fetched only by their page. Each is kept once it
+ * has arrived, so that a page that fetched it before the app first drew
+ * (`main.tsx`) shows it at once.
+ */
+const legalFiles: Record<LegalDocument, Record<string, () => Promise<LegalWording>>> = {
+  privacy: import.meta.glob<LegalWording>('../../../../packages/shared/wording/privacy/*.json', {
+    import: 'default',
+  }),
+  terms: import.meta.glob<LegalWording>('../../../../packages/shared/wording/terms/*.json', {
+    import: 'default',
+  }),
+}
+const legalLoaded = new Map<string, LegalWording>()
+
+export function loadLegal(document: LegalDocument, language: Language): Promise<LegalWording> {
+  const files = legalFiles[document]
+  const path = Object.keys(files).find((file) => file.endsWith(`/${language}.json`))
+  if (!path) return Promise.reject(new Error(`no ${document} document in ${language}`))
+  return files[path]().then((wording) => {
+    legalLoaded.set(`${document}/${language}`, wording)
+    return wording
+  })
+}
+
+/** The document in `language`, if it has already arrived. */
+export function loadedLegal(document: LegalDocument, language: Language): LegalWording | null {
+  return legalLoaded.get(`${document}/${language}`) ?? null
+}
+
 /**
- * The language a link asked for with `?lang=`, if it is one we have. The
- * mobile app opens help pages this way, in a browser that does not know
- * which language the app is in. It is not remembered.
+ * The language the address asks for, if it is one we have: with `?lang=`,
+ * as the mobile app opens help pages, in a browser that does not know which
+ * language the app is in; or as the privacy policy's or the terms' address
+ * names it, `/{language}/privacy`. It is not remembered.
  */
 export function addressLanguage(): Language | null {
   const asked = new URLSearchParams(window.location.search).get('lang')?.toLowerCase()
-  return languages.find((info) => info.code.toLowerCase() === asked)?.code ?? null
+  const found = languages.find((info) => info.code.toLowerCase() === asked)?.code
+  if (found) return found
+  // `/privacy` names no language: it is where anyone lands who named none.
+  const legal = legalPathOf(window.location.pathname)
+  if (!legal?.named) return null
+  return languages.find((info) => info.code === legal.language)?.code ?? null
 }
 
 const CHOICE = 'yuppers.language'

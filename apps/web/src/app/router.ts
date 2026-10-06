@@ -27,6 +27,16 @@ export function navigate(to: string, options: { replace?: boolean } = {}): void 
 }
 
 /**
+ * Changes the address without moving to another page or scrolling: the
+ * same page under the address that names what it now shows, such as the
+ * privacy policy's in the language it is read in. The fragment is kept.
+ */
+export function replaceAddress(to: string): void {
+  window.history.replaceState(window.history.state, '', `${to}${window.location.hash}`)
+  for (const listener of listeners) listener()
+}
+
+/**
  * Whether the person has moved between pages since the app loaded. A page
  * reached that way takes the focus to its heading; the first page leaves the
  * focus where the browser put it.

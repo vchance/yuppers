@@ -17,6 +17,7 @@ import {
   TextField,
 } from '../components/ui';
 import { HelpLink } from '../components/HelpLink';
+import { LegalLinks } from '../components/LegalLinks';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
 
@@ -34,6 +35,12 @@ export function DeleteAccount({ account }: { account: Account }) {
     <>
       <Heading level={2}>{w.heading}</Heading>
       <HelpLink place="deletion" />
+      <LegalLinks
+        documents={['privacy']}
+        testID="privacy-deletion"
+        section="deleting-your-account"
+        label={wording.privacy.deletion}
+      />
       {open ? (
         <Steps account={account} onCancel={() => setOpen(false)} />
       ) : (

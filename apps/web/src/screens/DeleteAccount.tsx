@@ -6,6 +6,7 @@ import { useI18n, useSession } from '../app/context'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { HelpLink } from '../components/HelpLink'
+import { LegalLink } from '../components/LegalLink'
 import { Panel } from '../components/Panel'
 import { Failure, Field, Notice, Written } from '../components/ui'
 import { api } from '../lib/api'
@@ -31,6 +32,13 @@ export default function DeleteAccount({ account }: { account: Account }) {
     <section aria-labelledby="deletion-heading">
       <h2 id="deletion-heading">{w.heading}</h2>
       <HelpLink place="deletion" />
+      <p className="learn-more">
+        <LegalLink
+          document="privacy"
+          section="deleting-your-account"
+          label={wording.privacy.deletion}
+        />
+      </p>
       {open ? (
         <Steps
           account={account}

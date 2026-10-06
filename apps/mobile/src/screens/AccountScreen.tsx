@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { BuildVersion } from '../components/BuildVersion';
 import { NotificationsSetting } from '../components/Notifications';
+import { LegalLinks } from '../components/LegalLinks';
 import { Actions, Button, Heading, Label, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { openHelp } from '../lib/help';
@@ -64,6 +65,7 @@ export function AccountScreen() {
           onPress={() => void openHelp(language)}
         />
       </Actions>
+      <LegalLinks />
       <View style={[styles.rule, { backgroundColor: colors.border }]} />
       <Actions>
         <Button label={wording.nav.signOut} disabled={leaving} onPress={() => void leave()} />

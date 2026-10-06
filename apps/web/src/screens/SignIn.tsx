@@ -10,6 +10,7 @@ import {
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
+import { LegalLink } from '../components/LegalLink'
 import { ErrorNote, Failure, Field, Notice } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
@@ -149,6 +150,18 @@ export function SignIn() {
             {w.sendCode}
           </button>
         </div>
+        {/* What a text message costs and how to stop them, said wherever a
+            code can go to a phone number, before one is asked for. */}
+        {phone && (
+          <p className="hint">
+            {wording.privacy.sms}{' '}
+            <LegalLink document="privacy" section="text-messages" label={wording.privacy.smsLink} />
+          </p>
+        )}
+        <p className="learn-more legal-links">
+          <LegalLink document="privacy" />
+          <LegalLink document="terms" />
+        </p>
       </form>
     )
   }

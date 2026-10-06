@@ -1,8 +1,9 @@
 //! The service serving the web app from the same origin as the API
 //! (DESIGN.md §13.5), against a directory laid out as the web build writes
 //! it: the app's `index.html`, one entry page per language at
-//! `{language}/i/index.html`, hashed files under `assets/`, and the public
-//! files beside them. Needs no database: nothing here reaches one.
+//! `{language}/i/index.html`, the privacy policy's and the terms' page in
+//! each language,
+//! hashed files under `assets/`, and the public files beside them. Needs no database: nothing here reaches one.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,6 +25,10 @@ use yuppers_backend::http::{self, AppLinks, AppState, Settings, TrustedProxies, 
 const HOME: &str = "<!doctype html><html lang=\"en\"><title>Yuppers</title>home</html>";
 const EN: &str = "<!doctype html><html lang=\"en\"><title>Invitation</title>en</html>";
 const ES: &str = "<!doctype html><html lang=\"es\"><title>Invitación</title>es</html>";
+const PRIVACY: &str = "<!doctype html><html lang=\"en\"><title>Privacy policy</title><h2 id=\"text-messages\">Text messages</h2></html>";
+const PRIVACY_ES: &str = "<!doctype html><html lang=\"es\"><title>Política de privacidad</title><h2 id=\"text-messages\">Mensajes</h2></html>";
+const TERMS: &str = "<!doctype html><html lang=\"en\"><title>Terms and Conditions</title><h2 id=\"text-messages\">Text messages</h2></html>";
+const TERMS_ES: &str = "<!doctype html><html lang=\"es\"><title>Términos y condiciones</title><h2 id=\"text-messages\">Mensajes</h2></html>";
 const SCRIPT: &str = "console.log('hashed')";
 const ICON: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
 
@@ -45,6 +50,10 @@ impl Build {
         write("index.html", HOME);
         write("en/i/index.html", EN);
         write("es/i/index.html", ES);
+        write("privacy/index.html", PRIVACY);
+        write("es/privacy/index.html", PRIVACY_ES);
+        write("terms/index.html", TERMS);
+        write("es/terms/index.html", TERMS_ES);
         write("assets/index-DCaXBRW7.js", SCRIPT);
         write("favicon.svg", ICON);
         Self(directory)
@@ -182,6 +191,86 @@ async fn the_entry_pages_and_the_app_are_served_without_redirects() {
     let head = fetch(&app, Method::HEAD, "/es/i").await;
     assert_eq!(head.status, StatusCode::OK);
     assert_eq!(head.body, "");
+}
+
+#[tokio::test]
+async fn the_privacy_policy_and_the_terms_are_pages_of_their_own_in_each_language_and_need_no_script()
+ {
+    let build = Build::write();
+    let web = WebApp::open(build.path()).unwrap();
+    assert_eq!(
+        web.legal_pages().collect::<Vec<_>>(),
+        ["/privacy", "/es/privacy", "/terms", "/es/terms"]
+    );
+    let app = service("https://app.example.test", Some(web));
+
+    for (path, body) in [
+        ("/privacy", PRIVACY),
+        ("/privacy/", PRIVACY),
+        ("/es/privacy", PRIVACY_ES),
+        ("/es/privacy/", PRIVACY_ES),
+        ("/terms", TERMS),
+        ("/terms/", TERMS),
+        ("/es/terms", TERMS_ES),
+        ("/es/terms/", TERMS_ES),
+    ] {
+        let page = get(&app, path).await;
+        assert_eq!(page.status, StatusCode::OK, "{path}");
+        assert_eq!(page.header(LOCATION), "", "{path}: no redirect");
+        assert!(page.header(CONTENT_TYPE).starts_with("text/html"), "{path}");
+        assert_eq!(page.body, body, "{path}");
+        // A page like any other: checked each time, and under the same
+        // policy, which allows no inline script or style.
+        assert_eq!(page.header(CACHE_CONTROL), "no-cache", "{path}");
+        assert_eq!(
+            page.header(CONTENT_SECURITY_POLICY),
+            "default-src 'self'; img-src 'self' data:; object-src 'none'; \
+             base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            "{path}"
+        );
+        assert_eq!(page.header(X_CONTENT_TYPE_OPTIONS), "nosniff", "{path}");
+        assert_eq!(page.header(X_FRAME_OPTIONS), "DENY", "{path}");
+        assert_eq!(page.header(REFERRER_POLICY), "no-referrer", "{path}");
+        assert_eq!(
+            page.header(STRICT_TRANSPORT_SECURITY),
+            "max-age=31536000",
+            "{path}"
+        );
+    }
+
+    // The default language has no page under its own code, and a language
+    // the build does not have has none at all: the app's page answers, and
+    // shows the policy itself.
+    for path in [
+        "/en/privacy",
+        "/fr/privacy",
+        "/privacy/more",
+        "/en/terms",
+        "/fr/terms",
+    ] {
+        let page = get(&app, path).await;
+        assert_eq!(page.status, StatusCode::OK, "{path}");
+        assert_eq!(page.body, HOME, "{path}");
+    }
+
+    let head = fetch(&app, Method::HEAD, "/es/terms").await;
+    assert_eq!(head.status, StatusCode::OK);
+    assert_eq!(head.body, "");
+}
+
+#[tokio::test]
+async fn a_build_without_the_documents_pages_still_serves_the_app_there() {
+    let build = Build::write();
+    for document in ["privacy", "terms"] {
+        std::fs::remove_dir_all(build.path().join(document)).unwrap();
+        std::fs::remove_dir_all(build.path().join("es").join(document)).unwrap();
+    }
+    let web = WebApp::open(build.path()).unwrap();
+    assert_eq!(web.legal_pages().count(), 0);
+    let app = service("http://localhost:8080", Some(web));
+    for path in ["/privacy", "/es/privacy", "/terms", "/es/terms"] {
+        assert_eq!(get(&app, path).await.body, HOME, "{path}");
+    }
 }
 
 #[tokio::test]

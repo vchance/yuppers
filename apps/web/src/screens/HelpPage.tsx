@@ -67,11 +67,17 @@ function useText() {
 }
 
 function Contents({ help }: { help: HelpWording }) {
+  const { wording, language } = useI18n()
   return (
     <div className="help">
       <PageHeading>{help.title}</PageHeading>
       <p>{help.intro}</p>
       <TopicList help={help} current={null} />
+      {/* What we collect and keep, and on what terms: beside the topics. */}
+      <p className="learn-more legal-links">
+        <Link to={paths.legal('privacy', language)}>{wording.privacy.policy}</Link>
+        <Link to={paths.legal('terms', language)}>{wording.termsOfUse.document}</Link>
+      </p>
     </div>
   )
 }

@@ -1064,6 +1064,32 @@ export interface Wording {
     /** The link to the topic that explains one place in the product, named for that place. */
     learnMore: Record<HelpLinkPlace, string>
   }
+  /**
+   * The ways to the privacy policy. Its own text is not here but in
+   * `wording/privacy/` (`PrivacyWording`), so that only its pages load it.
+   */
+  privacy: {
+    /** The short link: the web app's footer, beside "Help". */
+    link: string
+    /** The policy's name, for a link that stands on its own: sign-in, the account screens, the help pages. */
+    policy: string
+    /** Under the sign-in form, only where codes can go to phone numbers: what a text message costs and how to stop them. */
+    sms: string
+    /** After `sms`: the link to the policy's section on text messages. */
+    smsLink: string
+    /** Beside account deletion: the link to the policy's section on what deleting leaves. */
+    deletion: string
+  }
+  /**
+   * The ways to the terms and conditions. Their own text is in
+   * `wording/terms/` (`TermsWording`), like the privacy policy's.
+   */
+  termsOfUse: {
+    /** The short link: the web app's footer, beside "Privacy". */
+    link: string
+    /** The document's name, for a link that stands on its own, beside the privacy policy's. */
+    document: string
+  }
   /** One entry per error code the API can return. */
   errors: Record<ErrorCode, string>
   /**

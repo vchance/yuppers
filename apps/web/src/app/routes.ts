@@ -1,4 +1,10 @@
-import { helpPath, invitationPath } from '@yuppers/shared'
+import {
+  helpPath,
+  invitationPath,
+  legalPath,
+  legalPathOf,
+  type LegalDocument,
+} from '@yuppers/shared'
 
 // Reading the token back out of a link is the same on every client.
 export { invitationToken } from '@yuppers/shared'
@@ -21,6 +27,8 @@ export type Route =
   | { name: 'record'; id: string }
   /** The help pages: the list of topics, or one topic, which may not exist. */
   | { name: 'help'; topic: string | null }
+  /** The privacy policy or the terms, at `/{document}` or `/{language}/{document}`. */
+  | { name: 'legal'; document: LegalDocument }
   /** Staff review of abuse reports: the queue. Nothing links here; to anyone but a reviewer it is not found. */
   | { name: 'staff' }
   /** One report, opened for review. */
@@ -45,6 +53,8 @@ export function matchRoute(pathname: string): Route {
   if (path === '/help') return { name: 'help', topic: null }
   const help = HELP_TOPIC.exec(path)
   if (help) return { name: 'help', topic: help[1] }
+  const legal = legalPathOf(path)
+  if (legal) return { name: 'legal', document: legal.document }
   if (path === '/staff') return { name: 'staff' }
   const staffReport = STAFF_REPORT.exec(path)
   if (staffReport) return { name: 'staffReport', id: staffReport[1].toLowerCase() }
@@ -67,6 +77,8 @@ export const paths = {
   revise: (id: string) => `/exchanges/${id}/revise`,
   record: (id: string) => `/exchanges/${id}/record`,
   help: helpPath,
+  /** The privacy policy or the terms in a language: `/privacy`, `/terms` in the default one. */
+  legal: legalPath,
   staff: '/staff',
   staffReport: (id: string) => `/staff/reports/${id}`,
   /**

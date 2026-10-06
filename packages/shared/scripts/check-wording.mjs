@@ -8,6 +8,11 @@
 // of its own. A help page is a list of headings, paragraphs and lists, and a
 // list's entries are keys like any other (`blocks.3.ul.0`), so every language
 // must have the same pieces in the same order.
+//
+// The privacy policy's text, in `wording/privacy/`, and the terms', in
+// `wording/terms/`, are two more sets, checked the same way: every language
+// has the same sections, under the same anchors, with the same pieces in the
+// same order.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -46,8 +51,8 @@ if (new Set(codes).size !== codes.length) problems.push('languages.json lists a 
 
 /**
  * Checks one set of wording files, `folder` being '' for the product's
- * wording or 'help/' for the help pages'. Returns how many messages each
- * language has.
+ * wording, 'help/' for the help pages', or 'privacy/' or 'terms/' for
+ * the privacy policy's or the terms'. Returns how many messages each language has.
  */
 function check(folder) {
   const label = (code) => `${folder}${code}`
@@ -93,11 +98,14 @@ function check(folder) {
 
 const messages = check('')
 const helpMessages = check('help/')
+const privacyMessages = check('privacy/')
+const termsMessages = check('terms/')
 
 if (problems.length > 0) {
   console.error(problems.join('\n'))
   process.exit(1)
 }
 console.log(
-  `wording: ${codes.length} languages, ${messages} messages each, and ${helpMessages} in help`,
+  `wording: ${codes.length} languages, ${messages} messages each, ${helpMessages} in help, ` +
+    `${privacyMessages} in the privacy policy and ${termsMessages} in the terms`,
 )

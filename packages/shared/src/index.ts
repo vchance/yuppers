@@ -16,6 +16,34 @@ export {
   isHelpTopic,
 } from './help'
 export type { HelpLinkPlace, HelpTopic } from './help'
+export {
+  LEGAL_DOCUMENTS,
+  LEGAL_EFFECTIVE_DATES,
+  LEGAL_FIGURES,
+  LEGAL_LINKS,
+  LEGAL_SECTIONS,
+  PRIVACY_EMAIL,
+  SUPPORT_EMAIL,
+  legalAddress,
+  legalEffectiveDate,
+  legalInline,
+  legalPath,
+  legalPathOf,
+  legalSections,
+} from './legal'
+export type {
+  LegalBlock,
+  LegalDocument,
+  LegalInline,
+  LegalLinkName,
+  LegalSection,
+  LegalSectionWording,
+  LegalWording,
+  PrivacySection,
+  PrivacyWording,
+  TermsSection,
+  TermsWording,
+} from './legal'
 export { CONSENT_VERSION, consentShown } from './consent'
 export { formatMessage } from './message'
 export { labelText } from './label'

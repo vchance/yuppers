@@ -26,6 +26,7 @@ import { InvitationFor, InvitationLink } from '../components/InvitationLink'
 import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
+import { SmsUpdates } from '../components/SmsUpdates'
 import { WalletButton } from '../components/WalletButton'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { restoreFocus, useActions, type Actions } from '../lib/actions'
@@ -257,6 +258,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <SmsUpdates exchange={exchange} />
 
       <History exchange={exchange} reading={history} money={money} />
 

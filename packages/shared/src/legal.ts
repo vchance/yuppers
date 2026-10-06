@@ -13,10 +13,12 @@ export {
   LEGAL_LINKS,
   LEGAL_SECTIONS,
   PRIVACY_EMAIL,
+  STATIC_PAGES,
   SUPPORT_EMAIL,
   legalEffectiveDate,
   legalInline,
   legalSections,
+  staticPagePath,
 } from './legal-text'
 export type {
   LegalBlock,
@@ -28,6 +30,7 @@ export type {
   LegalWording,
   PrivacySection,
   PrivacyWording,
+  StaticPage,
   TermsSection,
   TermsWording,
 } from './legal-text'

@@ -7,7 +7,8 @@
   "otherLanguages": "These terms in other languages",
   "links": {
     "privacy": "Privacy policy",
-    "privacyTexts": "the section on text messages in our privacy policy"
+    "privacyTexts": "the section on text messages in our privacy policy",
+    "smsOptIn": "how people opt in to texts from Yuppers.app"
   },
   "sections": {
     "who-runs-yuppers": {
@@ -149,6 +150,7 @@
             "Program name: Yuppers.app agreement updates.",
             "Description: If you turn on text updates for an agreement, Yuppers.app texts you when its status changes: for example, when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it.",
             "How you opt in: by ticking a box on that agreement, which shows this text: “Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”",
+            "Before the box, if your account has no phone number, you add one, a US number that we check with a one-time code sent to it by text.",
             "Message frequency: Message frequency varies; there is no fixed maximum. One text per status change of an agreement you turned updates on for.",
             "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
             "Turning text updates off for an agreement stops them for that agreement only."
@@ -167,6 +169,9 @@
             "We do not sell your personal information. We do not share your personal information or your SMS opt-in data and consent with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes."
           ]
+        },
+        {
+          "p": "Every step of opting in, with the exact wording of each screen and each message, is shown on the page on {smsOptIn}."
         },
         {
           "p": "How we handle your phone number and these texts is in {privacyTexts}."

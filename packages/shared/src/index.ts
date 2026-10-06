@@ -23,6 +23,7 @@ export {
   LEGAL_LINKS,
   LEGAL_SECTIONS,
   PRIVACY_EMAIL,
+  STATIC_PAGES,
   SUPPORT_EMAIL,
   legalAddress,
   legalEffectiveDate,
@@ -30,6 +31,7 @@ export {
   legalPath,
   legalPathOf,
   legalSections,
+  staticPagePath,
 } from './legal'
 export type {
   LegalBlock,
@@ -41,6 +43,7 @@ export type {
   LegalWording,
   PrivacySection,
   PrivacyWording,
+  StaticPage,
   TermsSection,
   TermsWording,
 } from './legal'
@@ -176,6 +179,8 @@ export type {
   SendRevision,
   SessionCreated,
   SessionHolding,
+  SetSmsUpdates,
+  SmsUpdates,
   Slot,
   WalletLink,
   WalletPlatform,
@@ -259,6 +264,20 @@ export {
   walletPlatforms,
 } from './wallet'
 export type { WalletApi, WalletButton } from './wallet'
+export {
+  consentPieces,
+  maskPhone,
+  SMS_CONSENT_VERSION,
+  smsUpdatesOffered,
+  usPhone,
+  useSmsUpdates,
+} from './sms-updates'
+export type {
+  ConsentPiece,
+  SmsUpdatesApi,
+  SmsUpdatesControl,
+  SmsUpdatesStep,
+} from './sms-updates'
 export {
   codeWaitText,
   identifierRefused,

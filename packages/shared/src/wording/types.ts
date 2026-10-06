@@ -180,6 +180,14 @@ export interface Wording {
   sms: {
     signIn: string
     deleteAccount: string
+    /**
+     * An agreement update by text, sent by the service: `{link}` to the
+     * exchange and nothing else, within the GSM alphabet
+     * (`backend/src/notifications/sms_updates.rs`).
+     */
+    update: string
+    /** The text confirming that updates were turned on, as the carriers ask. */
+    optInConfirmation: string
   }
   common: {
     loading: string
@@ -880,6 +888,39 @@ export interface Wording {
     addStatement: string
     sendStatement: string
     statementAdded: string
+  }
+  /**
+   * Text updates for an agreement (DESIGN.md §12), on the exchange view:
+   * adding a phone number, the consent box, and where things stand.
+   */
+  smsUpdates: {
+    heading: string
+    intro: string
+    addPhoneIntro: string
+    phoneLabel: string
+    phoneHint: string
+    phoneInvalid: string
+    sendCode: string
+    /** `{phone}`, masked. */
+    codeSent: string
+    codeLabel: string
+    addPhone: string
+    changePhone: string
+    /** `{phone}`, masked. */
+    phoneAdded: string
+    /**
+     * The consent wording beside the box, word for word as the terms quote
+     * it; its two addresses are links. Its version is `SMS_CONSENT_VERSION`.
+     */
+    consent: string
+    save: string
+    /** `{phone}`, masked. */
+    on: string
+    off: string
+    /** `{phone}`, masked. */
+    optedOut: string
+    /** The link to the page on how people opt in, and to the terms on texts. */
+    howItWorks: string
   }
   /**
    * Wallet passes (DESIGN.md §11): the button on the exchange view, and what

@@ -523,6 +523,12 @@ export interface FakeService {
   proposed: boolean
   /** A refusal for every request for a code from now on, such as a limit. */
   refuseCodes: ErrorCode | null
+  /** Whether the service texts agreement updates (`sms_updates` in its meta). */
+  texting: boolean
+  /** The agreements the account has turned text updates on for. */
+  textUpdates: Set<string>
+  /** Whether the account's number replied STOP. */
+  optedOut: boolean
   fetch: typeof fetch
 }
 
@@ -534,6 +540,9 @@ export function fakeService(account: Account | null): FakeService {
     codeSender: CODE_SENDER,
     proposed: false,
     refuseCodes: null,
+    texting: true,
+    textUpdates: new Set(),
+    optedOut: false,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -674,6 +683,17 @@ function staff(call: string): [number, unknown] | null {
   return null
 }
 
+/** Where the account stands on text updates for an agreement. */
+function textUpdates(service: FakeService, exchange: ExchangeView) {
+  return {
+    on: service.textUpdates.has(exchange.id),
+    available: service.texting && ['NEGOTIATING', 'ACTIVE'].includes(exchange.state),
+    phone: service.account?.phone ?? null,
+    opted_out: service.optedOut,
+    consent_version: '2026-10-05',
+  }
+}
+
 function respond(service: FakeService, call: string, body: unknown): [number, unknown] {
   if (call === 'GET /v1/meta') {
     return [
@@ -688,6 +708,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
         wallet_platforms: ['APPLE', 'GOOGLE'],
         sign_in_channels: service.phone ? ['email', 'phone'] : ['email'],
         sms_country_codes: service.phone ? ['+1'] : [],
+        sms_updates: service.texting,
         ...(service.codeSender ? { code_sender: service.codeSender } : {}),
       },
     ]
@@ -728,6 +749,14 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return onlyIfYours ? [404, { code: 'INVITATION_UNAVAILABLE' }] : [200, offerExchange()]
   }
   if (call === 'GET /v1/me') return [200, service.account]
+  if (call === 'POST /v1/me/identifiers') {
+    const { code, identifier } = body as { code: string; identifier: string }
+    if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
+    service.account = identifier.includes('@')
+      ? { ...service.account, email: identifier }
+      : { ...service.account, phone: identifier }
+    return [200, service.account]
+  }
   if (call === 'PATCH /v1/me') {
     service.account = { ...service.account, ...(body as Partial<Account>) }
     return [200, service.account]
@@ -752,6 +781,14 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     if (call === `GET ${at}/record`) return [200, record(exchange)]
     if (call === `GET ${at}/block`) return [200, { blocked: false, name: PARTIES.B }]
     if (call === `PUT ${at}/block`) return [204, null]
+    if (call === `GET ${at}/sms-updates`) return [200, textUpdates(service, exchange)]
+    if (call === `PUT ${at}/sms-updates`) {
+      const { on } = body as { on: boolean }
+      if (on && service.optedOut) return [409, { code: 'PHONE_OPTED_OUT' }]
+      if (on) service.textUpdates.add(exchange.id)
+      else service.textUpdates.delete(exchange.id)
+      return [200, textUpdates(service, exchange)]
+    }
   }
   return [404, { code: 'NOT_FOUND' }]
 }

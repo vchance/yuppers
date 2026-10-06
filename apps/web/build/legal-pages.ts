@@ -7,6 +7,7 @@ import {
   legalEffectiveDate,
   legalInline,
   legalSections,
+  staticPagePath,
   type LegalBlock,
   type LegalDocument,
   type LegalWording,
@@ -94,6 +95,10 @@ function inline(message: string, context: Context): string {
     .map((piece) => {
       if ('email' in piece) {
         return `<a href="mailto:${escapeHtml(piece.email)}">${escapeHtml(piece.email)}</a>`
+      }
+      if ('page' in piece) {
+        const path = staticPagePath(piece.page, context.language, context.defaultLanguage)
+        return `<a href="${escapeHtml(path)}">${escapeHtml(piece.text)}</a>`
       }
       if ('document' in piece) {
         const path = legalPagePath(piece.document, context.language, context.defaultLanguage)

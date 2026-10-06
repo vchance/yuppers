@@ -6,7 +6,8 @@
   "contents": "Contenido",
   "otherLanguages": "Esta política en otros idiomas",
   "links": {
-    "terms": "Términos y condiciones"
+    "terms": "Términos y condiciones",
+    "smsOptIn": "cómo se suscribe la gente a los mensajes de Yuppers.app"
   },
   "sections": {
     "who-we-are": {
@@ -70,7 +71,7 @@
           "h": "Actualizaciones por mensaje de texto de un acuerdo, si las activas"
         },
         {
-          "p": "Si activas las actualizaciones por mensaje de texto para un acuerdo, guardamos un registro: qué acuerdo, el número de teléfono, cuándo las activaste y el texto de consentimiento que se te mostró. Lo usamos solo para enviarte esas actualizaciones y para demostrar que aceptaste recibirlas."
+          "p": "Si activas las actualizaciones por mensaje de texto para un acuerdo, guardamos un registro: qué acuerdo, el número de teléfono, cuándo las activaste y el texto de consentimiento que se te mostró. Lo usamos solo para enviarte esas actualizaciones y para demostrar que aceptaste recibirlas. Con él guardamos el idioma del texto y si usaste el sitio web o la app, y, durante {networkDays} días, la dirección IP y el agente de usuario de tu solicitud, como hacemos con una firma. También registramos cuándo se desactivan las actualizaciones, ya sea por ti, por una respuesta STOP, por un cambio de tu número de teléfono o por la eliminación de tu cuenta, y cada STOP y START que recibimos de un número de teléfono."
         },
         {
           "h": "Notificaciones en la app, si las activas"
@@ -178,6 +179,9 @@
         },
         {
           "p": "Para obtener ayuda con los mensajes de texto, escribe a {supportEmail} o responde HELP a cualquiera de nuestros mensajes. Para preguntas sobre privacidad, escribe a {privacyEmail}. Los términos de los dos programas están en nuestros {terms}."
+        },
+        {
+          "p": "Cada paso de la suscripción, con el texto exacto de cada pantalla y de cada mensaje, se muestra en la página sobre {smsOptIn}."
         }
       ]
     },
@@ -190,6 +194,7 @@
             "Los yups que se enviaron, con todo lo que contienen y su historial: los guardamos como el registro compartido de lo que se propuso y se acordó. No los borramos cuando una de las personas, o las dos, eliminan sus cuentas, y no hemos fijado un plazo después del cual se borren.",
             "Los borradores que no has enviado: hasta que los envíes, los descartes o elimines tu cuenta.",
             "La dirección IP y el agente de usuario registrados con una firma: {networkDays} días.",
+            "El registro de las actualizaciones por mensaje que activaste para un acuerdo, y de su fin: mientras estén activadas y, después, durante {smsConsentYears} años, como prueba de que pediste los mensajes que te enviamos. La dirección IP y el agente de usuario registrados con él: {networkDays} días. Un número de teléfono que respondió STOP: mientras siga dado de baja, para no volver a enviarle mensajes.",
             "Los códigos de un solo uso: cada código sirve durante {codeMinutes} minutos, y una sola vez. Todavía no borramos de forma periódica los registros de los códigos (el hash, adónde se envió y cuándo); al eliminar tu cuenta se borran los de tu correo electrónico y tu número de teléfono.",
             "Las sesiones: cada una dura {sessionDays} días, salvo que la cierres antes.",
             "Las cuentas de los límites para entrar: dos días.",
@@ -217,6 +222,7 @@
             "Se cierra tu sesión en todos los dispositivos.",
             "Tu correo electrónico, tu número de teléfono, tu nombre y tu idioma se borran de la cuenta.",
             "Tus códigos de un solo uso, los dispositivos registrados para tus notificaciones, los borradores que no has enviado, las notificaciones que esperaban enviarse y tu lista de personas bloqueadas.",
+            "Las actualizaciones por mensaje que activaste para tus acuerdos se detienen.",
             "Los enlaces de invitación que creaste y que nadie usó dejan de funcionar, y olvidan la dirección a la que iban dirigidos.",
             "Tus pases de Wallet se anulan."
           ]
@@ -238,6 +244,7 @@
           "ul": [
             "Los yups que se enviaron se quedan con la otra persona, como el registro de lo que se propuso y se acordó: los términos, el historial, tu firma y tu nombre exactamente como lo da el acuerdo. Tu nombre en esos registros no se borra ni se reemplaza.",
             "La dirección IP y el agente de usuario registrados con tus firmas, hasta {networkDays} días después de cada firma.",
+            "El registro de las actualizaciones por mensaje que activaste, y de que terminaron al eliminar tu cuenta, con el número de teléfono al que iban, durante {smsConsentYears} años, como prueba de lo que aceptaste; y, si tu número respondió STOP, que lo hizo, mientras siga dado de baja.",
             "Las denuncias que hiciste, o que se hicieron sobre ti, y el historial de su revisión.",
             "Un registro de la cuenta sin datos de contacto y sin nombre: su identificador, cuándo se creó y cuándo su titular confirmó tener 18 años o más, en lo que se basan las firmas que dio; y su línea en el registro de eliminaciones.",
             "Las copias de seguridad, hasta que caduquen como se describe arriba."
@@ -257,7 +264,8 @@
             "Corregirla: puedes cambiar tu nombre y tu idioma en la página de tu cuenta. Un nombre cambiado ahí se usa desde ese momento; los acuerdos ya enviados conservan los nombres con que se escribieron.",
             "Llevarte una copia: puedes descargar el registro de cada yup como archivo, o imprimirlo o guardarlo como PDF.",
             "Eliminar tu cuenta: desde la página de tu cuenta, como se describe arriba.",
-            "Notificaciones en la app: actívalas o desactívalas en la pantalla de tu cuenta en la app, o en los ajustes de tu teléfono. Los correos sobre tus yups son la forma en que te avisamos de que algo te necesita, así que no hay un ajuste para desactivarlos; nunca enviamos correos de marketing."
+            "Notificaciones en la app: actívalas o desactívalas en la pantalla de tu cuenta en la app, o en los ajustes de tu teléfono. Los correos sobre tus yups son la forma en que te avisamos de que algo te necesita, así que no hay un ajuste para desactivarlos; nunca enviamos correos de marketing.",
+            "Actualizaciones por mensaje de un acuerdo: actívalas o desactívalas en la página de ese acuerdo, o responde STOP a cualquiera de nuestros mensajes para detenerlas todas, y START para volver a permitir mensajes."
           ]
         },
         {

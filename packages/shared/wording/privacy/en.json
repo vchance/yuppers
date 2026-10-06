@@ -6,7 +6,8 @@
   "contents": "Contents",
   "otherLanguages": "This policy in other languages",
   "links": {
-    "terms": "Terms and Conditions"
+    "terms": "Terms and Conditions",
+    "smsOptIn": "how people opt in to texts from Yuppers.app"
   },
   "sections": {
     "who-we-are": {
@@ -70,7 +71,7 @@
           "h": "Text updates for an agreement, if you turn them on"
         },
         {
-          "p": "If you turn on text updates for an agreement, we keep a record of it: which agreement, the phone number, when you turned them on, and the consent wording you were shown. We use it only to send you those updates and to show that you agreed to receive them."
+          "p": "If you turn on text updates for an agreement, we keep a record of it: which agreement, the phone number, when you turned them on, and the consent wording you were shown. We use it only to send you those updates and to show that you agreed to receive them. With it we keep the language the wording was in and whether you used the website or the app, and, for {networkDays} days, the IP address and user agent of your request, as we do for a signature. We also record when updates are turned off, whether by you, by a STOP reply, by a change of your phone number or by deleting your account, and every STOP and START we receive from a phone number."
         },
         {
           "h": "Notifications in the app, if you turn them on"
@@ -178,6 +179,9 @@
         },
         {
           "p": "For help with text messages, write to {supportEmail} or reply HELP to any of our texts. For privacy questions, write to {privacyEmail}. The terms of both programs are in our {terms}."
+        },
+        {
+          "p": "Every step of opting in, with the exact wording of each screen and each message, is shown on the page on {smsOptIn}."
         }
       ]
     },
@@ -190,6 +194,7 @@
             "Yups that were sent, with everything in them and their history: we keep them as the shared record of what was proposed and agreed. We don’t delete them when one or both people delete their accounts, and we have not set a time after which they are deleted.",
             "Drafts you haven’t sent: until you send them, discard them or delete your account.",
             "The IP address and user agent recorded with a signature: {networkDays} days.",
+            "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
             "One-time codes: each code works for {codeMinutes} minutes, and only once. We don’t yet delete the records of codes (the hash, where it went and when) on a schedule; deleting your account deletes the ones for your email address and phone number.",
             "Sign-ins: each lasts {sessionDays} days, unless you sign out first.",
             "Sign-in limit counts: two days.",
@@ -217,6 +222,7 @@
             "You’re signed out on every device.",
             "Your email address, phone number, name and language are removed from the account.",
             "Your one-time codes, the devices registered for your notifications, drafts you haven’t sent, notifications waiting to be sent to you, and your list of people you’ve blocked.",
+            "Text updates you turned on for your agreements stop.",
             "Invitation links you made that nobody used stop working, and forget the address they were for.",
             "Your Wallet passes are voided."
           ]
@@ -238,6 +244,7 @@
           "ul": [
             "Yups that were sent stay with the other person, as the record of what was proposed and agreed: the terms, the history, your signature, and your name exactly as the agreement gives it. Your name in those records is not removed or replaced.",
             "The IP address and user agent recorded with your signatures, until {networkDays} days after each signature.",
+            "The record of text updates you turned on, and that they ended when you deleted your account, with the phone number they went to, for {smsConsentYears} years, as proof of what you agreed to; and, if your number replied STOP, that it did, for as long as it stays unsubscribed.",
             "Reports you made, or that were made about you, and the history of their review.",
             "An account record with no contact details and no name: its ID, when it was created and when its holder confirmed being 18 or over, which the signatures it gave rely on; and its line in the deletion log.",
             "Backup copies, until they expire as described above."
@@ -257,7 +264,8 @@
             "Correct it: you can change your name and language on your account page. A name changed there is used from then on; agreements already sent keep the names they were written with.",
             "Take a copy: you can download each yup’s record as a file, or print it or save it as a PDF.",
             "Delete your account: from your account page, as described above.",
-            "Notifications in the app: turn them on or off on the app’s account screen, or in your phone’s settings. Emails about your yups are how we tell you that something needs you, so there is no setting to turn them off; we never send marketing emails."
+            "Notifications in the app: turn them on or off on the app’s account screen, or in your phone’s settings. Emails about your yups are how we tell you that something needs you, so there is no setting to turn them off; we never send marketing emails.",
+            "Text updates for an agreement: turn them on or off on that agreement’s page, or reply STOP to any of our texts to stop them all, and START to allow texts again."
           ]
         },
         {

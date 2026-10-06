@@ -22,6 +22,7 @@ const META: Meta = {
   wallet_platforms: [],
   sign_in_channels: ['email'],
   sms_country_codes: [],
+  sms_updates: false,
 }
 
 function answering(meta: Partial<Meta> | Error): SignInApi {

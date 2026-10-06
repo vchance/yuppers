@@ -27,6 +27,8 @@ export type SendRevision = Schemas['SendRevision']
 export type SessionCreated = Schemas['SessionCreated']
 export type Slot = Schemas['Slot']
 export type WalletLink = Schemas['WalletLink']
+export type SmsUpdates = Schemas['SmsUpdates']
+export type SetSmsUpdates = Schemas['SetSmsUpdates']
 export type WalletPlatform = Schemas['WalletPlatform']
 
 /**
@@ -445,6 +447,42 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
         client.POST('/v1/exchanges/{id}/wallet/apple/link', {
           headers: headers(),
           params: { path: { id } },
+        }),
+      )
+    },
+
+    /**
+     * Attaches a verified email address or phone number to the account, with
+     * the code sent to it (`requestCode`), or replaces the one of its kind.
+     */
+    addIdentifier(identifier: string, code: string): Promise<Account> {
+      return send(() =>
+        client.POST('/v1/me/identifiers', { headers: headers(), body: { identifier, code } }),
+      )
+    },
+
+    // Text updates for an agreement (DESIGN.md §12): "Yuppers.app agreement updates".
+
+    /** Where the signed-in party stands on text updates for an agreement. */
+    smsUpdates(id: string): Promise<SmsUpdates> {
+      return send(() =>
+        client.GET('/v1/exchanges/{id}/sms-updates', {
+          headers: headers(),
+          params: { path: { id } },
+        }),
+      )
+    },
+
+    /**
+     * Turns text updates for an agreement on, with the version and language
+     * of the consent wording shown beside the box, or off.
+     */
+    setSmsUpdates(id: string, body: SetSmsUpdates): Promise<SmsUpdates> {
+      return send(() =>
+        client.PUT('/v1/exchanges/{id}/sms-updates', {
+          headers: headers(),
+          params: { path: { id } },
+          body,
         }),
       )
     },

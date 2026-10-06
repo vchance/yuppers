@@ -213,6 +213,11 @@ describe('inline pieces', () => {
 describe('the figures the documents state', () => {
   const backend = (file: string) =>
     readFileSync(new URL(`../../../backend/src/${file}`, import.meta.url), 'utf8')
+  const years = (source: string, field: string) => {
+    const found = new RegExp(`${field}: Duration::days\\(365 \\* (\\d+)\\)`).exec(source)
+    if (!found) throw new Error(`no ${field} in the backend's defaults`)
+    return Number(found[1])
+  }
   const rule = (source: string, field: string, unit: string) => {
     const found = new RegExp(`${field}: Duration::${unit}\\((\\d+)\\)`).exec(source)
     if (!found) throw new Error(`no ${field} in the backend's defaults`)
@@ -226,6 +231,7 @@ describe('the figures the documents state', () => {
       networkDays: rule(rules, 'network_metadata_retention', 'days'),
       codeMinutes: rule(auth, 'code_ttl', 'minutes'),
       sessionDays: rule(auth, 'session_ttl', 'days'),
+      smsConsentYears: years(rules, 'sms_consent_retention'),
     })
   })
 })

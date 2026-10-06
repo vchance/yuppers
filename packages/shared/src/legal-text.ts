@@ -52,6 +52,11 @@ export const LEGAL_FIGURES = {
   codeMinutes: 10,
   /** How long a session lasts (`AuthRules::session_ttl`). */
   sessionDays: 30,
+  /**
+   * How long the record of consent to text updates is kept once they have
+   * ended (`Rules::sms_consent_retention`), in years.
+   */
+  smsConsentYears: 4,
 } as const
 
 /**
@@ -103,7 +108,27 @@ export const LEGAL_LINKS = {
   terms: { document: 'terms' },
   privacy: { document: 'privacy' },
   privacyTexts: { document: 'privacy', section: 'text-messages' },
-} as const satisfies Record<string, { document: LegalDocument; section?: string }>
+  smsOptIn: { page: 'sms-opt-in' },
+} as const satisfies Record<
+  string,
+  { document: LegalDocument; section?: string } | { page: StaticPage }
+>
+
+/**
+ * Pages the web build writes that are neither document but that the
+ * documents link to: how people opt in to texts, for the carriers' review
+ * (`apps/web/build/sms-opt-in.ts`). Each is at `/{page}` in the default
+ * language and `/{language}/{page}` in the others, and is a page of its own,
+ * not one of the app's, so a link to it loads it whole.
+ */
+export const STATIC_PAGES = ['sms-opt-in'] as const
+
+export type StaticPage = (typeof STATIC_PAGES)[number]
+
+/** The path of a static page in `language`. */
+export function staticPagePath(page: StaticPage, language: string, defaultLanguage: string): string {
+  return language === defaultLanguage ? `/${page}` : `/${language}/${page}`
+}
 
 export type LegalLinkName = keyof typeof LEGAL_LINKS
 
@@ -160,6 +185,7 @@ export type LegalInline =
   | { text: string; strong?: true }
   | { email: string }
   | { document: LegalDocument; section?: string; text: string }
+  | { page: StaticPage; text: string }
 
 /**
  * A message of `document`, filled in: every placeholder replaced, and the

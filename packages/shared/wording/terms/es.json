@@ -7,7 +7,8 @@
   "otherLanguages": "Estos términos en otros idiomas",
   "links": {
     "privacy": "Política de privacidad",
-    "privacyTexts": "la sección sobre mensajes de texto de nuestra política de privacidad"
+    "privacyTexts": "la sección sobre mensajes de texto de nuestra política de privacidad",
+    "smsOptIn": "cómo se suscribe la gente a los mensajes de Yuppers.app"
   },
   "sections": {
     "who-runs-yuppers": {
@@ -149,6 +150,7 @@
             "Nombre del programa: actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates).",
             "Descripción: si activas las actualizaciones por mensaje de texto para un acuerdo, Yuppers.app te envía un mensaje cuando cambia su estado: por ejemplo, cuando la otra persona firma, marca algo como entregado, lo confirma, lo disputa o pide cerrarlo.",
             "Cómo te suscribes: marcando una casilla en ese acuerdo, que muestra este texto: “Recibir actualizaciones por mensaje de texto de yuppers.app sobre este acuerdo, un mensaje por cada cambio de estado. La frecuencia de los mensajes varía; no hay un máximo fijo. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.”",
+            "Antes de la casilla, si tu cuenta no tiene número de teléfono, agregas uno, un número de EE. UU. que comprobamos con un código de un solo uso que le enviamos por mensaje.",
             "Frecuencia de los mensajes: la frecuencia de los mensajes varía; no hay un máximo fijo. Un mensaje por cada cambio de estado de un acuerdo para el que activaste las actualizaciones.",
             "Qué dice una actualización: solo que algo cambió, con un enlace para entrar y verlo. Nunca incluye los términos, las cantidades ni los nombres de lo que se entrega, igual que nuestros correos y las notificaciones de la app.",
             "Desactivar las actualizaciones por mensaje de texto de un acuerdo las detiene solo para ese acuerdo."
@@ -167,6 +169,9 @@
             "No vendemos tu información personal. No compartimos tu información personal ni tus datos y consentimiento de suscripción a SMS con terceros ni con afiliados con fines de marketing o promoción.",
             "La información móvil no se compartirá con terceros ni con afiliados con fines de marketing o promoción."
           ]
+        },
+        {
+          "p": "Cada paso de la suscripción, con el texto exacto de cada pantalla y de cada mensaje, se muestra en la página sobre {smsOptIn}."
         },
         {
           "p": "Cómo manejamos tu número de teléfono y estos mensajes está en {privacyTexts}."

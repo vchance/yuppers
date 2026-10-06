@@ -1,9 +1,11 @@
 import {
+  defaultLanguage,
   languages,
   LEGAL_EFFECTIVE_DATES,
   legalEffectiveDate,
   legalInline,
   legalSections,
+  staticPagePath,
   type Language,
   type LegalBlock,
   type LegalDocument,
@@ -193,6 +195,14 @@ function Inline({ message, context }: { message: string; context: Context }) {
       return (
         <a key={index} href={`mailto:${piece.email}`}>
           {piece.email}
+        </a>
+      )
+    }
+    if ('page' in piece) {
+      // A page of its own, not the app's: loaded whole.
+      return (
+        <a key={index} href={staticPagePath(piece.page, language, defaultLanguage)}>
+          {piece.text}
         </a>
       )
     }

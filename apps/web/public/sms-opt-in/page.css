@@ -4,6 +4,16 @@
  * origin, so the Content-Security-Policy needs nothing more.
  */
 
+/* The two parts, the website and the mobile app, each opened by its heading. */
+.sms-opt-in .part {
+  margin-block: 3rem;
+}
+
+.sms-opt-in .part > h2 {
+  padding-block-start: 1.5rem;
+  border-block-start: 2px solid var(--line);
+}
+
 .sms-opt-in .step {
   margin-block: 2.5rem;
   padding-block-start: 1.5rem;
@@ -22,7 +32,7 @@
   border-radius: 0.75rem;
 }
 
-.sms-opt-in .wording h3 {
+.sms-opt-in .wording h4 {
   font-size: 1rem;
   margin-block: 1rem 0.5rem;
 }

@@ -126,14 +126,22 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   }
 })
 
-test('the page on how people opt in shows its six steps and their pictures, under the same policy', async ({
+test('the page on how people opt in shows its steps on the website and in the app, and their pictures, under the same policy', async ({
   person,
 }) => {
   const reader = await person('Reviewer', { javaScriptEnabled: false, viewport: { width: 390, height: 844 } })
   const { page } = reader
   const wording = JSON.parse(
     readFileSync(resolve(repoRoot, 'packages/shared/wording/sms-opt-in/en.json'), 'utf8'),
-  ) as { title: string; steps: Record<string, { title: string }> }
+  ) as {
+    title: string
+    contentsLabel: string
+    websiteHeading: string
+    mobileHeading: string
+    mobileRelease: string
+    steps: Record<string, { title: string }>
+    mobileSteps: Record<string, { title: string; caption: string }>
+  }
 
   // Reached from the sections on texts of the terms and the privacy policy.
   for (const document of ['terms', 'privacy']) {
@@ -153,13 +161,20 @@ test('the page on how people opt in shows its six steps and their pictures, unde
       "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     )
     await expect(page.locator('html')).toHaveAttribute('lang', language)
-    await expect(page.locator('section.step > h2')).toHaveCount(6)
-    // Every picture is there, from this origin, and drawn.
+    // Six steps on the website, four in the app.
+    await expect(page.locator('section.part:has(> h2#website) section.step > h3')).toHaveCount(6)
+    await expect(page.locator('section.part:has(> h2#mobile-app) section.step > h3')).toHaveCount(4)
+    // Every picture is there, from this origin, served, and drawn.
     const images = page.locator('section.step img')
-    await expect(images).toHaveCount(4)
+    await expect(images).toHaveCount(8)
+    await expect(page.locator('section.part:has(> h2#mobile-app) img[src^="/sms-opt-in/mobile/"]')).toHaveCount(4)
     for (const image of await images.all()) {
       await image.scrollIntoViewIfNeeded()
-      expect(await image.getAttribute('src')).toMatch(/^\/sms-opt-in\//)
+      const src = (await image.getAttribute('src'))!
+      expect(src).toMatch(/^\/sms-opt-in\//)
+      const served = await page.request.get(src)
+      expect(served.status(), src).toBe(200)
+      expect(served.headers()['content-type'], src).toBe('image/webp')
       await expect
         .poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth))
         .toBeGreaterThan(300)
@@ -167,9 +182,26 @@ test('the page on how people opt in shows its six steps and their pictures, unde
   }
   await page.goto('/sms-opt-in')
   await expect(page.getByRole('heading', { name: wording.title, level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: wording.websiteHeading, level: 2 })).toBeVisible()
   for (const step of Object.values(wording.steps)) {
-    await expect(page.getByRole('heading', { name: step.title, level: 2 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: step.title, level: 3, exact: true })).toBeVisible()
   }
-  await expect(page.getByText(en.smsUpdates.consent, { exact: true })).toBeVisible()
+  await expect(page.getByText(en.smsUpdates.consent, { exact: true }).first()).toBeVisible()
   await expect(page.getByText(en.sms.optInConfirmation, { exact: true })).toBeVisible()
+
+  // The contents list leads to the mobile app's part, at its own address.
+  const contents = page.getByRole('navigation', { name: wording.contentsLabel })
+  await expect(contents.getByRole('link', { name: wording.websiteHeading })).toHaveAttribute('href', '#website')
+  await contents.getByRole('link', { name: wording.mobileHeading }).click()
+  await expect(page).toHaveURL(/\/sms-opt-in#mobile-app$/)
+  const mobile = page.getByRole('heading', { name: wording.mobileHeading, level: 2 })
+  await expect(mobile).toBeInViewport()
+  await expect(page.getByText(wording.mobileRelease, { exact: true })).toBeVisible()
+  for (const step of Object.values(wording.mobileSteps)) {
+    await expect(page.getByRole('heading', { name: step.title, level: 3, exact: true })).toBeVisible()
+    await expect(page.getByText(step.caption, { exact: true })).toBeVisible()
+  }
+  // A link straight to the app's part opens there.
+  await page.goto('/es/sms-opt-in#mobile-app')
+  await expect(page.locator('h2#mobile-app')).toBeInViewport()
 })

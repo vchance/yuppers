@@ -14,6 +14,7 @@
     "test": "npm run test --workspaces --if-present",
     "e2e": "cargo build --manifest-path backend/Cargo.toml --bin api --bin staff --bin worker && npm run build:web && npm run e2e -w @yuppers/web --",
     "screenshots:sms": "cargo build --manifest-path backend/Cargo.toml --bin api && npm run screenshots:sms -w @yuppers/web",
+    "screenshots:sms:mobile": "cargo build --manifest-path backend/Cargo.toml --bin api && npm run screenshots:sms -w @yuppers/mobile",
     "e2e:mobile": "cargo build --manifest-path backend/Cargo.toml --bin api && npm run e2e:export -w @yuppers/mobile && npm run e2e -w @yuppers/mobile --"
   }
 }

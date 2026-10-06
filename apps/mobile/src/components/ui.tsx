@@ -615,6 +615,9 @@ const styles = StyleSheet.create({
   button: {
     minHeight: TOUCH_TARGET,
     minWidth: TOUCH_TARGET,
+    // A long label wraps within the row rather than running off the screen.
+    // Yoga already keeps it in on a device; a browser does not without this.
+    maxWidth: '100%',
     paddingVertical: space.m,
     paddingHorizontal: space.l,
     borderRadius: 8,

@@ -54,7 +54,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
     "test": "jest",
     "e2e:export": "node e2e/support/export-web.mjs",
-    "e2e": "playwright test -c e2e/playwright.config.ts"
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "screenshots:sms": "node e2e/screenshots/export.mjs && playwright test -c e2e/screenshots/playwright.config.ts"
   },
   "private": true
 }

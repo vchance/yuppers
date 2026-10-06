@@ -57,8 +57,10 @@ describe('the page on how people opt in to texts', () => {
     expect(root.querySelector('h1')?.textContent).toBe(wording.title)
     expect(root.textContent).toContain(wording.note)
 
-    const steps = [...root.querySelectorAll('section.step')]
-    expect(steps.map((step) => step.querySelector('h2')?.id)).toEqual([
+    const website = root.querySelector('#website')!.parentElement!
+    expect(website.querySelector('h2')?.textContent).toBe(wording.websiteHeading)
+    const steps = [...website.querySelectorAll('section.step')]
+    expect(steps.map((step) => step.querySelector('h3')?.id)).toEqual([
       'sign-in',
       'code-sent',
       'text-updates',
@@ -107,10 +109,106 @@ describe('the page on how people opt in to texts', () => {
     ])
   })
 
+  test.each(['en', 'es'])('in %s opens with a contents list of its two parts', (language) => {
+    const page = parse(language)
+    const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
+    const contents = page.querySelector(`nav[aria-label="${wording.contentsLabel}"]`)!
+    const links = [...contents.querySelectorAll('a')]
+    expect(links.map((link) => [link.getAttribute('href'), link.textContent])).toEqual([
+      ['#website', wording.websiteHeading],
+      ['#mobile-app', wording.mobileHeading],
+    ])
+    // Before either part, and each link leads to its part's heading.
+    const article = page.querySelector('article')!
+    const first = article.querySelector('section.part')!
+    expect(contents.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    for (const link of links) {
+      const target = page.getElementById(link.getAttribute('href')!.slice(1))!
+      expect(target.tagName).toBe('H2')
+      expect(target.parentElement?.matches('section.part')).toBe(true)
+    }
+  })
+
+  test.each(['en', 'es'])(
+    'in %s shows the four steps in the mobile app, each with its caption and what it says word for word',
+    (language) => {
+      const page = parse(language)
+      const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
+      const product = read(`${language}.json`)
+      const heading = page.getElementById('mobile-app')!
+      expect(heading.textContent).toBe(wording.mobileHeading)
+      const part = heading.parentElement!
+      // The app's release state, and that its consent and confirmation are the website's.
+      expect(part.textContent).toContain(wording.mobileRelease)
+      expect(wording.mobileRelease).toMatch(/App Store/)
+      expect(wording.mobileRelease).toMatch(/Google Play/)
+      const same = fill(wording.mobileSame, {
+        confirmationText: wording.confirmationTextLink,
+        replies: wording.repliesLink,
+      })
+      expect(part.textContent).toContain(same)
+      expect([...part.querySelectorAll('p > a')].map((link) => link.getAttribute('href'))).toEqual([
+        '#confirmation-text',
+        '#help-and-stop',
+      ])
+
+      const steps = [...part.querySelectorAll('section.step')]
+      expect(steps.map((step) => step.querySelector('h3')?.id)).toEqual([
+        'mobile-sign-in',
+        'mobile-code-sent',
+        'mobile-text-updates',
+        'mobile-confirmation',
+      ])
+      ;(Object.keys(SCREENSHOTS) as Screen[]).forEach((screen, index) => {
+        const step = steps[index]
+        expect(step.querySelector('h3')?.textContent).toBe(wording.mobileSteps[screen].title)
+        expect(step.querySelector('h3 + p')?.textContent).toBe(wording.mobileSteps[screen].caption)
+        const image = step.querySelector('img')!
+        expect(image.getAttribute('src')).toBe(screenshotPath(screen, language, 'en', 'mobile'))
+        expect(image.getAttribute('alt')).toBe(wording.mobileSteps[screen].alt)
+      })
+      const quoted = (index: number) =>
+        [...steps[index].querySelectorAll('q')].map((element) => element.textContent)
+
+      // (m1) The app's sign-in screen, with the line on texts and the links.
+      expect(quoted(0)).toEqual(
+        expect.arrayContaining([
+          product.signIn.title,
+          product.signIn.identifierLabel,
+          product.signIn.sendCode,
+          product.privacy.sms,
+          product.privacy.smsLink,
+          product.privacy.policy,
+          product.termsOfUse.document,
+        ]),
+      )
+      // (m2) After asking for a code.
+      expect(quoted(1)).toEqual(
+        expect.arrayContaining([fill(product.signIn.codeSent, { identifier: SAMPLE_PHONE })]),
+      )
+      // (m3) The same consent wording as the website's, its addresses links.
+      expect(quoted(2)).toEqual(
+        expect.arrayContaining([product.smsUpdates.consent, product.smsUpdates.save]),
+      )
+      expect(
+        [...steps[2].querySelectorAll('q a')].map((link) => link.getAttribute('href')),
+      ).toEqual(['https://yuppers.app/terms', 'https://yuppers.app/privacy'])
+      // (m4) The same confirmation as the website's.
+      const on = fill(product.smsUpdates.on, { phone: `+1 •••-•••-${SAMPLE_PHONE.slice(-4)}` })
+      expect(quoted(3)).toEqual([on])
+      const website = page.getElementById('confirmation')!.parentElement!
+      expect([...website.querySelectorAll('q')].map((element) => element.textContent)).toEqual([on])
+    },
+  )
+
   test.each(['en', 'es'])('in %s shows a picture of each screen, from this origin', (language) => {
     const images = [...parse(language).querySelectorAll('section.step img')]
     expect(images.map((image) => image.getAttribute('src'))).toEqual(
-      (Object.keys(SCREENSHOTS) as Screen[]).map((screen) => screenshotPath(screen, language, 'en')),
+      (['web', 'mobile'] as const).flatMap((surface) =>
+        (Object.keys(SCREENSHOTS) as Screen[]).map((screen) =>
+          screenshotPath(screen, language, 'en', surface),
+        ),
+      ),
     )
     for (const image of images) {
       const src = image.getAttribute('src')!
@@ -181,6 +279,8 @@ describe('the page on how people opt in to texts', () => {
     const { replies } = read('sms-opt-in/en.json') as SmsOptInWording
     expect(guide).toContain(replies.help)
     expect(guide).toContain(replies.stop)
+    // And the link to give for the mobile app's screens is this page's part on it.
+    expect(guide).toContain('https://yuppers.app/sms-opt-in#mobile-app')
     expect(read('sms-opt-in/es.json').replies).toEqual(replies)
   })
 })

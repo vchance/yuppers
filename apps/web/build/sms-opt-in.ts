@@ -9,11 +9,15 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
  * "Text messages"), at `/sms-opt-in` and `/{language}/sms-opt-in`, open to
  * anyone and readable without scripts.
  *
- * It shows each step a person takes to receive texts: a picture of each
- * screen, taken from the web app by `npm run screenshots:sms`
- * (`e2e/screenshots/`) and kept in `public/sms-opt-in/`, and beside it the
- * exact wording that screen shows, read here from the same wording files
- * the app reads, so the two cannot drift apart. The texts themselves are
+ * It shows each step a person takes to receive texts, in two parts with a
+ * contents list above them: on the website (`#website`), with a picture of
+ * each screen taken from the web app by `npm run screenshots:sms`
+ * (`e2e/screenshots/`) and kept in `public/sms-opt-in/`; and in the mobile
+ * app (`#mobile-app`), with the app's own screens taken by `npm run
+ * screenshots:sms:mobile` (`apps/mobile/e2e/screenshots/`) and kept in
+ * `public/sms-opt-in/mobile/`. Beside each picture is the exact wording
+ * that screen shows, read here from the same wording files the apps read,
+ * so the two cannot drift apart. The texts themselves are
  * shown as text: the confirmation and an update from the service's own
  * wording (`sms` in the wording files), and the HELP and STOP replies that
  * Twilio is configured to send (`wording/sms-opt-in/`, and
@@ -43,11 +47,24 @@ export const SCREENSHOTS = {
 
 export type Screen = keyof typeof SCREENSHOTS
 
+/**
+ * Where the pictures come from: the website (`npm run screenshots:sms`) or
+ * the mobile app (`npm run screenshots:sms:mobile`), which has the same four
+ * steps under the same file names in `mobile/`.
+ */
+export type Surface = 'web' | 'mobile'
+
 /** Where a language's pictures are, under the web build's public files. */
-export function screenshotPath(screen: Screen, language: string, defaultLanguage: string): string {
+export function screenshotPath(
+  screen: Screen,
+  language: string,
+  defaultLanguage: string,
+  surface: Surface = 'web',
+): string {
+  const base = surface === 'mobile' ? '/sms-opt-in/mobile' : '/sms-opt-in'
   return language === defaultLanguage
-    ? `/sms-opt-in/${SCREENSHOTS[screen]}`
-    : `/sms-opt-in/${language}/${SCREENSHOTS[screen]}`
+    ? `${base}/${SCREENSHOTS[screen]}`
+    : `${base}/${language}/${SCREENSHOTS[screen]}`
 }
 
 /** The pixel size the pictures are taken at: a phone's width, at twice the density. */
@@ -71,12 +88,26 @@ export interface SmsOptInWording {
   description: string
   intro: string
   note: string
+  /** The contents list's name, for the two ways in: the website and the app. */
+  contentsLabel: string
+  websiteHeading: string
+  websiteIntro: string
+  mobileHeading: string
+  mobileIntro: string
+  /** What the app's release state is, and so where its pictures come from. */
+  mobileRelease: string
+  /** That the app's consent and confirmation are the website's, with links to steps 5 and 6. */
+  mobileSame: string
+  confirmationTextLink: string
+  repliesLink: string
   wordingHeading: string
   messageFrom: string
   messageTo: string
   programsHeading: string
   programs: string[]
   steps: Record<Screen | 'confirmationText' | 'replies', Step>
+  /** The same four screens in the mobile app. */
+  mobileSteps: Record<Screen, Step>
   codeText: string
   updateText: string
   moreHeading: string
@@ -113,6 +144,7 @@ interface ProductWording {
     consent: string
     save: string
     on: string
+    howItWorks: string
   }
   sms: { signIn: string; update: string; optInConfirmation: string }
 }
@@ -165,7 +197,7 @@ function quoted(heading: string, lines: string[], links = false): string {
   const items = lines
     .map((line) => `<li><q>${links ? linked(line) : escapeHtml(line)}</q></li>`)
     .join('')
-  return `<div class="wording"><h3>${escapeHtml(heading)}</h3><ul>${items}</ul></div>`
+  return `<div class="wording"><h4>${escapeHtml(heading)}</h4><ul>${items}</ul></div>`
 }
 
 /** A text message, as a phone shows it: from the service, or a reply. */
@@ -189,13 +221,26 @@ export function renderSmsOptInMarkup(
   const s = product.signIn
   const u = product.smsUpdates
   const steps = page.steps
+  const mobileSteps = page.mobileSteps
 
-  const screenshot = (screen: Screen) =>
-    `<img src="${screenshotPath(screen, language, defaultLanguage)}" alt="${escapeHtml(steps[screen].alt ?? '')}" width="${SCREENSHOT_WIDTH}" loading="lazy" decoding="async">`
-  const step = (id: string, screen: Screen | null, title: string, caption: string, body: string) =>
-    `<section class="step" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(title)}</h2><p>${escapeHtml(caption)}</p>${
-      screen ? `<div class="shot">${screenshot(screen)}</div>` : ''
+  const screenshot = (screen: Screen, surface: Surface) => {
+    const alt = (surface === 'mobile' ? mobileSteps : steps)[screen].alt ?? ''
+    return `<img src="${screenshotPath(screen, language, defaultLanguage, surface)}" alt="${escapeHtml(alt)}" width="${SCREENSHOT_WIDTH}" loading="lazy" decoding="async">`
+  }
+  /** A step, under its section's heading: what it is, its picture, and what it says. */
+  const step = (
+    id: string,
+    screen: Screen | null,
+    { title, caption }: Step,
+    body: string,
+    surface: Surface = 'web',
+  ) =>
+    `<section class="step" aria-labelledby="${id}"><h3 id="${id}">${escapeHtml(title)}</h3><p>${escapeHtml(caption)}</p>${
+      screen ? `<div class="shot shot-${surface}">${screenshot(screen, surface)}</div>` : ''
     }${body}</section>`
+  /** One of the page's two parts, the website or the app, under a heading the contents list links to. */
+  const part = (id: string, heading: string, body: string) =>
+    `<section class="part" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(heading)}</h2>${body}</section>`
 
   const signIn = quoted(page.wordingHeading, [
     s.title,
@@ -229,6 +274,71 @@ export function renderSmsOptInMarkup(
   ].join('')
   const update = `<p>${escapeHtml(page.updateText)}</p>${bubble(fill(product.sms.update, { link: SAMPLE_LINK }), page.messageFrom)}`
 
+  // The app's screens say what the website's do, but for its own links: the
+  // line on texts is a link of its own, and "How we text you" opens this page.
+  const mobileSignIn = quoted(page.wordingHeading, [
+    s.title,
+    s.intro,
+    s.identifierLabel,
+    fill(s.identifierHintCountries, { codes: '+1' }),
+    s.sendCode,
+    product.privacy.sms,
+    product.privacy.smsLink,
+    product.privacy.policy,
+    product.termsOfUse.document,
+  ])
+  const mobileCodeSent = quoted(page.wordingHeading, [
+    fill(s.codeSent, { identifier: SAMPLE_PHONE }),
+    s.codeLabel,
+    s.codeHint,
+    s.resendSoon,
+    s.submit,
+    s.changeIdentifier,
+  ])
+  const mobileTextUpdates = quoted(
+    page.wordingHeading,
+    [u.heading, u.intro, u.consent, u.save, u.howItWorks],
+    true,
+  )
+  const mobileConfirmation = quoted(page.wordingHeading, [fill(u.on, { phone: masked(SAMPLE_PHONE) })])
+  const mobileSame = fill(escapeHtml(page.mobileSame), {
+    confirmationText: `<a href="#confirmation-text">${escapeHtml(page.confirmationTextLink)}</a>`,
+    replies: `<a href="#help-and-stop">${escapeHtml(page.repliesLink)}</a>`,
+  })
+
+  const website = part(
+    'website',
+    page.websiteHeading,
+    [
+      `<p>${linked(page.websiteIntro)}</p>`,
+      step('sign-in', 'signIn', steps.signIn, signIn),
+      step('code-sent', 'codeSent', steps.codeSent, codeSent),
+      step('text-updates', 'textUpdates', steps.textUpdates, textUpdates),
+      step('confirmation', 'confirmation', steps.confirmation, confirmation),
+      step('confirmation-text', null, steps.confirmationText, confirmationText),
+      step('help-and-stop', null, steps.replies, replies + update),
+    ].join(''),
+  )
+  const mobile = part(
+    'mobile-app',
+    page.mobileHeading,
+    [
+      `<p>${escapeHtml(page.mobileIntro)}</p>`,
+      `<p class="notice">${escapeHtml(page.mobileRelease)}</p>`,
+      `<p>${mobileSame}</p>`,
+      step('mobile-sign-in', 'signIn', mobileSteps.signIn, mobileSignIn, 'mobile'),
+      step('mobile-code-sent', 'codeSent', mobileSteps.codeSent, mobileCodeSent, 'mobile'),
+      step('mobile-text-updates', 'textUpdates', mobileSteps.textUpdates, mobileTextUpdates, 'mobile'),
+      step('mobile-confirmation', 'confirmation', mobileSteps.confirmation, mobileConfirmation, 'mobile'),
+    ].join(''),
+  )
+  const contents = `<nav aria-label="${escapeHtml(page.contentsLabel)}" class="contents"><ul>${[
+    ['website', page.websiteHeading],
+    ['mobile-app', page.mobileHeading],
+  ]
+    .map(([id, heading]) => `<li><a href="#${id}">${escapeHtml(heading)}</a></li>`)
+    .join('')}</ul></nav>`
+
   const otherLanguages = languages
     .map((other) => {
       const current = other.code === language ? ' aria-current="page"' : ''
@@ -254,13 +364,10 @@ export function renderSmsOptInMarkup(
     `<p>${escapeHtml(page.intro)}</p>`,
     `<p class="notice">${escapeHtml(page.note)}</p>`,
     `<nav aria-label="${escapeHtml(page.title)}" class="legal-languages"><ul class="plain">${otherLanguages}</ul></nav>`,
+    contents,
     `<section aria-labelledby="programs"><h2 id="programs">${escapeHtml(page.programsHeading)}</h2><ul>${page.programs.map((program) => `<li>${escapeHtml(program)}</li>`).join('')}</ul></section>`,
-    step('sign-in', 'signIn', steps.signIn.title, steps.signIn.caption, signIn),
-    step('code-sent', 'codeSent', steps.codeSent.title, steps.codeSent.caption, codeSent),
-    step('text-updates', 'textUpdates', steps.textUpdates.title, steps.textUpdates.caption, textUpdates),
-    step('confirmation', 'confirmation', steps.confirmation.title, steps.confirmation.caption, confirmation),
-    step('confirmation-text', null, steps.confirmationText.title, steps.confirmationText.caption, confirmationText),
-    step('help-and-stop', null, steps.replies.title, steps.replies.caption, replies + update),
+    website,
+    mobile,
     `<section aria-labelledby="more"><h2 id="more">${escapeHtml(page.moreHeading)}</h2><p>${more}</p></section>`,
     '</article>',
     '<!--/email_off-->',

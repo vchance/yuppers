@@ -15,14 +15,16 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
  * (`e2e/screenshots/`) and kept in `public/sms-opt-in/`; and in the mobile
  * app (`#mobile-app`), with the app's own screens taken by `npm run
  * screenshots:sms:mobile` (`apps/mobile/e2e/screenshots/`) and kept in
- * `public/sms-opt-in/mobile/`. Beside each picture is the exact wording
- * that screen shows, read here from the same wording files the apps read,
- * so the two cannot drift apart. The texts themselves are
- * shown as text: the sign-in code's, the code's for a number being added,
- * the confirmation and an update from the service's own wording (`sms` in
- * the wording files), and the HELP and STOP replies that
- * Twilio is configured to send (`wording/sms-opt-in/`, and
- * docs/deploy-render.md).
+ * `public/sms-opt-in/mobile/`. Each part goes form by form (FORMS), each
+ * form under an anchor of its own (`formAnchor`), so a reviewer can be given
+ * a link to one: signing in by text, confirming a phone number, deleting an
+ * account by text, agreement updates, and HELP and STOP. Beside each
+ * picture is the exact wording that screen shows, read here from the same
+ * wording files the apps read, so the two cannot drift apart. The texts
+ * themselves are shown as text: each code's, the confirmation and an update
+ * from the service's own wording (`sms` in the wording files), and the HELP
+ * and STOP replies that Twilio is configured to send
+ * (`wording/sms-opt-in/`, and docs/deploy-render.md).
  *
  * Unlike the privacy policy's and the terms' pages, it is not the app's page
  * with a document in it: the app has no page at this address, so the entry
@@ -32,8 +34,16 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
  * and the pictures come from this origin.
  */
 
-/** The number the pictures show: a US number reserved for fiction (555-01XX). */
+/** The number the pictures sign in with and delete: a US number reserved for fiction (555-01XX). */
 export const SAMPLE_PHONE = '+12015550123'
+
+/**
+ * The number the pictures add to an account with a code ("Confirming a
+ * phone number"): another reserved for fiction, so that the codes the two
+ * flows ask for are counted against different numbers (`npm run
+ * screenshots:sms`, and the service's limit of codes per number per hour).
+ */
+export const SAMPLE_PHONE_TO_ADD = '+12015550124'
 
 /** The one-time code the texts show. */
 export const SAMPLE_CODE = '123456'
@@ -43,9 +53,11 @@ export const SAMPLE_LINK = 'https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a16
 
 /**
  * The pictures, by step, as `public/sms-opt-in/` holds them for the default
- * language: the sign-in form with a number entered and the box beside it
- * unticked, the same with the box ticked and "Send code" enabled, the code
- * sent, and an agreement's "Text updates" before and after.
+ * language. Signing in: the form with a number entered and the box beside
+ * it unticked, the same with the box ticked and "Send code" enabled, and the
+ * code sent. Agreement updates: "Text updates" before and after. Confirming
+ * a number being added in "Text updates", and deleting an account with a
+ * code by text: each with the box unticked, ticked, and the code sent.
  */
 export const SCREENSHOTS = {
   signIn: '1-sign-in.webp',
@@ -53,16 +65,77 @@ export const SCREENSHOTS = {
   codeSent: '3-code-sent.webp',
   textUpdates: '4-text-updates.webp',
   confirmation: '5-confirmation.webp',
+  confirmNumber: '6-confirm-number.webp',
+  confirmNumberTicked: '7-confirm-number-ticked.webp',
+  confirmNumberCodeSent: '8-confirm-number-code-sent.webp',
+  deleteAccount: '9-delete-account.webp',
+  deleteAccountTicked: '10-delete-account-ticked.webp',
+  deleteAccountCodeSent: '11-delete-account-code-sent.webp',
 } as const
 
 export type Screen = keyof typeof SCREENSHOTS
 
+/** A step without a picture: a text as it arrives. */
+type TextStep = 'confirmationText'
+
+/** Any step: one with a picture, or a text. */
+export type StepName = Screen | TextStep
+
+/** The forms, in the page's order, each with its steps; HELP and STOP has none. */
+export const FORMS = {
+  signIn: ['signIn', 'boxTicked', 'codeSent'],
+  confirmNumber: ['confirmNumber', 'confirmNumberTicked', 'confirmNumberCodeSent'],
+  deleteAccount: ['deleteAccount', 'deleteAccountTicked', 'deleteAccountCodeSent'],
+  agreementUpdates: ['textUpdates', 'confirmation', 'confirmationText'],
+  replies: [],
+} as const satisfies Record<string, readonly (Screen | TextStep)[]>
+
+export type Form = keyof typeof FORMS
+
+/** Each form's anchor, after its part's: `#website-sign-in`, `#mobile-app-sign-in`. */
+const FORM_SLUGS: Record<Form, string> = {
+  signIn: 'sign-in',
+  confirmNumber: 'confirm-number',
+  deleteAccount: 'delete-account',
+  agreementUpdates: 'agreement-updates',
+  replies: 'help-and-stop',
+}
+
+/** Each step's anchor on the website; in the app, the same after `mobile-`. */
+const STEP_IDS: Record<Screen | TextStep, string> = {
+  signIn: 'sign-in',
+  boxTicked: 'box-ticked',
+  codeSent: 'code-sent',
+  confirmNumber: 'confirm-number',
+  confirmNumberTicked: 'confirm-number-ticked',
+  confirmNumberCodeSent: 'confirm-number-code-sent',
+  deleteAccount: 'delete-account',
+  deleteAccountTicked: 'delete-account-ticked',
+  deleteAccountCodeSent: 'delete-account-code-sent',
+  textUpdates: 'text-updates',
+  confirmation: 'confirmation',
+  confirmationText: 'confirmation-text',
+}
+
 /**
  * Where the pictures come from: the website (`npm run screenshots:sms`) or
- * the mobile app (`npm run screenshots:sms:mobile`), which has the same five
+ * the mobile app (`npm run screenshots:sms:mobile`), which has the same
  * steps under the same file names in `mobile/`.
  */
 export type Surface = 'web' | 'mobile'
+
+/** The anchor of each part: the website's and the app's. */
+export const PART_ANCHORS: Record<Surface, string> = { web: 'website', mobile: 'mobile-app' }
+
+/** A form's anchor in a part, such as `website-confirm-number`. */
+export function formAnchor(form: Form, surface: Surface): string {
+  return `${PART_ANCHORS[surface]}-${FORM_SLUGS[form]}`
+}
+
+/** A step's anchor in a part, such as `confirm-number` or `mobile-confirm-number`. */
+export function stepAnchor(step: Screen | TextStep, surface: Surface): string {
+  return surface === 'mobile' ? `mobile-${STEP_IDS[step]}` : STEP_IDS[step]
+}
 
 /** Where a language's pictures are, under the web build's public files. */
 export function screenshotPath(
@@ -92,13 +165,19 @@ interface Step {
   alt?: string
 }
 
+/** A form's heading, and what it is for, the same on the website and in the app. */
+interface FormWording {
+  heading: string
+  intro: string
+}
+
 /** The page's own words, `wording/sms-opt-in/{language}.json`. */
 export interface SmsOptInWording {
   title: string
   description: string
   intro: string
   note: string
-  /** The contents list's name, for the two ways in: the website and the app. */
+  /** The contents list's name: each part, and each form in it. */
   contentsLabel: string
   websiteHeading: string
   websiteIntro: string
@@ -106,21 +185,22 @@ export interface SmsOptInWording {
   mobileIntro: string
   /** What the app's release state is, and so where its pictures come from. */
   mobileRelease: string
-  /** That the app's consent and confirmation are the website's, with links to steps 6 and 7. */
+  /** That the app's consent texts and texts are the website's. */
   mobileSame: string
-  confirmationTextLink: string
-  repliesLink: string
   wordingHeading: string
   messageFrom: string
   messageTo: string
   programsHeading: string
   programs: string[]
-  steps: Record<Screen | 'confirmationText' | 'replies', Step>
-  /** The same five screens in the mobile app. */
-  mobileSteps: Record<Screen, Step>
+  forms: Record<Form, FormWording>
+  steps: Record<Screen | TextStep, Step>
+  /** The same steps in the mobile app. */
+  mobileSteps: Record<Screen | TextStep, Step>
   codeText: string
   /** Before the text carrying the code that checks a number being added. */
   verifyCodeText: string
+  /** Before the text carrying the code that confirms deleting an account. */
+  deleteCodeText: string
   updateText: string
   moreHeading: string
   more: string
@@ -133,7 +213,7 @@ export interface SmsOptInWording {
 /** What the page quotes from the product's wording, `wording/{language}.json`. */
 interface ProductWording {
   productName: string
-  common: { skipToContent: string }
+  common: { skipToContent: string; cancel: string }
   help: { link: string }
   privacy: { link: string; policy: string; smsLink: string }
   termsOfUse: { link: string; document: string }
@@ -147,19 +227,41 @@ interface ProductWording {
     codeLabel: string
     codeHint: string
     resendSoon: string
+    resend: string
     submit: string
     changeIdentifier: string
   }
   smsUpdates: {
     heading: string
     intro: string
+    addPhoneIntro: string
+    phoneLabel: string
+    phoneHint: string
+    sendCode: string
+    codeSent: string
+    codeLabel: string
+    addPhone: string
+    changePhone: string
     consent: string
     save: string
     on: string
     howItWorks: string
   }
-  smsCode: { signIn: string; verifyNumber: string; tickToSend: string }
-  sms: { signIn: string; verifyNumber: string; update: string; optInConfirmation: string }
+  deletion: {
+    heading: string
+    codeIntro: string
+    sendCode: string
+    codeSent: string
+    continue: string
+  }
+  smsCode: { signIn: string; deleteAccount: string; verifyNumber: string; tickToSend: string }
+  sms: {
+    signIn: string
+    deleteAccount: string
+    verifyNumber: string
+    update: string
+    optInConfirmation: string
+  }
 }
 
 /** One language's page. */
@@ -206,11 +308,9 @@ function linked(text: string): string {
 }
 
 /** A list of what a screen says, word for word. */
-function quoted(heading: string, lines: string[], links = false): string {
-  const items = lines
-    .map((line) => `<li><q>${links ? linked(line) : escapeHtml(line)}</q></li>`)
-    .join('')
-  return `<div class="wording"><h4>${escapeHtml(heading)}</h4><ul>${items}</ul></div>`
+function quoted(heading: string, lines: string[]): string {
+  const items = lines.map((line) => `<li><q>${linked(line)}</q></li>`).join('')
+  return `<div class="wording"><h5>${escapeHtml(heading)}</h5><ul>${items}</ul></div>`
 }
 
 /** A text message, as a phone shows it: from the service, or a reply. */
@@ -233,128 +333,179 @@ export function renderSmsOptInMarkup(
     `${language === defaultLanguage ? `/${document}` : `/${language}/${document}`}${section ? `#${section}` : ''}`
   const s = product.signIn
   const u = product.smsUpdates
+  const d = product.deletion
   const c = product.smsCode
-  const steps = page.steps
-  const mobileSteps = page.mobileSteps
+  const said = (lines: string[]) => quoted(page.wordingHeading, lines)
+  const text = (before: string, message: string) =>
+    `<p>${escapeHtml(before)}</p>${bubble(message, page.messageFrom)}`
 
-  const screenshot = (screen: Screen, surface: Surface) => {
-    const alt = (surface === 'mobile' ? mobileSteps : steps)[screen].alt ?? ''
-    return `<img src="${screenshotPath(screen, language, defaultLanguage, surface)}" alt="${escapeHtml(alt)}" width="${SCREENSHOT_WIDTH}" loading="lazy" decoding="async">`
+  // What each screen says, and after a code is sent, the text it comes in.
+  // The app's screens say what the website's do, but for their own links:
+  // "How we text you" opens this page.
+  const wording = (step: Screen | TextStep, surface: Surface): string => {
+    switch (step) {
+      // The form with a number entered: the box beside it, unticked, and
+      // "Send code" waiting for it; then the box ticked.
+      case 'signIn':
+        return said([
+          s.title,
+          s.intro,
+          s.identifierLabel,
+          fill(s.identifierHintCountries, { codes: '+1' }),
+          c.signIn,
+          c.tickToSend,
+          s.sendCode,
+          product.privacy.smsLink,
+          product.privacy.policy,
+          product.termsOfUse.document,
+        ])
+      case 'boxTicked':
+        return said([c.signIn, s.sendCode])
+      case 'codeSent':
+        return (
+          said([
+            fill(s.codeSent, { identifier: SAMPLE_PHONE }),
+            s.codeLabel,
+            s.codeHint,
+            s.resendSoon,
+            s.submit,
+            s.changeIdentifier,
+          ]) + text(page.codeText, fill(product.sms.signIn, { code: SAMPLE_CODE }))
+        )
+      // "Text updates" on an account with no number yet: the number, the box
+      // beside it, and the code that checks it.
+      case 'confirmNumber':
+        return said([
+          u.heading,
+          u.intro,
+          u.addPhoneIntro,
+          u.phoneLabel,
+          u.phoneHint,
+          c.verifyNumber,
+          c.tickToSend,
+          u.sendCode,
+          u.howItWorks,
+        ])
+      case 'confirmNumberTicked':
+        return said([c.verifyNumber, u.sendCode])
+      case 'confirmNumberCodeSent':
+        return (
+          said([
+            fill(u.codeSent, { phone: masked(SAMPLE_PHONE_TO_ADD) }),
+            u.codeLabel,
+            s.codeHint,
+            u.addPhone,
+            u.changePhone,
+          ]) + text(page.verifyCodeText, fill(product.sms.verifyNumber, { code: SAMPLE_CODE }))
+        )
+      // Deleting an account whose code goes to its phone number.
+      case 'deleteAccount':
+        return said([
+          fill(d.codeIntro, { identifier: SAMPLE_PHONE }),
+          c.deleteAccount,
+          c.tickToSend,
+          d.sendCode,
+          product.common.cancel,
+        ])
+      case 'deleteAccountTicked':
+        return said([c.deleteAccount, d.sendCode])
+      case 'deleteAccountCodeSent':
+        return (
+          said([
+            d.heading,
+            fill(d.codeSent, { identifier: SAMPLE_PHONE }),
+            s.codeLabel,
+            s.codeHint,
+            d.continue,
+            s.resend,
+            product.common.cancel,
+          ]) + text(page.deleteCodeText, fill(product.sms.deleteAccount, { code: SAMPLE_CODE }))
+        )
+      case 'textUpdates':
+        return said([
+          u.heading,
+          u.intro,
+          u.consent,
+          u.save,
+          ...(surface === 'mobile' ? [u.howItWorks] : []),
+        ])
+      case 'confirmation':
+        return said([fill(u.on, { phone: masked(SAMPLE_PHONE) })])
+      case 'confirmationText':
+        return bubble(product.sms.optInConfirmation, page.messageFrom)
+    }
   }
-  /** A step, under its section's heading: what it is, its picture, and what it says. */
-  const step = (
-    id: string,
-    screen: Screen | null,
-    { title, caption }: Step,
-    body: string,
-    surface: Surface = 'web',
-  ) =>
-    `<section class="step" aria-labelledby="${id}"><h3 id="${id}">${escapeHtml(title)}</h3><p>${escapeHtml(caption)}</p>${
-      screen ? `<div class="shot shot-${surface}">${screenshot(screen, surface)}</div>` : ''
-    }${body}</section>`
-  /** One of the page's two parts, the website or the app, under a heading the contents list links to. */
-  const part = (id: string, heading: string, body: string) =>
-    `<section class="part" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(heading)}</h2>${body}</section>`
 
-  // The form with a number entered: the box beside it, unticked, and "Send
-  // code" waiting for it; then the box ticked.
-  const signInLines = [
-    s.title,
-    s.intro,
-    s.identifierLabel,
-    fill(s.identifierHintCountries, { codes: '+1' }),
-    c.signIn,
-    c.tickToSend,
-    s.sendCode,
-    product.privacy.smsLink,
-    product.privacy.policy,
-    product.termsOfUse.document,
-  ]
-  const signIn = quoted(page.wordingHeading, signInLines, true)
-  const boxTicked = quoted(page.wordingHeading, [c.signIn, s.sendCode], true)
-  const codeSent =
-    quoted(page.wordingHeading, [
-      fill(s.codeSent, { identifier: SAMPLE_PHONE }),
-      s.codeLabel,
-      s.codeHint,
-      s.resendSoon,
-      s.submit,
-      s.changeIdentifier,
-    ]) +
-    `<p>${escapeHtml(page.codeText)}</p>` +
-    bubble(fill(product.sms.signIn, { code: SAMPLE_CODE }), page.messageFrom)
-  // Last, the box beside a number being added, and then the text carrying
-  // the code that checks it.
-  const textUpdates =
-    quoted(page.wordingHeading, [u.heading, u.intro, u.consent, u.save, c.verifyNumber], true) +
-    `<p>${escapeHtml(page.verifyCodeText)}</p>` +
-    bubble(fill(product.sms.verifyNumber, { code: SAMPLE_CODE }), page.messageFrom)
-  const confirmation = quoted(page.wordingHeading, [fill(u.on, { phone: masked(SAMPLE_PHONE) })])
-  const confirmationText = bubble(product.sms.optInConfirmation, page.messageFrom)
+  /** A step, under its form's heading: what it is, its picture, and what it says. */
+  const step = (name: Screen | TextStep, surface: Surface) => {
+    const { title, caption, alt } = (surface === 'mobile' ? page.mobileSteps : page.steps)[name]
+    const id = stepAnchor(name, surface)
+    const picture =
+      name === 'confirmationText'
+        ? ''
+        : `<div class="shot shot-${surface}"><img src="${screenshotPath(name, language, defaultLanguage, surface)}" alt="${escapeHtml(alt ?? '')}" width="${SCREENSHOT_WIDTH}" loading="lazy" decoding="async"></div>`
+    return `<section class="step"><h4 id="${id}">${escapeHtml(title)}</h4><p>${escapeHtml(caption)}</p>${picture}${wording(name, surface)}</section>`
+  }
+
   const replies = [
     bubble('HELP', page.messageTo, true),
     bubble(page.replies.help, page.messageFrom),
     bubble('STOP', page.messageTo, true),
     bubble(page.replies.stop, page.messageFrom),
   ].join('')
-  const update = `<p>${escapeHtml(page.updateText)}</p>${bubble(fill(product.sms.update, { link: SAMPLE_LINK }), page.messageFrom)}`
+  const update = text(page.updateText, fill(product.sms.update, { link: SAMPLE_LINK }))
 
-  // The app's screens say what the website's do, but for its own links:
-  // "How we text you" opens this page.
-  const mobileSignIn = quoted(page.wordingHeading, signInLines, true)
-  const mobileBoxTicked = quoted(page.wordingHeading, [c.signIn, s.sendCode], true)
-  const mobileCodeSent = quoted(page.wordingHeading, [
-    fill(s.codeSent, { identifier: SAMPLE_PHONE }),
-    s.codeLabel,
-    s.codeHint,
-    s.resendSoon,
-    s.submit,
-    s.changeIdentifier,
-  ])
-  const mobileTextUpdates = quoted(
-    page.wordingHeading,
-    [u.heading, u.intro, u.consent, u.save, u.howItWorks, c.verifyNumber],
-    true,
-  )
-  const mobileConfirmation = quoted(page.wordingHeading, [fill(u.on, { phone: masked(SAMPLE_PHONE) })])
-  const mobileSame = fill(escapeHtml(page.mobileSame), {
-    confirmationText: `<a href="#confirmation-text">${escapeHtml(page.confirmationTextLink)}</a>`,
-    replies: `<a href="#help-and-stop">${escapeHtml(page.repliesLink)}</a>`,
-  })
+  /**
+   * One form in a part, under a heading of its own that the contents list
+   * links to. On the website, HELP and STOP keeps the anchor it had as a
+   * step, `#help-and-stop`, on its section. Forms and steps are plain
+   * sections found by their headings, not landmarks: their names repeat
+   * from one part to the other, and a landmark's must not.
+   */
+  const form = (name: Form, surface: Surface) => {
+    const id = formAnchor(name, surface)
+    const { heading, intro } = page.forms[name]
+    const kept = name === 'replies' && surface === 'web' ? ' id="help-and-stop"' : ''
+    const body =
+      name === 'replies'
+        ? replies + update
+        : FORMS[name].map((each) => step(each, surface)).join('')
+    return `<section class="form"${kept}><h3 id="${id}">${escapeHtml(heading)}</h3><p>${escapeHtml(intro)}</p>${body}</section>`
+  }
+  const forms = (surface: Surface) =>
+    (Object.keys(FORMS) as Form[]).map((name) => form(name, surface)).join('')
 
-  const website = part(
-    'website',
-    page.websiteHeading,
-    [
-      `<p>${linked(page.websiteIntro)}</p>`,
-      step('sign-in', 'signIn', steps.signIn, signIn),
-      step('box-ticked', 'boxTicked', steps.boxTicked, boxTicked),
-      step('code-sent', 'codeSent', steps.codeSent, codeSent),
-      step('text-updates', 'textUpdates', steps.textUpdates, textUpdates),
-      step('confirmation', 'confirmation', steps.confirmation, confirmation),
-      step('confirmation-text', null, steps.confirmationText, confirmationText),
-      step('help-and-stop', null, steps.replies, replies + update),
-    ].join(''),
-  )
+  /** One of the page's two parts, the website or the app, under a heading the contents list links to. */
+  const part = (surface: Surface, heading: string, body: string) => {
+    const id = PART_ANCHORS[surface]
+    return `<section class="part" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(heading)}</h2>${body}${forms(surface)}</section>`
+  }
+
+  const website = part('web', page.websiteHeading, `<p>${linked(page.websiteIntro)}</p>`)
   const mobile = part(
-    'mobile-app',
+    'mobile',
     page.mobileHeading,
     [
       `<p>${escapeHtml(page.mobileIntro)}</p>`,
       `<p class="notice">${escapeHtml(page.mobileRelease)}</p>`,
-      `<p>${mobileSame}</p>`,
-      step('mobile-sign-in', 'signIn', mobileSteps.signIn, mobileSignIn, 'mobile'),
-      step('mobile-box-ticked', 'boxTicked', mobileSteps.boxTicked, mobileBoxTicked, 'mobile'),
-      step('mobile-code-sent', 'codeSent', mobileSteps.codeSent, mobileCodeSent, 'mobile'),
-      step('mobile-text-updates', 'textUpdates', mobileSteps.textUpdates, mobileTextUpdates, 'mobile'),
-      step('mobile-confirmation', 'confirmation', mobileSteps.confirmation, mobileConfirmation, 'mobile'),
+      `<p>${escapeHtml(page.mobileSame)}</p>`,
     ].join(''),
   )
-  const contents = `<nav aria-label="${escapeHtml(page.contentsLabel)}" class="contents"><ul>${[
-    ['website', page.websiteHeading],
-    ['mobile-app', page.mobileHeading],
-  ]
-    .map(([id, heading]) => `<li><a href="#${id}">${escapeHtml(heading)}</a></li>`)
+  const contents = `<nav aria-label="${escapeHtml(page.contentsLabel)}" class="contents"><ul>${(
+    [
+      ['web', page.websiteHeading],
+      ['mobile', page.mobileHeading],
+    ] as const
+  )
+    .map(([surface, heading]) => {
+      const each = (Object.keys(FORMS) as Form[])
+        .map(
+          (name) =>
+            `<li><a href="#${formAnchor(name, surface)}">${escapeHtml(page.forms[name].heading)}</a></li>`,
+        )
+        .join('')
+      return `<li><a href="#${PART_ANCHORS[surface]}">${escapeHtml(heading)}</a><ul>${each}</ul></li>`
+    })
     .join('')}</ul></nav>`
 
   const otherLanguages = languages

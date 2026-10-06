@@ -2,6 +2,15 @@ import { spawn } from 'node:child_process'
 import { closeSync, openSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import {
+  FORMS,
+  PART_ANCHORS,
+  SCREENSHOTS,
+  formAnchor,
+  stepAnchor,
+  type Form,
+  type StepName,
+} from '../build/sms-opt-in'
 import { apiEnvironment, apiLog, port, repoRoot, webRoot, workerBinary } from './support/env'
 import { expect, test } from './support/fixtures'
 import { agree, move, type ItemSpec } from './support/flows'
@@ -107,7 +116,7 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   }
 })
 
-test('the page on how people opt in shows its steps on the website and in the app, and their pictures, under the same policy', async ({
+test('the page on how people opt in shows each form on the website and in the app, and their pictures, under the same policy', async ({
   person,
 }) => {
   const reader = await person('Reviewer', { javaScriptEnabled: false, viewport: { width: 390, height: 844 } })
@@ -120,9 +129,12 @@ test('the page on how people opt in shows its steps on the website and in the ap
     websiteHeading: string
     mobileHeading: string
     mobileRelease: string
+    forms: Record<Form, { heading: string }>
     steps: Record<string, { title: string }>
     mobileSteps: Record<string, { title: string; caption: string }>
   }
+  const forms = Object.keys(FORMS) as Form[]
+  const screens = Object.keys(SCREENSHOTS).length
 
   // Reached from the sections on texts of the terms and the privacy policy.
   for (const document of ['terms', 'privacy']) {
@@ -142,13 +154,22 @@ test('the page on how people opt in shows its steps on the website and in the ap
       "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     )
     await expect(page.locator('html')).toHaveAttribute('lang', language)
-    // Seven steps on the website, five in the app.
-    await expect(page.locator('section.part:has(> h2#website) section.step > h3')).toHaveCount(7)
-    await expect(page.locator('section.part:has(> h2#mobile-app) section.step > h3')).toHaveCount(5)
+    // The four forms and HELP and STOP in each part, each under its own
+    // anchor, and every step of each.
+    for (const surface of ['web', 'mobile'] as const) {
+      const section = page.locator(`section.part:has(> h2#${PART_ANCHORS[surface]})`)
+      await expect(section.locator('section.form > h3')).toHaveCount(forms.length)
+      for (const form of forms) {
+        await expect(section.locator(`h3#${formAnchor(form, surface)}`)).toHaveCount(1)
+      }
+      await expect(section.locator('section.step > h4')).toHaveCount(
+        forms.reduce((count, form) => count + FORMS[form].length, 0),
+      )
+    }
     // Every picture is there, from this origin, served, and drawn.
     const images = page.locator('section.step img')
-    await expect(images).toHaveCount(10)
-    await expect(page.locator('section.part:has(> h2#mobile-app) img[src^="/sms-opt-in/mobile/"]')).toHaveCount(5)
+    await expect(images).toHaveCount(2 * screens)
+    await expect(page.locator('section.part:has(> h2#mobile-app) img[src^="/sms-opt-in/mobile/"]')).toHaveCount(screens)
     for (const image of await images.all()) {
       await image.scrollIntoViewIfNeeded()
       const src = (await image.getAttribute('src'))!
@@ -164,26 +185,38 @@ test('the page on how people opt in shows its steps on the website and in the ap
   await page.goto('/sms-opt-in')
   await expect(page.getByRole('heading', { name: wording.title, level: 1 })).toBeVisible()
   await expect(page.getByRole('heading', { name: wording.websiteHeading, level: 2 })).toBeVisible()
-  for (const step of Object.values(wording.steps)) {
-    await expect(page.getByRole('heading', { name: step.title, level: 3, exact: true })).toBeVisible()
+  for (const [step, { title }] of Object.entries(wording.steps)) {
+    await expect(page.locator(`h4#${stepAnchor(step as StepName, 'web')}`)).toHaveText(title)
   }
   await expect(page.getByText(en.smsUpdates.consent, { exact: true }).first()).toBeVisible()
-  await expect(page.getByText(en.smsCode.signIn, { exact: true }).first()).toBeVisible()
-  await expect(page.getByText(en.sms.optInConfirmation, { exact: true })).toBeVisible()
+  for (const label of [en.smsCode.signIn, en.smsCode.verifyNumber, en.smsCode.deleteAccount]) {
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+  }
+  await expect(page.getByText(en.sms.optInConfirmation, { exact: true }).first()).toBeVisible()
 
-  // The contents list leads to the mobile app's part, at its own address.
+  // The contents list leads to each part and each form, at its own address.
   const contents = page.getByRole('navigation', { name: wording.contentsLabel })
+  await expect(contents.getByRole('link')).toHaveCount(2 + 2 * forms.length)
   await expect(contents.getByRole('link', { name: wording.websiteHeading })).toHaveAttribute('href', '#website')
   await contents.getByRole('link', { name: wording.mobileHeading }).click()
   await expect(page).toHaveURL(/\/sms-opt-in#mobile-app$/)
   const mobile = page.getByRole('heading', { name: wording.mobileHeading, level: 2 })
   await expect(mobile).toBeInViewport()
   await expect(page.getByText(wording.mobileRelease, { exact: true })).toBeVisible()
-  for (const step of Object.values(wording.mobileSteps)) {
-    await expect(page.getByRole('heading', { name: step.title, level: 3, exact: true })).toBeVisible()
-    await expect(page.getByText(step.caption, { exact: true })).toBeVisible()
+  for (const [step, { title, caption }] of Object.entries(wording.mobileSteps)) {
+    const heading = page.locator(`h4#${stepAnchor(step as StepName, 'mobile')}`)
+    await expect(heading).toHaveText(title)
+    await expect(heading.locator('xpath=following-sibling::p[1]')).toHaveText(caption)
   }
-  // A link straight to the app's part opens there.
+  await contents
+    .getByRole('link', { name: wording.forms.confirmNumber.heading })
+    .nth(1)
+    .click()
+  await expect(page).toHaveURL(/\/sms-opt-in#mobile-app-confirm-number$/)
+  await expect(page.locator('h3#mobile-app-confirm-number')).toBeInViewport()
+  // A link straight to a part, or to one form, opens there.
   await page.goto('/es/sms-opt-in#mobile-app')
   await expect(page.locator('h2#mobile-app')).toBeInViewport()
+  await page.goto('/es/sms-opt-in#website-delete-account')
+  await expect(page.locator('h3#website-delete-account')).toBeInViewport()
 })

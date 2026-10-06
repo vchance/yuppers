@@ -4,6 +4,11 @@
  * origin, so the Content-Security-Policy needs nothing more.
  */
 
+/* The contents list: each part, and each form in it. */
+.sms-opt-in .contents ul ul {
+  margin-block: 0.25rem 0.75rem;
+}
+
 /* The two parts, the website and the mobile app, each opened by its heading. */
 .sms-opt-in .part {
   margin-block: 3rem;
@@ -14,8 +19,17 @@
   border-block-start: 2px solid var(--line);
 }
 
-.sms-opt-in .step {
+/* Each form in a part, with its steps, under a heading of its own. */
+.sms-opt-in .form {
   margin-block: 2.5rem;
+}
+
+.sms-opt-in .form > h3 {
+  font-size: 1.25rem;
+}
+
+.sms-opt-in .step {
+  margin-block: 2rem;
   padding-block-start: 1.5rem;
   border-block-start: 1px solid var(--line);
 }
@@ -32,7 +46,11 @@
   border-radius: 0.75rem;
 }
 
-.sms-opt-in .wording h4 {
+.sms-opt-in .step > h4 {
+  font-size: 1.05rem;
+}
+
+.sms-opt-in .wording h5 {
   font-size: 1rem;
   margin-block: 1rem 0.5rem;
 }

@@ -5,9 +5,9 @@ import { resolve } from 'node:path'
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test'
 import type { Wording } from '@yuppers/shared'
 
-import { SMS_CODE_CONSENT_VERSION } from '../../../../packages/shared/src/sms-code-consent.ts'
 import {
   SAMPLE_PHONE,
+  SAMPLE_PHONE_TO_ADD,
   SCREENSHOT_WIDTH,
   screenshotPath,
   type Screen,
@@ -18,28 +18,51 @@ import { en, es, fill } from '../support/wording'
 import { apiPort, screenshotsLog, webOrigin } from './playwright.config'
 
 /*
- * Takes the five pictures of the page on how people opt in to texts, in each
- * language, as a person on a phone goes through the steps:
+ * Takes the pictures of the page on how people opt in to texts, in each
+ * language, as a person on a phone goes through the steps of each form that
+ * texts them:
  *
  *   1. the sign-in form with a phone number entered, the box beside it not
  *      yet ticked and "Send code" waiting for it;
  *   2. the same with the box ticked and "Send code" enabled;
  *   3. the form after asking for a code;
  *   4. "Text updates" on an agreement, the box not yet ticked;
- *   5. the same once ticked and saved.
+ *   5. the same once ticked and saved;
+ *   6. "Text updates" on an account with no number: a number entered to be
+ *      added, the box beside it not yet ticked and "Text me a code" waiting
+ *      for it;
+ *   7. the same with the box ticked;
+ *   8. after asking for the code that confirms the number;
+ *   9. deleting the account, with the code to go to its phone number, the
+ *      box beside it not yet ticked and "Send code and continue" waiting;
+ *  10. the same with the box ticked;
+ *  11. after asking for the deletion code.
  *
  * The person signs in with SAMPLE_PHONE, a number reserved for fiction,
- * whose code is read back from the API's log; someone else, through the
- * API, has sent them a proposal. Their account is deleted at the end, so
- * the next run starts the same way. Each picture is written as WebP,
- * encoded by the browser itself.
+ * whose code is read back from the API's log; someone else, Ana, who signs
+ * in with an email address, has sent them a proposal through the API. Ana
+ * adds SAMPLE_PHONE_TO_ADD, another number reserved for fiction, on the
+ * same agreement, and stops once its code is sent (6 to 8). The person who
+ * signed in by phone then asks for a code to delete their account (9 to
+ * 11), and the account is deleted with that code, so the next run starts
+ * the same way.
+ *
+ * The service sends one number at most five sign-in codes an hour, and a
+ * code that confirms a number being added is one of them
+ * (`AuthRules::codes_per_hour` in the backend, which no setting changes);
+ * deletion codes are counted against the account instead. With the number
+ * added apart from the number that signs in, each is sent one code per
+ * language: two a run, and four for this run and `npm run
+ * screenshots:sms:mobile` together within the hour.
+ *
+ * Each picture is written as WebP, encoded by the browser itself.
  */
 
 const API = `http://127.0.0.1:${apiPort}`
 
 /** The text message a code went out in, read back from the log, for a phone number. */
-function phoneCodeFrom(purpose: 'sign-in' | 'delete', send: () => Promise<unknown>) {
-  const masked = `+1••••••••${SAMPLE_PHONE.slice(-2)}`
+function phoneCodeFrom(phone: string, purpose: 'sign-in' | 'delete', send: () => Promise<unknown>) {
+  const masked = `+1••••••••${phone.slice(-2)}`
   const before = phoneCodes(masked, purpose).length
   return (async () => {
     await send()
@@ -63,8 +86,15 @@ function phoneCodes(masked: string, purpose: 'sign-in' | 'delete'): string[] {
     .filter((code): code is string => code !== undefined)
 }
 
-/** Someone with an email address who has sent a proposal bound to SAMPLE_PHONE. Returns its invitation token. */
-async function proposal(request: APIRequestContext): Promise<string> {
+/**
+ * Someone with an email address who has sent a proposal bound to
+ * SAMPLE_PHONE, in `language`. Returns their address, the exchange and its
+ * invitation token.
+ */
+async function proposal(
+  request: APIRequestContext,
+  language: string,
+): Promise<{ email: string; id: string; token: string }> {
   const email = `opt-in-${randomUUID().slice(0, 8)}@example.test`
   const code = await codeFrom(
     email,
@@ -79,7 +109,7 @@ async function proposal(request: APIRequestContext): Promise<string> {
   const headers = { Authorization: `Bearer ${token}` }
   await request.patch(`${API}/v1/me`, {
     headers,
-    data: { display_name: 'Ana Ruiz', adult_confirmed: true },
+    data: { display_name: 'Ana Ruiz', adult_confirmed: true, language },
   })
   const draft = (await (
     await request.post(`${API}/v1/exchanges`, { headers, data: { timezone: 'America/Chicago' } })
@@ -112,7 +142,8 @@ async function proposal(request: APIRequestContext): Promise<string> {
     },
   })
   expect(sent.status(), await sent.text()).toBe(200)
-  return ((await sent.json()) as { invitation_token: string }).invitation_token
+  const { invitation_token } = (await sent.json()) as { invitation_token: string }
+  return { email, id: draft.id, token: invitation_token }
 }
 
 /** Writes a screenshot as WebP, encoded by the browser. */
@@ -134,23 +165,29 @@ async function save(browser: Browser, png: Buffer, screen: Screen, language: str
   writeFileSync(file, Buffer.from(base64, 'base64'))
 }
 
-/** Deletes the account signed in on `page`, with a code by text, freeing the number for the next run. */
-async function deleteAccount(page: Page) {
-  const headers = { Origin: webOrigin }
-  const code = await phoneCodeFrom('delete', () =>
-    page.request.post('/v1/me/deletion/codes', {
-      headers,
-      data: {
-        channel: 'PHONE',
-        sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
-      },
-    }),
-  )
+/** Deletes the account signed in on `page` with the code texted for it, freeing the number for the next run. */
+async function deleteAccount(page: Page, code: string) {
   const done = await page.request.post('/v1/me/deletion', {
-    headers,
+    headers: { Origin: webOrigin },
     data: { channel: 'PHONE', code },
   })
   expect(done.ok(), await done.text()).toBe(true)
+}
+
+/** Signs in on `page` with an email address, as Ana does on a phone of her own, and opens exchange `id`. */
+async function signInByEmail(page: Page, w: Wording, email: string, id: string) {
+  await page.goto('/')
+  await page.getByLabel(w.signIn.identifierLabel, { exact: true }).fill(email)
+  const code = await codeFrom(
+    email,
+    'sign-in',
+    () => page.getByRole('button', { name: w.signIn.sendCode, exact: true }).click(),
+    screenshotsLog,
+  )
+  await page.getByLabel(w.signIn.codeLabel).fill(code)
+  await page.getByRole('button', { name: w.signIn.submit, exact: true }).click()
+  await expect(page.getByRole('heading', { name: w.home.title, level: 1 })).toBeVisible()
+  await page.goto(`/exchanges/${id}`)
 }
 
 for (const [language, locale, w] of [
@@ -159,19 +196,22 @@ for (const [language, locale, w] of [
 ] as [string, string, Wording][]) {
   test(`the opt-in screens in ${language}`, async ({ browser, playwright }) => {
     const request = await playwright.request.newContext()
-    const token = await proposal(request)
+    const { email, id: sent, token } = await proposal(request, language)
     await request.dispose()
 
-    const context = await browser.newContext({
-      baseURL: webOrigin,
-      locale,
-      timezoneId: 'America/Chicago',
-      viewport: { width: SCREENSHOT_WIDTH, height: 844 },
-      deviceScaleFactor: 2,
-      isMobile: true,
-      hasTouch: true,
-      colorScheme: 'light',
-    })
+    /** A phone of its own, for each person. */
+    const phone = () =>
+      browser.newContext({
+        baseURL: webOrigin,
+        locale,
+        timezoneId: 'America/Chicago',
+        viewport: { width: SCREENSHOT_WIDTH, height: 844 },
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true,
+        colorScheme: 'light',
+      })
+    const context = await phone()
     const page = await context.newPage()
 
     // 1. The sign-in form, offering phone numbers, with a number entered:
@@ -195,7 +235,7 @@ for (const [language, locale, w] of [
     await save(browser, await page.screenshot({ fullPage: true }), 'boxTicked', language)
 
     // 3. After asking for a code.
-    const code = await phoneCodeFrom('sign-in', () => send.click())
+    const code = await phoneCodeFrom(SAMPLE_PHONE, 'sign-in', () => send.click())
     await expect(page.getByText(fill(w.signIn.codeSent, { identifier: SAMPLE_PHONE }))).toBeVisible()
     await page.mouse.click(1, 1)
     await save(browser, await page.screenshot(), 'codeSent', language)
@@ -232,7 +272,76 @@ for (const [language, locale, w] of [
     await control.getByRole('button', { name: w.smsUpdates.save, exact: true }).blur()
     await save(browser, await control.screenshot(), 'confirmation', language)
 
-    await deleteAccount(page)
+    // 6. Ana, with no number on her account, adds one in "Text updates" on
+    // the agreement she sent: the number entered, the box beside it
+    // unticked, and "Text me a code" waiting for it.
+    const anaContext = await phone()
+    const ana = await anaContext.newPage()
+    await signInByEmail(ana, w, email, sent)
+    const adding = ana.locator('section.sms-updates')
+    await expect(adding.getByText(w.smsUpdates.addPhoneIntro)).toBeVisible()
+    await adding.getByLabel(w.smsUpdates.phoneLabel).fill(SAMPLE_PHONE_TO_ADD)
+    const numberBox = adding.getByRole('checkbox', { name: w.smsCode.verifyNumber, exact: true })
+    const textMe = adding.getByRole('button', { name: w.smsUpdates.sendCode, exact: true })
+    await expect(numberBox).not.toBeChecked()
+    await expect(textMe).toBeDisabled()
+    await expect(adding.getByText(w.smsCode.tickToSend)).toBeVisible()
+    await ana.mouse.click(1, 1)
+    await adding.scrollIntoViewIfNeeded()
+    await save(browser, await adding.screenshot(), 'confirmNumber', language)
+
+    // 7. The box ticked: "Text me a code" enabled.
+    await numberBox.check()
+    await expect(textMe).toBeEnabled()
+    await ana.mouse.click(1, 1)
+    await save(browser, await adding.screenshot(), 'confirmNumberTicked', language)
+
+    // 8. After asking for the code. The number is left unconfirmed.
+    await phoneCodeFrom(SAMPLE_PHONE_TO_ADD, 'sign-in', () => textMe.click())
+    const toAdd = `+1 •••-•••-${SAMPLE_PHONE_TO_ADD.slice(-4)}`
+    await expect(adding.getByText(fill(w.smsUpdates.codeSent, { phone: toAdd }))).toBeVisible()
+    await ana.mouse.click(1, 1)
+    await save(browser, await adding.screenshot(), 'confirmNumberCodeSent', language)
+    await anaContext.close()
+
+    // 9. The person who signed in by phone deletes their account: the code
+    // to go to the number, the box beside it unticked, and "Send code and
+    // continue" waiting for it.
+    await page.goto('/account')
+    const deletion = page.getByRole('region', { name: w.deletion.heading, exact: true })
+    await deletion.getByRole('button', { name: w.deletion.open, exact: true }).click()
+    await expect(
+      deletion.getByText(fill(w.deletion.codeIntro, { identifier: SAMPLE_PHONE })),
+    ).toBeVisible()
+    const deletionBox = deletion.getByRole('checkbox', { name: w.smsCode.deleteAccount, exact: true })
+    const sendDeletion = deletion.getByRole('button', { name: w.deletion.sendCode, exact: true })
+    await expect(deletionBox).not.toBeChecked()
+    await expect(sendDeletion).toBeDisabled()
+    await expect(deletion.getByText(w.smsCode.tickToSend)).toBeVisible()
+    await page.mouse.click(1, 1)
+    // From where the code goes to the button, the box in the middle.
+    await deletionBox.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+    await save(browser, await page.screenshot(), 'deleteAccount', language)
+
+    // 10. The box ticked: the button enabled.
+    await deletionBox.check()
+    await expect(sendDeletion).toBeEnabled()
+    await page.mouse.click(1, 1)
+    await deletionBox.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+    await save(browser, await page.screenshot(), 'deleteAccountTicked', language)
+
+    // 11. After asking for the code. Nothing is deleted on screen; the
+    // account is deleted with this code, through the API, once the picture
+    // is taken.
+    const deletionCode = await phoneCodeFrom(SAMPLE_PHONE, 'delete', () => sendDeletion.click())
+    await expect(
+      deletion.getByText(fill(w.deletion.codeSent, { identifier: SAMPLE_PHONE })),
+    ).toBeVisible()
+    await page.mouse.click(1, 1)
+    await deletion.evaluate((element) => element.scrollIntoView({ block: 'start' }))
+    await save(browser, await page.screenshot(), 'deleteAccountCodeSent', language)
+
+    await deleteAccount(page, deletionCode)
     await context.close()
   })
 }

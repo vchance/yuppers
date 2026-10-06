@@ -2,16 +2,14 @@
   "title": "How people opt in to texts from Yuppers.app",
   "description": "Each step a person takes to receive text messages from Yuppers.app, with the exact wording of every screen and message.",
   "intro": "Yuppers.app (https://yuppers.app) sends text messages in two programs, Yuppers.app sign-in codes and Yuppers.app agreement updates, and for nothing else: no marketing. This page shows each step a person takes to receive them, with a picture of each screen and the exact wording it shows.",
-  "note": "On yuppers.app and in the Yuppers mobile app, signing in with a phone number and the “Text updates” control on an agreement appear only while texting is turned on for the service. The screens below show them as they appear when texting is enabled.",
+  "note": "On yuppers.app and in the Yuppers mobile app, signing in with a phone number, a code by text to delete an account, and the “Text updates” control on an agreement appear only while texting is turned on for the service. The screens below show them as they appear when texting is enabled.",
   "contentsLabel": "On this page",
   "websiteHeading": "On the Yuppers website",
   "websiteIntro": "These screens were captured from the Yuppers website, https://yuppers.app, on a phone-sized screen.",
   "mobileHeading": "In the Yuppers mobile app",
-  "mobileIntro": "The Yuppers app for iPhone and Android has the same steps: signing in with a phone number, and the “Text updates” control on an agreement. Each picture is the whole screen, under the app’s own navigation bar.",
+  "mobileIntro": "The Yuppers app for iPhone and Android has the same four forms, with the same boxes and the same wording: signing in with a phone number, confirming a phone number, deleting an account by text, and the “Text updates” control on an agreement. Each picture is the whole screen, under the app’s own navigation bar.",
   "mobileRelease": "The Yuppers app is not yet published in the App Store or Google Play, so these pictures were taken from the app’s own screens, built from its code and shown at the size of an iPhone screen, rather than from a store download.",
-  "mobileSame": "The same consent texts and confirmation are used on the website and in the app, and so are the texts that follow: the confirmation text in {confirmationText} and the HELP and STOP replies in {replies}.",
-  "confirmationTextLink": "step 6 above",
-  "repliesLink": "step 7 above",
+  "mobileSame": "The consent texts, the texts that carry the codes, the opt-in confirmation text and the HELP and STOP replies are the same on the website and in the app.",
   "wordingHeading": "Exact wording",
   "messageFrom": "Text from Yuppers.app",
   "messageTo": "Reply from the person",
@@ -20,6 +18,28 @@
     "Yuppers.app sign-in codes: one text for each code a person asks for, to sign in, to confirm deleting their account, or to add a number to their account, and only once they have ticked a box beside the number.",
     "Yuppers.app agreement updates: one text per status change of an agreement the person turned updates on for. Message frequency varies; there is no fixed maximum."
   ],
+  "forms": {
+    "signIn": {
+      "heading": "Signing in by text",
+      "intro": "The sign-in form, the first screen for anyone not signed in. A code is texted only to a number the person types there, and only once they tick the box beside it."
+    },
+    "confirmNumber": {
+      "heading": "Confirming a phone number",
+      "intro": "Text updates need a US mobile number on the account. If it has none, “Text updates” on an agreement first asks for one and checks that it is the person’s with a one-time code, texted only once they tick the box beside the number."
+    },
+    "deleteAccount": {
+      "heading": "Deleting an account by text",
+      "intro": "Deleting an account is confirmed with a one-time code sent to the account’s email address or phone number. When it is to go to the phone number, it is texted only once the person ticks the box beside it. The pictures show an account whose only way in is its phone number."
+    },
+    "agreementUpdates": {
+      "heading": "Agreement updates",
+      "intro": "Text updates are turned on one agreement at a time, with a box on that agreement, and a text confirms it."
+    },
+    "replies": {
+      "heading": "HELP and STOP",
+      "intro": "Replying HELP or STOP to any of our texts is answered at once with these texts. STOP ends every text from Yuppers.app to that number, codes included, until it replies START; the person can still sign in with an email address. Each agreement update looks like the last text below."
+    }
+  },
   "steps": {
     "signIn": {
       "title": "Step 1. Entering a phone number to sign in",
@@ -36,23 +56,49 @@
       "caption": "The screen says where the code went and asks for it. The text that carries the code is shown below the picture.",
       "alt": "The Yuppers sign-in form after a code was sent: the number it went to, and a field for the six-digit code."
     },
+    "confirmNumber": {
+      "title": "Step 1. Entering the number to add",
+      "caption": "On an agreement the person is a party to, when their account has no phone number, “Text updates” asks for a US mobile number, with an unticked box beside the consent text below, whose two addresses are links to the terms and the privacy policy. “Text me a code” stays disabled until the box is ticked, and the form says why.",
+      "alt": "The Text updates section of an agreement on a phone, asking for a mobile number, with a number entered, an unticked box beside the consent text with links to the terms and the privacy policy, the Text me a code button disabled, and the line saying to tick the box first."
+    },
+    "confirmNumberTicked": {
+      "title": "Step 2. Ticking the box",
+      "caption": "Once the person ticks the box, “Text me a code” is enabled. Pressing it asks for one text with a code that confirms the number; nothing is sent before. Changing the number unticks the box.",
+      "alt": "The same Text updates section with the box beside the consent text ticked and the Text me a code button enabled."
+    },
+    "confirmNumberCodeSent": {
+      "title": "Step 3. After asking for a code",
+      "caption": "The form says which number the code went to, partly hidden, and asks for it. Entering it adds the number to the account, and the agreement’s own box follows (“Agreement updates” below). The text that carries the code is shown below the picture.",
+      "alt": "The Text updates section after a code was sent: the number it went to, partly hidden, and a field for the code from the text."
+    },
+    "deleteAccount": {
+      "title": "Step 1. Asking to delete the account",
+      "caption": "On the account page, “Delete my account” first says what deleting does, then that a one-time code will be sent to the account’s phone number, with an unticked box beside the consent text below, whose two addresses are links to the terms and the privacy policy. “Send code and continue” stays disabled until the box is ticked, and the form says why. A code sent to an email address needs no box.",
+      "alt": "The end of the account deletion form on a phone: the number the code will go to, an unticked box beside the consent text with links to the terms and the privacy policy, the Send code and continue button disabled, and the line saying to tick the box first."
+    },
+    "deleteAccountTicked": {
+      "title": "Step 2. Ticking the box",
+      "caption": "Once the person ticks the box, “Send code and continue” is enabled. Pressing it asks for one text with a code that works only for deleting the account; nothing is sent before.",
+      "alt": "The same deletion form with the box beside the consent text ticked and the Send code and continue button enabled."
+    },
+    "deleteAccountCodeSent": {
+      "title": "Step 3. After asking for a code",
+      "caption": "The form says where the code went and asks for it. Nothing is deleted until the person enters the code and confirms once more. The text that carries the code is shown below the picture.",
+      "alt": "The deletion form after a code was sent: the number it went to, and a field for the six-digit code."
+    },
     "textUpdates": {
-      "title": "Step 4. Turning on text updates for an agreement",
-      "caption": "On an agreement the person is a party to, “Text updates” shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save. If the account has no phone number yet, the person first enters a US number, which we check with a one-time code sent to it only once they tick a box beside the last quoted text below. The text that carries that code is shown after it.",
+      "title": "Step 1. Turning on text updates for an agreement",
+      "caption": "On an agreement the person is a party to, once their account has a phone number, “Text updates” shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save.",
       "alt": "The Text updates section of an agreement on a phone: an unticked box beside the consent wording, with links to the terms and the privacy policy, and a Save button."
     },
     "confirmation": {
-      "title": "Step 5. After ticking the box and saving",
+      "title": "Step 2. After ticking the box and saving",
       "caption": "The screen confirms that text updates are on for this agreement, says how often and to which number they go, and how to stop them.",
       "alt": "The Text updates section after saving: the box ticked, and the confirmation that text updates are on, with the number partly hidden."
     },
     "confirmationText": {
-      "title": "Step 6. The opt-in confirmation text",
+      "title": "Step 3. The opt-in confirmation text",
       "caption": "Sent at once to the number, as received:"
-    },
-    "replies": {
-      "title": "Step 7. HELP and STOP",
-      "caption": "Replying HELP or STOP to any of our texts is answered at once with these texts. STOP ends every text from Yuppers.app to that number, sign-in codes included, until it replies START; the person can still sign in with an email address. Each status update afterwards looks like the last text below."
     }
   },
   "mobileSteps": {
@@ -68,22 +114,57 @@
     },
     "codeSent": {
       "title": "Step 3. After asking for a code, in the app",
-      "caption": "The app says where the code went and asks for it. The code comes in the same text as on the website.",
+      "caption": "The app says where the code went and asks for it. The text that carries the code, the same as on the website, is shown below the picture.",
       "alt": "The sign-in screen of the Yuppers app after a code was sent: the number it went to, and a field for the six-digit code."
     },
+    "confirmNumber": {
+      "title": "Step 1. Entering the number to add, in the app",
+      "caption": "On an agreement the person is a party to, when their account has no phone number, the app’s “Text updates” section asks for a US mobile number, with an unticked box beside the same consent text as on the website, whose two addresses are links that open in the browser. “Text me a code” stays disabled until the box is ticked, and the screen says why. “How we text you” opens this page.",
+      "alt": "The Text updates section of an agreement in the Yuppers app, asking for a mobile number, with a number entered, an unticked box beside the consent text with links to the terms and the privacy policy, the Text me a code button disabled, and the line saying to tick the box first."
+    },
+    "confirmNumberTicked": {
+      "title": "Step 2. Ticking the box, in the app",
+      "caption": "In the app too, once the person ticks the box, “Text me a code” is enabled. Pressing it asks for one text with a code that confirms the number; nothing is sent before. Changing the number unticks the box.",
+      "alt": "The same section in the Yuppers app with the box beside the consent text ticked and the Text me a code button enabled."
+    },
+    "confirmNumberCodeSent": {
+      "title": "Step 3. After asking for a code, in the app",
+      "caption": "The app says which number the code went to, partly hidden, and asks for it. Entering it adds the number to the account, and the agreement’s own box follows. The text that carries the code, the same as on the website, is shown below the picture.",
+      "alt": "The Text updates section in the Yuppers app after a code was sent: the number it went to, partly hidden, and a field for the code from the text."
+    },
+    "deleteAccount": {
+      "title": "Step 1. Asking to delete the account, in the app",
+      "caption": "On the app’s account screen, “Delete my account” first says what deleting does, then that a one-time code will be sent to the account’s phone number, with an unticked box beside the same consent text as on the website, whose two addresses are links that open in the browser. “Send code and continue” stays disabled until the box is ticked, and the screen says why. A code sent to an email address needs no box.",
+      "alt": "The account deletion screen of the Yuppers app: the number the code will go to, an unticked box beside the consent text with links to the terms and the privacy policy, the Send code and continue button disabled, and the line saying to tick the box first."
+    },
+    "deleteAccountTicked": {
+      "title": "Step 2. Ticking the box, in the app",
+      "caption": "In the app too, once the person ticks the box, “Send code and continue” is enabled. Pressing it asks for one text with a code that works only for deleting the account; nothing is sent before.",
+      "alt": "The same deletion screen in the Yuppers app with the box beside the consent text ticked and the Send code and continue button enabled."
+    },
+    "deleteAccountCodeSent": {
+      "title": "Step 3. After asking for a code, in the app",
+      "caption": "The app says where the code went and asks for it. Nothing is deleted until the person enters the code and confirms once more. The text that carries the code, the same as on the website, is shown below the picture.",
+      "alt": "The deletion screen of the Yuppers app after a code was sent: the number it went to, and a field for the six-digit code."
+    },
     "textUpdates": {
-      "title": "Step 4. Turning on text updates for an agreement, in the app",
-      "caption": "On an agreement the person is a party to, the app’s “Text updates” section shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save. “How we text you” opens this page. If the account has no phone number yet, the person first enters a US number, which we check with a one-time code sent to it only once they tick a box beside the last text below.",
+      "title": "Step 1. Turning on text updates for an agreement, in the app",
+      "caption": "On an agreement the person is a party to, once their account has a phone number, the app’s “Text updates” section shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save. “How we text you” opens this page.",
       "alt": "The Text updates section of an agreement in the Yuppers app: an unticked box beside the consent wording, with links to the terms and the privacy policy, and a Save button."
     },
     "confirmation": {
-      "title": "Step 5. After ticking the box and saving, in the app",
+      "title": "Step 2. After ticking the box and saving, in the app",
       "caption": "The app confirms that text updates are on for this agreement, says how often and to which number they go, and how to stop them.",
       "alt": "The Text updates section in the Yuppers app after saving: the box ticked, and the confirmation that text updates are on, with the number partly hidden."
+    },
+    "confirmationText": {
+      "title": "Step 3. The opt-in confirmation text, in the app",
+      "caption": "Sent at once to the number, the same text as when updates are turned on on the website:"
     }
   },
   "codeText": "The sign-in code text:",
-  "verifyCodeText": "The text with the code that checks a number being added:",
+  "verifyCodeText": "The text with the code that confirms a number being added:",
+  "deleteCodeText": "The text with the code that confirms deleting an account:",
   "updateText": "An agreement update, as received:",
   "moreHeading": "The terms and the privacy policy",
   "more": "Both programs are described in the section on text messages of the {terms} and of the {privacy}.",

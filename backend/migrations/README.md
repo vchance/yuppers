@@ -176,6 +176,15 @@ Text updates for an agreement, "Yuppers.app agreement updates" (README, "Text up
 
 Working data and the record both name a phone number in full, as `account` does: the number is what consent was given for. `backend/tests/schema.rs` checks the checks and grants; `backend/tests/sms_updates.rs` everything through the API, the webhook and the worker.
 
+## 0021_sms_code_consent
+
+Consent to a one-time code by text, "Yuppers.app sign-in codes" (README, "Signing in"; `backend/src/code_consent.rs`): every form that texts a code shows a box beside the number, and a code is texted only once it is ticked.
+
+- **`sms_code_consent`**: one row for each code issued after a tick. Why it was asked for (`SIGN_IN`, `DELETE_ACCOUNT`, `VERIFY_NUMBER`), the account where there is one (signing in has none until the number is an account's), the wording's version and language, the client and the time. The number is kept in full only beside the account it already belongs to; every row has `phone_hash`, an HMAC-SHA256 of the number under `APP_SECRET`, so a record can be found from a number without the table holding numbers nobody has shown are theirs. Checks hold every purpose but signing in to an account, and a number in full to one. The application role may read it and add to it, never change it; it may remove rows only because the worker's retention purge does, after `Rules::sms_consent_retention`.
+- **`sms_code_consent_network`**: the request's IP address and user agent, apart, removed with the signatures' after 90 days; and with its record, by cascade.
+
+Not `sms_consent` (0020): an opt-in there is always a person and an agreement, and its number always kept, and its purge keeps what a subscription rests on; a code is asked for without an agreement, often without an account, for a number nobody has yet shown to be theirs. Fitting these rows there would loosen every check of 0020. `backend/tests/schema.rs` checks the checks and grants; `backend/tests/auth.rs` and `backend/tests/deletion.rs` the refusals and the records through the API.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

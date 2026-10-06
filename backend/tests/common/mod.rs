@@ -625,6 +625,16 @@ pub fn consent() -> Value {
     json!({ "language": "en", "version": CONSENT_VERSION })
 }
 
+/// What a client sends with a request for a code by text: the box beside
+/// the number ticked, with the wording's version and language. Ignored for
+/// an email address.
+pub fn sms_consent() -> Value {
+    json!({
+        "version": yuppers_backend::code_consent::CODE_CONSENT_VERSION,
+        "language": "en",
+    })
+}
+
 pub fn accept(revision: &str) -> Value {
     json!({ "type": "ACCEPT", "revision": revision, "consent": consent() })
 }

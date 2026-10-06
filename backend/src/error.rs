@@ -42,6 +42,10 @@ pub enum ErrorCode {
     /// it, one-time codes included, until it replies START. An email address
     /// still works.
     PhoneOptedOut,
+    /// A code was asked for by text without the box beside the number ticked:
+    /// the request named no `sms_consent`, or wording that is not the current
+    /// one. Nothing was counted or sent. An email address needs none.
+    SmsConsentRequired,
     /// The one-time code is wrong, expired or used up. Deliberately one code
     /// for all three, so a guesser learns nothing.
     InvalidCode,
@@ -115,6 +119,7 @@ impl From<ErrorCode> for ApiError {
             InvalidRequest
             | InvalidIdentifier
             | PhoneCountryNotServed
+            | SmsConsentRequired
             | InvalidRevision
             | IdempotencyKeyReused => StatusCode::UNPROCESSABLE_ENTITY,
             InvalidCode | Unauthenticated | SessionTooOld => StatusCode::UNAUTHORIZED,

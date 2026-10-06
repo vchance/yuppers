@@ -1,7 +1,7 @@
 //! Request extractors that answer with typed error codes.
 
 use axum::body::Bytes;
-use axum::extract::{FromRequest, FromRequestParts, Request};
+use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequestParts, Request};
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method};
@@ -145,6 +145,24 @@ impl FromRequestParts<AppState> for Session {
             auth_method,
             authenticated_at,
         })
+    }
+}
+
+/// The session, where a request has a valid one, and `None` where it has
+/// none or one that no longer works: for an endpoint open to anyone that
+/// also says who asked when someone signed in did (`POST /v1/auth/codes`).
+impl OptionalFromRequestParts<AppState> for Session {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Option<Self>, ApiError> {
+        match <Self as FromRequestParts<AppState>>::from_request_parts(parts, state).await {
+            Ok(session) => Ok(Some(session)),
+            Err(error) if error.code == ErrorCode::Unauthenticated => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 }
 

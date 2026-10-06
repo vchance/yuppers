@@ -85,7 +85,7 @@ async fn ask(app: &App, identifier: &str, language: &str) -> common::Reply {
         None,
         Method::POST,
         "/v1/auth/codes",
-        Some(json!({ "identifier": identifier })),
+        Some(json!({ "identifier": identifier, "sms_consent": common::sms_consent() })),
         &[("accept-language", language)],
     )
     .await
@@ -265,7 +265,7 @@ async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_
         Some(&ana),
         Method::POST,
         "/v1/me/deletion/codes",
-        Some(json!({ "channel": "PHONE" })),
+        Some(json!({ "channel": "PHONE", "sms_consent": common::sms_consent() })),
         &[],
     )
     .await

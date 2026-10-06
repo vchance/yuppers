@@ -22,7 +22,7 @@ use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
 use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
-use yuppers_backend::{db, shutdown, telemetry};
+use yuppers_backend::{code_consent, db, shutdown, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
 
@@ -163,6 +163,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "text update consent records past retention removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "consent record purge failed"),
+                }
+                match code_consent::purge(&db, &rules, OffsetDateTime::now_utc()).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "code consent records past retention removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "code consent purge failed"),
                 }
                 match purge_sign_in_limits(&db).await {
                     Ok(0) => {}

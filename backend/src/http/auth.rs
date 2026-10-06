@@ -2,7 +2,7 @@
 
 use axum::Json;
 use axum::extract::State;
-use axum::http::header::{ACCEPT_LANGUAGE, SET_COOKIE};
+use axum::http::header::{ACCEPT_LANGUAGE, SET_COOKIE, USER_AGENT};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
@@ -13,36 +13,74 @@ use super::account::{self, Account};
 use super::extract::{ApiJson, SESSION_COOKIE, Session, require_web_origin};
 use super::{AppState, ClientAddress, Settings};
 use crate::auth::{self, Requester};
+use crate::client_version;
+use crate::code_consent::{CodePurpose, CodeRequest, SmsCodeConsent};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
+use crate::notifications::sms_updates::Source;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RequestCode {
     /// An email address, or a phone number in international form.
     pub identifier: String,
+    /// For a phone number, required: the box beside it was ticked, with the
+    /// version and language of the wording shown. Ignored for an email
+    /// address.
+    pub sms_consent: Option<SmsCodeConsent>,
+}
+
+/// The client a request came from, as `X-Client-Version` names it, and its
+/// user agent: what a consent is recorded with.
+pub(super) fn client_of(headers: &HeaderMap) -> (Source, Option<&str>) {
+    let client = headers
+        .get(client_version::HEADER)
+        .and_then(|value| value.to_str().ok());
+    let user_agent = headers
+        .get(USER_AGENT)
+        .and_then(|value| value.to_str().ok());
+    (Source::of_client(client), user_agent)
 }
 
 /// Sends a one-time code to an email address or phone number. Answers the
 /// same way whether or not an account exists for it. Codes sent earlier keep
-/// working until they expire, up to the newest few.
+/// working until they expire, up to the newest few. A code for a phone
+/// number needs `sms_consent`, which is recorded with it: for signing in,
+/// or, from a signed-in account, for checking a number it is adding.
 #[utoipa::path(
     post,
     path = "/v1/auth/codes",
     request_body = RequestCode,
     responses(
         (status = 204, description = "A code was sent"),
-        (status = 422, description = "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
+        (status = 409, description = "The phone number replied STOP (`PHONE_OPTED_OUT`)", body = ErrorBody),
+        (status = 422, description = "Not an email address or phone number (`INVALID_IDENTIFIER`), a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`), a phone number without `sms_consent`, or with wording that is not the current one (`SMS_CONSENT_REQUIRED`), or a consent in a language not supported (`INVALID_REQUEST`)", body = ErrorBody),
         (status = 429, description = "Too many codes requested for this identifier or from this address (`TOO_MANY_REQUESTS`), or too many wrong codes for this identifier today, so none is sent (`TOO_MANY_GUESSES`)", body = ErrorBody)
     )
 )]
 pub async fn request_code(
     State(state): State<AppState>,
     ClientAddress(address): ClientAddress,
+    session: Option<Session>,
     headers: HeaderMap,
     ApiJson(body): ApiJson<RequestCode>,
 ) -> Result<StatusCode, ApiError> {
     let identifier = Identifier::parse(&body.identifier)?;
+    let (source, user_agent) = client_of(&headers);
+    // Signed in, the only code asked for is one checking a number being
+    // added to the account (for agreement updates); signed out, signing in.
+    let (purpose, account) = match &session {
+        Some(session) => (CodePurpose::VerifyNumber, Some(session.account_id)),
+        None => (CodePurpose::SignIn, None),
+    };
+    let request = CodeRequest {
+        purpose,
+        account,
+        consent: body.sms_consent.as_ref(),
+        source,
+        address,
+        user_agent,
+    };
     let settings = &state.settings;
     // There may be no account yet, so the browser's or device's language
     // stands in for a preference.
@@ -58,6 +96,7 @@ pub async fn request_code(
         &identifier,
         Requester::SignIn { address },
         &language,
+        &request,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)

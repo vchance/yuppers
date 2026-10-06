@@ -98,7 +98,7 @@ async fn sign_in(app: &App, codes: &Codes) -> Secrets {
             None,
             Method::POST,
             "/v1/auth/codes",
-            Some(json!({ "identifier": phone })),
+            Some(json!({ "identifier": phone, "sms_consent": common::sms_consent() })),
             &[],
         )
         .await;

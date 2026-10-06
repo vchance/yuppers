@@ -6,6 +6,7 @@ pub mod app_role;
 pub mod auth;
 pub mod build_info;
 pub mod client_version;
+pub mod code_consent;
 pub mod config;
 pub mod db;
 pub mod deletion;

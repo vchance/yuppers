@@ -53,7 +53,9 @@ export interface paths {
         /**
          * Sends a one-time code to an email address or phone number. Answers the
          *     same way whether or not an account exists for it. Codes sent earlier keep
-         *     working until they expire, up to the newest few.
+         *     working until they expire, up to the newest few. A code for a phone
+         *     number needs `sms_consent`, which is recorded with it: for signing in,
+         *     or, from a signed-in account, for checking a number it is adding.
          */
         post: operations["request_code"];
         delete?: never;
@@ -548,7 +550,8 @@ export interface paths {
          * Sends a one-time code for deleting the account to its own email address
          *     or phone number. The code is good for that and nothing else. Requests are
          *     counted against the account, apart from sign-in codes, so nobody asking
-         *     for sign-in codes for the same address can use them up.
+         *     for sign-in codes for the same address can use them up. A code by text
+         *     needs `sms_consent`, which is recorded with it.
          */
         post: operations["request_deletion_code"];
         delete?: never;
@@ -1110,7 +1113,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1657,10 +1660,12 @@ export interface components {
         RequestCode: {
             /** @description An email address, or a phone number in international form. */
             identifier: string;
+            sms_consent?: components["schemas"]["SmsCodeConsent"] | null;
         };
         RequestDeletionCode: {
             /** @description Which of the account's own identifiers to send the code to. */
             channel: components["schemas"]["CodeChannel"];
+            sms_consent?: components["schemas"]["SmsCodeConsent"] | null;
         };
         /** @description Resolving a report. */
         Resolution: {
@@ -1908,6 +1913,13 @@ export interface components {
          * @enum {string}
          */
         Slot: "A" | "B";
+        /** @description What the box beside a phone number said, as a client sends it. */
+        SmsCodeConsent: {
+            /** @description The language it was shown in, as a language tag. */
+            language: string;
+            /** @description The version of the wording shown beside the box. */
+            version: string;
+        };
         /** @description What a party ticked, when turning updates on. */
         SmsConsent: {
             /** @description The language it was shown in, as a language tag. */
@@ -2102,7 +2114,16 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`) */
+            /** @description The phone number replied STOP (`PHONE_OPTED_OUT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not an email address or phone number (`INVALID_IDENTIFIER`), a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`), a phone number without `sms_consent`, or with wording that is not the current one (`SMS_CONSENT_REQUIRED`), or a consent in a language not supported (`INVALID_REQUEST`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3578,7 +3599,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The account has no such identifier (`INVALID_REQUEST`), or its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`) */
+            /** @description The phone number replied STOP (`PHONE_OPTED_OUT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The account has no such identifier, or a consent in a language not supported (`INVALID_REQUEST`); its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`); or `PHONE` without `sms_consent`, or with wording that is not the current one (`SMS_CONSENT_REQUIRED`) */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -17,6 +17,7 @@ use time::{Duration, OffsetDateTime};
 use tokio::sync::MutexGuard;
 use uuid::Uuid;
 use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
+use yuppers_backend::code_consent::CODE_CONSENT_VERSION;
 use yuppers_backend::deletion;
 use yuppers_backend::deletion_log;
 use yuppers_backend::domain::Rules;
@@ -94,7 +95,12 @@ impl Test {
     async fn deletion_code(&self, user: &User, channel: &str, sent_to: &str) -> String {
         let reply = self
             .app
-            .post(user, "/v1/me/deletion/codes", json!({ "channel": channel }))
+            .post(
+                user,
+                "/v1/me/deletion/codes",
+                // Ignored for an email address.
+                json!({ "channel": channel, "sms_consent": common::sms_consent() }),
+            )
             .await;
         done(&reply);
         let (code, purpose) = self.codes.last(sent_to);
@@ -144,7 +150,7 @@ impl Test {
                 None,
                 Method::POST,
                 "/v1/auth/codes",
-                Some(json!({ "identifier": identifier })),
+                Some(json!({ "identifier": identifier, "sms_consent": common::sms_consent() })),
                 &[],
             )
             .await;
@@ -753,7 +759,7 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
             None,
             Method::POST,
             "/v1/auth/codes",
-            Some(json!({ "identifier": phone })),
+            Some(json!({ "identifier": phone, "sms_consent": common::sms_consent() })),
             &[],
         )
         .await,
@@ -2363,4 +2369,69 @@ async fn the_api_and_the_worker_wait_for_the_replay_that_clears_the_restore_mark
             .await
             .unwrap();
     assert_eq!(history, ["REPLAYED", "REPLAY_PENDING"]);
+}
+
+#[tokio::test]
+async fn a_deletion_code_by_text_needs_the_box_ticked_and_is_recorded_with_it() {
+    let test = start().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+    let phone = format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000);
+    sqlx::query("UPDATE account SET phone = $1 WHERE id = $2")
+        .bind(&phone)
+        .bind(ana.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    let sent = || test.codes.0.lock().unwrap().len();
+    let before = sent();
+
+    // Without the box ticked, as from a client from before it: refused,
+    // with nothing sent and nothing counted against the account, which may
+    // ask for 5 deletion codes an hour.
+    for _ in 0..6 {
+        app.post(&ana, "/v1/me/deletion/codes", json!({ "channel": "PHONE" }))
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "SMS_CONSENT_REQUIRED");
+    }
+    assert_eq!(sent(), before);
+    // By email, nothing is needed.
+    let reply = app
+        .post(&ana, "/v1/me/deletion/codes", json!({ "channel": "EMAIL" }))
+        .await;
+    done(&reply);
+
+    // Ticked: sent, and recorded with the account and its number.
+    let code = test.deletion_code(&ana, "PHONE", &phone).await;
+    /// Why, whose, the number, and the wording's version and language.
+    type Record = (String, Option<Uuid>, Option<String>, String, String);
+    let records: Vec<Record> = sqlx::query_as(
+        "SELECT purpose, account_id, phone, consent_version, consent_language
+         FROM sms_code_consent WHERE account_id = $1",
+    )
+    .bind(ana.id)
+    .fetch_all(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        records,
+        [(
+            "DELETE_ACCOUNT".to_owned(),
+            Some(ana.id),
+            Some(phone.clone()),
+            CODE_CONSENT_VERSION.to_owned(),
+            "en".to_owned(),
+        )]
+    );
+
+    // Deleting removes the number from the account; the record of what was
+    // agreed to stays, as the privacy policy says.
+    done(&test.delete_with(&ana, "PHONE", &code).await);
+    let kept: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sms_code_consent WHERE account_id = $1")
+            .bind(ana.id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(kept, 1);
 }

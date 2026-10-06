@@ -1948,3 +1948,155 @@ async fn the_restore_mark_is_the_owners_to_write_and_the_replays_to_clear() {
     assert_eq!((pending, again), (false, false));
     tx.rollback().await.unwrap();
 }
+
+/// Consent to a code by text (migration 0021): why it was asked for, a
+/// number in full only beside the account it belongs to and always its keyed
+/// hash, the wording shown, and the request's address apart; added to by
+/// the service and removed by the worker's purge, never rewritten.
+#[tokio::test]
+async fn a_code_by_text_keeps_a_record_of_consent_the_service_cannot_rewrite() {
+    let mut tx = app().await;
+    let account = account(&mut tx).await;
+    let phone = format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000);
+    let hash = vec![7_u8; 32];
+
+    let consent = |purpose: &'static str,
+                   account: Option<Uuid>,
+                   phone: Option<&str>,
+                   hash: &[u8],
+                   source: &'static str,
+                   language: &'static str| {
+        sqlx::query(
+            "INSERT INTO sms_code_consent
+                 (purpose, account_id, phone, phone_hash, source, consent_version, consent_language)
+             VALUES ($1, $2, $3, $4, $5, '2026-10-06', $6)
+             RETURNING id",
+        )
+        .bind(purpose)
+        .bind(account)
+        .bind(phone.map(str::to_owned))
+        .bind(hash.to_vec())
+        .bind(source)
+        .bind(language)
+    };
+    // Signing in may be asked for by anyone; the number then only as a hash.
+    consent("SIGN_IN", None, None, &hash, "WEB", "en")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    refused!(
+        tx,
+        CHECK,
+        consent("SIGN_IN", None, Some(&phone), &hash, "WEB", "en")
+    );
+    // Deleting and checking a number are an account's.
+    refused!(
+        tx,
+        CHECK,
+        consent("DELETE_ACCOUNT", None, None, &hash, "IOS", "en")
+    );
+    refused!(
+        tx,
+        CHECK,
+        consent("VERIFY_NUMBER", None, None, &hash, "IOS", "en")
+    );
+    consent(
+        "DELETE_ACCOUNT",
+        Some(account),
+        Some(&phone),
+        &hash,
+        "ANDROID",
+        "es",
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    // A number, a hash, a purpose, a client and a language as they are written.
+    refused!(
+        tx,
+        CHECK,
+        consent(
+            "DELETE_ACCOUNT",
+            Some(account),
+            Some("5551234567"),
+            &hash,
+            "IOS",
+            "en"
+        )
+    );
+    refused!(
+        tx,
+        CHECK,
+        consent("SIGN_IN", None, None, &[7_u8; 20], "WEB", "en")
+    );
+    refused!(
+        tx,
+        CHECK,
+        consent("MARKETING", Some(account), None, &hash, "WEB", "en")
+    );
+    refused!(
+        tx,
+        CHECK,
+        consent("SIGN_IN", None, None, &hash, "SMS_REPLY", "en")
+    );
+    refused!(
+        tx,
+        CHECK,
+        consent("SIGN_IN", None, None, &hash, "WEB", "not a tag")
+    );
+    refused!(
+        tx,
+        FOREIGN_KEY,
+        consent(
+            "VERIFY_NUMBER",
+            Some(Uuid::new_v4()),
+            None,
+            &hash,
+            "WEB",
+            "en"
+        )
+    );
+
+    let id: i64 = sqlx::query_scalar(
+        "SELECT id FROM sms_code_consent WHERE account_id = $1 AND purpose = 'DELETE_ACCOUNT'",
+    )
+    .bind(account)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sms_code_consent_network (consent_id, ip_address, user_agent)
+         VALUES ($1, '192.0.2.1', 'test')",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    // The record is never rewritten by the service.
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("UPDATE sms_code_consent SET phone = NULL WHERE id = $1").bind(id)
+    );
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query(
+            "UPDATE sms_code_consent_network SET user_agent = 'other' WHERE consent_id = $1"
+        )
+        .bind(id)
+    );
+    // The worker's purge removes it, and its address and agent with it.
+    sqlx::query("DELETE FROM sms_code_consent WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let network: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sms_code_consent_network WHERE consent_id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert_eq!(network, 0);
+}

@@ -48,7 +48,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Sends a one-time code to an email address or phone number. Answers the\nsame way whether or not an account exists for it. Codes sent earlier keep\nworking until they expire, up to the newest few.",
+        "summary": "Sends a one-time code to an email address or phone number. Answers the\nsame way whether or not an account exists for it. Codes sent earlier keep\nworking until they expire, up to the newest few. A code for a phone\nnumber needs `sms_consent`, which is recorded with it: for signing in,\nor, from a signed-in account, for checking a number it is adding.",
         "operationId": "request_code",
         "requestBody": {
           "content": {
@@ -64,8 +64,18 @@
           "204": {
             "description": "A code was sent"
           },
+          "409": {
+            "description": "The phone number replied STOP (`PHONE_OPTED_OUT`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)",
+            "description": "Not an email address or phone number (`INVALID_IDENTIFIER`), a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`), a phone number without `sms_consent`, or with wording that is not the current one (`SMS_CONSENT_REQUIRED`), or a consent in a language not supported (`INVALID_REQUEST`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1842,7 +1852,7 @@
         "tags": [
           "deletion"
         ],
-        "summary": "Sends a one-time code for deleting the account to its own email address\nor phone number. The code is good for that and nothing else. Requests are\ncounted against the account, apart from sign-in codes, so nobody asking\nfor sign-in codes for the same address can use them up.",
+        "summary": "Sends a one-time code for deleting the account to its own email address\nor phone number. The code is good for that and nothing else. Requests are\ncounted against the account, apart from sign-in codes, so nobody asking\nfor sign-in codes for the same address can use them up. A code by text\nneeds `sms_consent`, which is recorded with it.",
         "operationId": "request_deletion_code",
         "requestBody": {
           "content": {
@@ -1868,8 +1878,18 @@
               }
             }
           },
+          "409": {
+            "description": "The phone number replied STOP (`PHONE_OPTED_OUT`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The account has no such identifier (`INVALID_REQUEST`), or its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)",
+            "description": "The account has no such identifier, or a consent in a language not supported (`INVALID_REQUEST`); its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`); or `PHONE` without `sms_consent`, or with wording that is not the current one (`SMS_CONSENT_REQUIRED`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3346,6 +3366,7 @@
           "INVALID_IDENTIFIER",
           "PHONE_COUNTRY_NOT_SERVED",
           "PHONE_OPTED_OUT",
+          "SMS_CONSENT_REQUIRED",
           "INVALID_CODE",
           "TOO_MANY_REQUESTS",
           "TOO_MANY_GUESSES",
@@ -4704,6 +4725,17 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number in international form."
+          },
+          "sms_consent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SmsCodeConsent",
+                "description": "For a phone number, required: the box beside it was ticked, with the\nversion and language of the wording shown. Ignored for an email\naddress."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -4716,6 +4748,17 @@
           "channel": {
             "$ref": "#/components/schemas/CodeChannel",
             "description": "Which of the account's own identifiers to send the code to."
+          },
+          "sms_consent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SmsCodeConsent",
+                "description": "For `PHONE`, required: the box beside the number was ticked, with the\nversion and language of the wording shown. Ignored for `EMAIL`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -5391,6 +5434,24 @@
           "A",
           "B"
         ]
+      },
+      "SmsCodeConsent": {
+        "type": "object",
+        "description": "What the box beside a phone number said, as a client sends it.",
+        "required": [
+          "version",
+          "language"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "The language it was shown in, as a language tag."
+          },
+          "version": {
+            "type": "string",
+            "description": "The version of the wording shown beside the box."
+          }
+        }
       },
       "SmsConsent": {
         "type": "object",

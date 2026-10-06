@@ -39,6 +39,7 @@ use sqlx::{PgConnection, PgPool};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::code_consent::{self, CodeRequest};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
 use crate::languages;
@@ -606,6 +607,14 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// `TOO_MANY_GUESSES` while the identifier has used up its wrong sign-in
 /// guesses for the day, or, for deletion, the account its wrong deletion
 /// guesses, since no code sent then could work.
+///
+/// A code for a phone number needs the box beside it ticked: refused,
+/// before anything is counted, with `SMS_CONSENT_REQUIRED` when `request`
+/// names no consent or wording the service does not know (`INVALID_REQUEST`
+/// for a language it does not speak), after the country and STOP checks,
+/// which say more. The consent is recorded with the code it led to
+/// (`crate::code_consent`).
+#[allow(clippy::too_many_arguments)]
 pub async fn request_code(
     db: &PgPool,
     secret: &[u8],
@@ -614,6 +623,7 @@ pub async fn request_code(
     identifier: &Identifier,
     requester: Requester,
     language: &str,
+    request: &CodeRequest<'_>,
 ) -> Result<(), ApiError> {
     let purpose = requester.purpose();
     let charged = sender.charged_per_message(identifier);
@@ -637,6 +647,9 @@ pub async fn request_code(
     if charged && is_opted_out(db, identifier).await? {
         return Err(ErrorCode::PhoneOptedOut.into());
     }
+
+    // A code by text only with the box ticked beside the number.
+    let consent = request.check(identifier)?;
 
     let mut tx = db.begin().await?;
 
@@ -775,6 +788,10 @@ pub async fn request_code(
     .bind(rules.live_codes)
     .execute(&mut *tx)
     .await?;
+    // The consent the code was texted on, with it.
+    if let Some(consent) = consent {
+        code_consent::record(&mut tx, secret, identifier.as_str(), request, consent).await?;
+    }
     tx.commit().await?;
 
     let sent = sender

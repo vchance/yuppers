@@ -7,16 +7,17 @@
 
 use axum::Json;
 use axum::extract::State;
-use axum::http::StatusCode;
 use axum::http::header::SET_COOKIE;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use super::AppState;
-use super::auth::expired_cookie;
+use super::auth::{client_of, expired_cookie};
 use super::extract::{ApiJson, Session};
+use super::{AppState, ClientAddress};
 use crate::auth::{self, OfferedCode, Requester};
+use crate::code_consent::{CodePurpose, CodeRequest, SmsCodeConsent};
 use crate::deletion::{self, CodeChannel, DeletionPreview};
 use crate::error::{ApiError, ErrorBody};
 
@@ -42,12 +43,16 @@ pub async fn deletion_preview(
 pub struct RequestDeletionCode {
     /// Which of the account's own identifiers to send the code to.
     pub channel: CodeChannel,
+    /// For `PHONE`, required: the box beside the number was ticked, with the
+    /// version and language of the wording shown. Ignored for `EMAIL`.
+    pub sms_consent: Option<SmsCodeConsent>,
 }
 
 /// Sends a one-time code for deleting the account to its own email address
 /// or phone number. The code is good for that and nothing else. Requests are
 /// counted against the account, apart from sign-in codes, so nobody asking
-/// for sign-in codes for the same address can use them up.
+/// for sign-in codes for the same address can use them up. A code by text
+/// needs `sms_consent`, which is recorded with it.
 #[utoipa::path(
     post,
     path = "/v1/me/deletion/codes",
@@ -55,16 +60,28 @@ pub struct RequestDeletionCode {
     responses(
         (status = 204, description = "A code was sent"),
         (status = 401, description = "Not signed in", body = ErrorBody),
-        (status = 422, description = "The account has no such identifier (`INVALID_REQUEST`), or its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
+        (status = 409, description = "The phone number replied STOP (`PHONE_OPTED_OUT`)", body = ErrorBody),
+        (status = 422, description = "The account has no such identifier, or a consent in a language not supported (`INVALID_REQUEST`); its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`); or `PHONE` without `sms_consent`, or with wording that is not the current one (`SMS_CONSENT_REQUIRED`)", body = ErrorBody),
         (status = 429, description = "Too many deletion codes requested by this account", body = ErrorBody)
     )
 )]
 pub async fn request_deletion_code(
     State(state): State<AppState>,
     session: Session,
+    ClientAddress(address): ClientAddress,
+    headers: HeaderMap,
     ApiJson(body): ApiJson<RequestDeletionCode>,
 ) -> Result<StatusCode, ApiError> {
     let identifier = deletion::identifier(&state.db, session.account_id, body.channel).await?;
+    let (source, user_agent) = client_of(&headers);
+    let request = CodeRequest {
+        purpose: CodePurpose::DeleteAccount,
+        account: Some(session.account_id),
+        consent: body.sms_consent.as_ref(),
+        source,
+        address,
+        user_agent,
+    };
     let settings = &state.settings;
     // The identifier is the account's own, so this finds its language.
     let language = auth::language_for(&state.db, &identifier, None).await;
@@ -78,6 +95,7 @@ pub async fn request_deletion_code(
             account: session.account_id,
         },
         &language,
+        &request,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)

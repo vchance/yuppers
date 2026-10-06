@@ -13,15 +13,18 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
-use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
-use axum::http::{HeaderMap, Method, Request, StatusCode};
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE, USER_AGENT};
+use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use time::OffsetDateTime;
 use tower::ServiceExt;
 use uuid::Uuid;
 use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture, token_hash};
+use yuppers_backend::code_consent::{self, CODE_CONSENT_VERSION, phone_hash};
 use yuppers_backend::db;
+use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
 
 const WEB_ORIGIN: &str = "https://app.test";
@@ -89,6 +92,11 @@ fn phone() -> String {
 }
 
 /// An address of its own, in the range reserved for documentation.
+/// The box beside a phone number ticked, with the wording shown in `language`.
+fn sms_consent(language: &str) -> Value {
+    json!({ "version": CODE_CONSENT_VERSION, "language": language })
+}
+
 fn address() -> IpAddr {
     let random = Uuid::new_v4().as_u128();
     IpAddr::V6(Ipv6Addr::from((0x2001_0db8_u128 << 96) | (random >> 32)))
@@ -199,8 +207,12 @@ impl App {
     }
 
     async fn request_code(&self, identifier: &str) -> String {
+        // A phone number with the box beside it ticked, as the apps send it.
         let reply = self
-            .post("/v1/auth/codes", json!({ "identifier": identifier }))
+            .post(
+                "/v1/auth/codes",
+                json!({ "identifier": identifier, "sms_consent": sms_consent("en") }),
+            )
             .await;
         assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
         self.last_code(identifier)
@@ -242,6 +254,7 @@ impl App {
         );
         let statements = [
             format!("DELETE FROM account_session WHERE account_id IN ({accounts})"),
+            format!("DELETE FROM sms_code_consent WHERE account_id IN ({accounts})"),
             format!("DELETE FROM account WHERE id IN ({accounts})"),
             format!(
                 "DELETE FROM one_time_code
@@ -262,6 +275,8 @@ impl App {
         for identifier in identifiers {
             for statement in [
                 "DELETE FROM account_session WHERE account_id IN
+                    (SELECT id FROM account WHERE email = $1 OR phone = $1)",
+                "DELETE FROM sms_code_consent WHERE account_id IN
                     (SELECT id FROM account WHERE email = $1 OR phone = $1)",
                 "DELETE FROM account WHERE email = $1 OR phone = $1",
                 "DELETE FROM one_time_code WHERE identifier = $1",
@@ -1149,4 +1164,326 @@ async fn neither_codes_nor_tokens_are_stored() {
     assert_eq!(hashes, vec![token_hash(token).to_vec()]);
 
     app.finish(&[&email]).await;
+}
+
+// ---- Consent to a code by text ------------------------------------------------
+
+/// `APP_SECRET` as these tests set it, which keys a number's hash.
+const SECRET: &[u8] = b"test-secret-test-secret-test-secret";
+
+/// One record of consent to a code by text, as stored.
+#[derive(Debug, PartialEq, sqlx::FromRow)]
+struct CodeConsent {
+    purpose: String,
+    account_id: Option<Uuid>,
+    phone: Option<String>,
+    source: String,
+    consent_version: String,
+    consent_language: String,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+}
+
+/// Every consent recorded for a number, oldest first.
+async fn code_consents(app: &App, phone: &str) -> Vec<CodeConsent> {
+    sqlx::query_as(
+        "SELECT c.purpose, c.account_id, c.phone, c.source, c.consent_version,
+                c.consent_language, host(n.ip_address) AS ip_address, n.user_agent
+         FROM sms_code_consent c
+         LEFT JOIN sms_code_consent_network n ON n.consent_id = c.id
+         WHERE c.phone_hash = $1
+         ORDER BY c.id",
+    )
+    .bind(phone_hash(SECRET, phone).as_slice())
+    .fetch_all(&app.owner)
+    .await
+    .unwrap()
+}
+
+/// Removes the consents recorded for numbers this test used.
+async fn forget_consents(app: &App, phones: &[&str]) {
+    for phone in phones {
+        sqlx::query("DELETE FROM sms_code_consent WHERE phone_hash = $1")
+            .bind(phone_hash(SECRET, phone).as_slice())
+            .execute(&app.owner)
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_code_by_text_needs_the_box_ticked_and_nothing_is_counted_without_it() {
+    let app = App::start().await;
+    let phone = phone();
+
+    // A form without the box, or a client from before it: refused, more
+    // times than the address may ask for codes in an hour, none of them
+    // counted and nothing sent.
+    for _ in 0..=AuthRules::default().code_requests_per_address_per_hour {
+        let reply = app
+            .post("/v1/auth/codes", json!({ "identifier": phone }))
+            .await;
+        assert_eq!(
+            (reply.status, reply.code()),
+            (StatusCode::UNPROCESSABLE_ENTITY, "SMS_CONSENT_REQUIRED")
+        );
+    }
+    // Wording the service no longer knows is no consent to what it sends
+    // now; a language it does not speak is a malformed request.
+    let outdated = json!({ "version": "2026-10-05", "language": "en" });
+    let reply = app
+        .post(
+            "/v1/auth/codes",
+            json!({ "identifier": phone, "sms_consent": outdated }),
+        )
+        .await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "SMS_CONSENT_REQUIRED")
+    );
+    let reply = app
+        .post(
+            "/v1/auth/codes",
+            json!({ "identifier": phone, "sms_consent": sms_consent("tlh") }),
+        )
+        .await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST")
+    );
+    assert!(
+        app.outbox
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|(to, _)| to != &phone)
+    );
+    assert!(code_consents(&app, &phone).await.is_empty());
+
+    // Ticked, from the same address, which has asked for nothing yet.
+    let code = app.request_code(&phone).await;
+    assert_eq!(
+        app.create_session(&phone, &code).await.status,
+        StatusCode::OK
+    );
+
+    forget_consents(&app, &[&phone]).await;
+    app.finish(&[&phone]).await;
+}
+
+#[tokio::test]
+async fn a_code_by_text_is_recorded_with_its_consent() {
+    let app = App::start().await;
+    let phone = phone();
+    let user_agent = "Yuppers/1.4 CFNetwork Darwin";
+    let client_version = HeaderName::from_static("x-client-version");
+
+    // The first time, the number is nobody's: kept only as its hash.
+    let reply = app
+        .send(
+            Method::POST,
+            "/v1/auth/codes",
+            Some(json!({ "identifier": phone, "sms_consent": sms_consent("es-MX") })),
+            &[
+                (USER_AGENT, user_agent),
+                (client_version.clone(), "ios/1.4.0"),
+            ],
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+    let first = CodeConsent {
+        purpose: "SIGN_IN".to_owned(),
+        account_id: None,
+        phone: None,
+        source: "IOS".to_owned(),
+        consent_version: CODE_CONSENT_VERSION.to_owned(),
+        consent_language: "es".to_owned(),
+        ip_address: Some(app.peer.to_string()),
+        user_agent: Some(user_agent.to_owned()),
+    };
+    assert_eq!(code_consents(&app, &phone).await, [first]);
+    let in_full: i64 = sqlx::query_scalar("SELECT count(*) FROM sms_code_consent WHERE phone = $1")
+        .bind(&phone)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(in_full, 0, "the number itself is nowhere in the record");
+
+    // Signed up with it, the number is the account's: kept in full with it.
+    let code = app.last_code(&phone);
+    let account: Uuid = app.create_session(&phone, &code).await.body["account"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let reply = app
+        .send(
+            Method::POST,
+            "/v1/auth/codes",
+            Some(json!({ "identifier": phone, "sms_consent": sms_consent("en") })),
+            &[(client_version, "web/1.4.0")],
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+    let records = code_consents(&app, &phone).await;
+    assert_eq!(records.len(), 2);
+    let second = &records[1];
+    assert_eq!(
+        (
+            second.purpose.as_str(),
+            second.account_id,
+            second.phone.as_deref(),
+            second.source.as_str(),
+            second.consent_language.as_str(),
+            second.user_agent.as_deref(),
+        ),
+        (
+            "SIGN_IN",
+            Some(account),
+            Some(phone.as_str()),
+            "WEB",
+            "en",
+            None
+        )
+    );
+
+    forget_consents(&app, &[&phone]).await;
+    app.finish(&[&phone]).await;
+}
+
+#[tokio::test]
+async fn a_code_by_email_needs_no_consent_and_records_none() {
+    let app = App::start().await;
+    let email = email();
+
+    let reply = app
+        .post("/v1/auth/codes", json!({ "identifier": email }))
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+    // Whatever is sent with it is ignored.
+    let nonsense = json!({ "version": "?", "language": "?" });
+    let reply = app
+        .post(
+            "/v1/auth/codes",
+            json!({ "identifier": email, "sms_consent": nonsense }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+    let code = app.last_code(&email);
+    assert_eq!(
+        app.create_session(&email, &code).await.status,
+        StatusCode::OK
+    );
+    assert!(code_consents(&app, &email).await.is_empty());
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn checking_a_number_added_to_an_account_records_that_purpose() {
+    let app = App::start().await;
+    let (email, phone) = (email(), phone());
+    let (token, account) = app.sign_in(&email).await;
+    let bearer = format!("Bearer {token}");
+
+    let ask = |consent: Option<Value>| {
+        let mut body = json!({ "identifier": phone });
+        if let Some(consent) = consent {
+            body["sms_consent"] = consent;
+        }
+        let (app, bearer) = (&app, &bearer);
+        async move {
+            app.send(
+                Method::POST,
+                "/v1/auth/codes",
+                Some(body),
+                &[(AUTHORIZATION, bearer.as_str())],
+            )
+            .await
+        }
+    };
+    let reply = ask(None).await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "SMS_CONSENT_REQUIRED")
+    );
+    let reply = ask(Some(sms_consent("en"))).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+
+    // The account asking, and the number as a hash only: it is not the
+    // account's until the code comes back.
+    let records = code_consents(&app, &phone).await;
+    let account: Uuid = account.parse().unwrap();
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| (
+                record.purpose.as_str(),
+                record.account_id,
+                record.phone.as_deref()
+            ))
+            .collect::<Vec<_>>(),
+        [("VERIFY_NUMBER", Some(account), None)]
+    );
+    let reply = app
+        .send(
+            Method::POST,
+            "/v1/me/identifiers",
+            Some(json!({ "identifier": phone, "code": app.last_code(&phone) })),
+            &[(AUTHORIZATION, bearer.as_str())],
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+
+    forget_consents(&app, &[&phone]).await;
+    app.finish(&[&email, &phone]).await;
+}
+
+#[tokio::test]
+async fn code_consents_are_kept_for_their_retention_and_their_addresses_for_less() {
+    let app = App::start().await;
+    let (old, recent) = (phone(), phone());
+    app.request_code(&old).await;
+    app.request_code(&recent).await;
+    let rules = Rules::default();
+
+    // One record older than the retention; the other's address and user
+    // agent older than a signature's.
+    sqlx::query(
+        "UPDATE sms_code_consent
+         SET created_at = created_at - interval '1 day' - $2 * interval '1 second'
+         WHERE phone_hash = $1",
+    )
+    .bind(phone_hash(SECRET, &old).as_slice())
+    .bind(rules.sms_consent_retention.whole_seconds() as f64)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE sms_code_consent_network
+         SET recorded_at = recorded_at - interval '1 day' - $2 * interval '1 second'
+         WHERE consent_id IN (SELECT id FROM sms_code_consent WHERE phone_hash = $1)",
+    )
+    .bind(phone_hash(SECRET, &recent).as_slice())
+    .bind(rules.network_metadata_retention.whole_seconds() as f64)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+
+    // As the worker runs it, as the service's own role.
+    let service = connect("DATABASE_URL").await;
+    code_consent::purge(&service, &rules, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert!(code_consents(&app, &old).await.is_empty());
+    let kept = code_consents(&app, &recent).await;
+    assert_eq!(kept.len(), 1);
+    assert_eq!(
+        (kept[0].ip_address.as_deref(), kept[0].user_agent.as_deref()),
+        (None, None)
+    );
+
+    forget_consents(&app, &[&old, &recent]).await;
+    app.finish(&[&old, &recent]).await;
 }

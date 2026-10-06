@@ -88,6 +88,12 @@
 0008 grant relation sign_in_limit SELECT
 0008 grant relation sign_in_limit UPDATE
 0006 grant relation slot_holding SELECT
+0021 grant relation sms_code_consent DELETE
+0021 grant relation sms_code_consent INSERT
+0021 grant relation sms_code_consent SELECT
+0021 grant relation sms_code_consent_network DELETE
+0021 grant relation sms_code_consent_network INSERT
+0021 grant relation sms_code_consent_network SELECT
 0020 grant relation sms_consent DELETE
 0020 grant relation sms_consent INSERT
 0020 grant relation sms_consent SELECT

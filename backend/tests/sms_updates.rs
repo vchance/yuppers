@@ -654,7 +654,7 @@ async fn a_number_that_replied_stop_is_never_texted() {
         None,
         Method::POST,
         "/v1/auth/codes",
-        Some(json!({ "identifier": phone })),
+        Some(json!({ "identifier": phone, "sms_consent": common::sms_consent() })),
         &[],
     )
     .await
@@ -894,7 +894,7 @@ async fn a_number_is_verified_by_a_code_and_replacing_it_ends_the_old_numbers_up
                 Some(ben),
                 Method::POST,
                 "/v1/auth/codes",
-                Some(json!({ "identifier": phone })),
+                Some(json!({ "identifier": phone, "sms_consent": common::sms_consent() })),
                 &[],
             )
             .await;

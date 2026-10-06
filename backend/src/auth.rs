@@ -39,7 +39,7 @@ use sqlx::{PgConnection, PgPool};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::code_consent::{self, CodeRequest};
+use crate::code_consent::{self, CodePurpose, CodeRequest};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
 use crate::languages;
@@ -231,8 +231,12 @@ pub type SendFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send
 pub struct CodeMessage<'a> {
     pub to: &'a Identifier,
     pub code: &'a str,
-    /// What the code is for. The message must say so.
+    /// What the code is good for. An email must say so.
     pub purpose: Purpose,
+    /// Why it was asked for, which a text message names: a number being
+    /// added to an account gets a sign-in code (`purpose`), in a text that
+    /// says it confirms the number.
+    pub reason: CodePurpose,
     /// The language to write the message in: a supported language tag, or
     /// whatever the client asked for, to be resolved by the wording.
     pub language: &'a str,
@@ -626,6 +630,9 @@ pub async fn request_code(
     request: &CodeRequest<'_>,
 ) -> Result<(), ApiError> {
     let purpose = requester.purpose();
+    // The two are decided together by each caller; a code whose text named
+    // another purpose than its own would mislead whoever reads it.
+    debug_assert_eq!(request.purpose.code_purpose(), purpose);
     let charged = sender.charged_per_message(identifier);
 
     // Before anything is counted: a number the service would never send to
@@ -799,6 +806,7 @@ pub async fn request_code(
             to: identifier,
             code: &code,
             purpose,
+            reason: request.purpose,
             language,
         })
         .await;

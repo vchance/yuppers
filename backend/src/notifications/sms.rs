@@ -313,7 +313,7 @@ impl CodeSender for CodeRouter {
                 Identifier::Phone(number) => {
                     let text =
                         self.wording
-                            .code_sms(message.language, message.purpose, message.code);
+                            .code_sms(message.language, message.reason, message.code);
                     self.sms
                         .send(Sms {
                             to: number,
@@ -345,7 +345,7 @@ impl CodeSender for CodeRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::Purpose;
+    use crate::code_consent::CodePurpose;
     use crate::languages;
 
     #[test]
@@ -364,22 +364,35 @@ mod tests {
         assert!(!Encoding::Ucs2 { units: 71 }.fits_one_segment());
     }
 
+    const REASONS: [CodePurpose; 3] = [
+        CodePurpose::SignIn,
+        CodePurpose::DeleteAccount,
+        CodePurpose::VerifyNumber,
+    ];
+
     #[test]
     fn every_code_message_fits_one_segment_in_every_language() {
         let wording = Wording::embedded().unwrap();
         for language in languages::supported() {
-            for purpose in [Purpose::SignIn, Purpose::DeleteAccount] {
-                let text = wording.code_sms(language, purpose, "123456");
-                let encoding = encoding(&text);
+            let texts = REASONS.map(|reason| wording.code_sms(language, reason, "123456"));
+            for (reason, text) in REASONS.iter().zip(&texts) {
+                let encoding = encoding(text);
                 assert!(
                     encoding.fits_one_segment(),
                     "{language} {}: {encoding:?} for {text:?}",
-                    purpose.as_str()
+                    reason.as_str()
                 );
+                // The program's name first, as in every text of ours.
+                assert!(text.starts_with("Yuppers.app: "), "{language}: {text:?}");
                 assert!(text.contains("123456"), "{language}: {text:?}");
-                assert!(text.contains("Yuppers"), "{language}: {text:?}");
                 assert!(!text.contains('{') && !text.contains('}'), "{text:?}");
             }
+            // Each says what its code is for.
+            let [sign_in, delete, verify] = &texts;
+            assert!(
+                sign_in != delete && delete != verify && sign_in != verify,
+                "{language}: {texts:?}"
+            );
         }
     }
 
@@ -389,44 +402,57 @@ mod tests {
         let cases = [
             (
                 "en",
-                Purpose::SignIn,
-                "123456 is your Yuppers sign-in code. Do not share it with anyone.",
-                Encoding::Gsm7 { septets: 65 },
+                CodePurpose::SignIn,
+                "Yuppers.app: 123456 is your sign-in code. Do not share it with anyone.",
+                Encoding::Gsm7 { septets: 70 },
             ),
             (
                 "en",
-                Purpose::DeleteAccount,
-                "123456 is your code to delete your Yuppers account. Do not share it with anyone.",
-                Encoding::Gsm7 { septets: 80 },
+                CodePurpose::DeleteAccount,
+                "Yuppers.app: 123456 is your code to delete your account. Do not share it with anyone.",
+                Encoding::Gsm7 { septets: 85 },
+            ),
+            (
+                "en",
+                CodePurpose::VerifyNumber,
+                "Yuppers.app: 123456 is your code to confirm this phone number. Do not share it with anyone.",
+                Encoding::Gsm7 { septets: 91 },
             ),
             // "código" is not in the GSM alphabet, so Spanish goes as UCS-2
             // and must stay within 70.
             (
                 "es",
-                Purpose::SignIn,
-                "123456 es tu código de Yuppers para entrar. No se lo des a nadie.",
-                Encoding::Ucs2 { units: 65 },
+                CodePurpose::SignIn,
+                "Yuppers.app: 123456 es tu código para entrar. No se lo des a nadie.",
+                Encoding::Ucs2 { units: 67 },
             ),
             (
                 "es",
-                Purpose::DeleteAccount,
-                "123456: código para eliminar tu cuenta de Yuppers. No lo compartas.",
-                Encoding::Ucs2 { units: 67 },
+                CodePurpose::DeleteAccount,
+                "Yuppers.app: 123456: código para eliminar tu cuenta. No lo compartas.",
+                Encoding::Ucs2 { units: 69 },
+            ),
+            (
+                "es",
+                CodePurpose::VerifyNumber,
+                "Yuppers.app: 123456: código para confirmar tu número. No lo compartas.",
+                Encoding::Ucs2 { units: 70 },
             ),
         ];
-        for (language, purpose, text, sent_as) in cases {
-            let written = wording.code_sms(language, purpose, "123456");
+        for (language, reason, text, sent_as) in cases {
+            let written = wording.code_sms(language, reason, "123456");
             assert_eq!(written, text);
             assert_eq!(encoding(&written), sent_as, "{written}");
+            assert!(sent_as.fits_one_segment(), "{written}");
         }
         // A regional tag gets its base language; an unknown one the default.
         assert_eq!(
-            wording.code_sms("es-MX", Purpose::SignIn, "1"),
-            wording.code_sms("es", Purpose::SignIn, "1")
+            wording.code_sms("es-MX", CodePurpose::SignIn, "1"),
+            wording.code_sms("es", CodePurpose::SignIn, "1")
         );
         assert_eq!(
-            wording.code_sms("tlh", Purpose::SignIn, "1"),
-            wording.code_sms(languages::default(), Purpose::SignIn, "1")
+            wording.code_sms("tlh", CodePurpose::VerifyNumber, "1"),
+            wording.code_sms(languages::default(), CodePurpose::VerifyNumber, "1")
         );
     }
 

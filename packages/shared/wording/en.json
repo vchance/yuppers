@@ -173,8 +173,9 @@
     "body": "Your yup has an update."
   },
   "sms": {
-    "signIn": "{code} is your {productName} sign-in code. Do not share it with anyone.",
-    "deleteAccount": "{code} is your code to delete your {productName} account. Do not share it with anyone.",
+    "signIn": "Yuppers.app: {code} is your sign-in code. Do not share it with anyone.",
+    "deleteAccount": "Yuppers.app: {code} is your code to delete your account. Do not share it with anyone.",
+    "verifyNumber": "Yuppers.app: {code} is your code to confirm this phone number. Do not share it with anyone.",
     "update": "Yuppers.app: an agreement you turned on updates for has changed. See it: {link}. Reply STOP to opt out.",
     "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
   },

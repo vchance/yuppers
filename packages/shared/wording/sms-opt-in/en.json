@@ -38,7 +38,7 @@
     },
     "textUpdates": {
       "title": "Step 4. Turning on text updates for an agreement",
-      "caption": "On an agreement the person is a party to, “Text updates” shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save. If the account has no phone number yet, the person first enters a US number, which we check with a one-time code sent to it only once they tick a box beside the last text below.",
+      "caption": "On an agreement the person is a party to, “Text updates” shows an unticked box beside the consent wording below, whose two addresses are links to the terms and the privacy policy. Nothing is sent unless the person ticks the box and presses Save. If the account has no phone number yet, the person first enters a US number, which we check with a one-time code sent to it only once they tick a box beside the last quoted text below. The text that carries that code is shown after it.",
       "alt": "The Text updates section of an agreement on a phone: an unticked box beside the consent wording, with links to the terms and the privacy policy, and a Save button."
     },
     "confirmation": {
@@ -83,6 +83,7 @@
     }
   },
   "codeText": "The sign-in code text:",
+  "verifyCodeText": "The text with the code that checks a number being added:",
   "updateText": "An agreement update, as received:",
   "moreHeading": "The terms and the privacy policy",
   "more": "Both programs are described in the section on text messages of the {terms} and of the {privacy}.",

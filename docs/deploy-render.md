@@ -167,12 +167,17 @@ Each field of the campaign, word for word:
 - **Opt-out (STOP) message**: "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
 - **Opt-in keywords**: none (people opt in on the website or in the app, never by texting a keyword). **Opt-out keywords**: STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, OPTOUT, REVOKE. **Help keywords**: HELP, INFO.
 - **Message frequency**: "Sign-in codes: one per code request. Agreement updates: message frequency varies; there is no fixed maximum (one per status change of an agreement the user turned updates on for)."
-- **Sample messages**, exactly as the service sends them (`backend/src/notifications/sms.rs` and `sms_updates.rs` test them; each update links to the agreement it is about; the ID here is made up):
-  - "123456 is your Yuppers sign-in code. Do not share it with anyone."
-  - "123456 es tu código de Yuppers para entrar. No se lo des a nadie."
+- **Sample messages**, exactly as the service sends them (`backend/src/notifications/sms.rs` and `sms_updates.rs` test them; each update links to the agreement it is about; the ID here is made up). The form takes at most five, so give these: the three code texts, one for each reason a code is texted (signing in, confirming an account deletion, and confirming a number being added to an account), an update, and the opt-in confirmation:
+  - "Yuppers.app: 123456 is your sign-in code. Do not share it with anyone."
+  - "Yuppers.app: 123456 is your code to delete your account. Do not share it with anyone."
+  - "Yuppers.app: 123456 is your code to confirm this phone number. Do not share it with anyone."
   - "Yuppers.app: an agreement you turned on updates for has changed. See it: https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e. Reply STOP to opt out."
-  - "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e. Responde STOP para cancelar."
   - "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
+- **The same in Spanish**, for a reviewer who asks (people whose language is Spanish get these):
+  - "Yuppers.app: 123456 es tu código para entrar. No se lo des a nadie."
+  - "Yuppers.app: 123456: código para eliminar tu cuenta. No lo compartas."
+  - "Yuppers.app: 123456: código para confirmar tu número. No lo compartas."
+  - "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e. Responde STOP para cancelar."
 - **Embedded links**: yes (an update links to the agreement on `https://yuppers.app`). **Embedded phone numbers**: no. **Age-gated content**: no. **Direct lending**: no.
 
 ### In Twilio's console

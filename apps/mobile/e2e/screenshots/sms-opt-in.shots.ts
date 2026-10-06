@@ -64,7 +64,7 @@ function phoneCodes(masked: string, purpose: 'sign-in' | 'delete'): string[] {
   return lines
     .filter((line) => line.includes(masked))
     .filter((line) => (purpose === 'delete') === /delete|eliminar/.test(line))
-    .map((line) => /text="?(\d{6})/.exec(line)?.[1])
+    .map((line) => /text="?Yuppers\.app: (\d{6})/.exec(line)?.[1])
     .filter((code): code is string => code !== undefined)
 }
 

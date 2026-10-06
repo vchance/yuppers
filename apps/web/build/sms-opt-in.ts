@@ -18,8 +18,9 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
  * `public/sms-opt-in/mobile/`. Beside each picture is the exact wording
  * that screen shows, read here from the same wording files the apps read,
  * so the two cannot drift apart. The texts themselves are
- * shown as text: the confirmation and an update from the service's own
- * wording (`sms` in the wording files), and the HELP and STOP replies that
+ * shown as text: the sign-in code's, the code's for a number being added,
+ * the confirmation and an update from the service's own wording (`sms` in
+ * the wording files), and the HELP and STOP replies that
  * Twilio is configured to send (`wording/sms-opt-in/`, and
  * docs/deploy-render.md).
  *
@@ -33,6 +34,9 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
 
 /** The number the pictures show: a US number reserved for fiction (555-01XX). */
 export const SAMPLE_PHONE = '+12015550123'
+
+/** The one-time code the texts show. */
+export const SAMPLE_CODE = '123456'
 
 /** An exchange's address as an update links to it, with an ID made up for the page. */
 export const SAMPLE_LINK = 'https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e'
@@ -115,6 +119,8 @@ export interface SmsOptInWording {
   /** The same five screens in the mobile app. */
   mobileSteps: Record<Screen, Step>
   codeText: string
+  /** Before the text carrying the code that checks a number being added. */
+  verifyCodeText: string
   updateText: string
   moreHeading: string
   more: string
@@ -153,7 +159,7 @@ interface ProductWording {
     howItWorks: string
   }
   smsCode: { signIn: string; verifyNumber: string; tickToSend: string }
-  sms: { signIn: string; update: string; optInConfirmation: string }
+  sms: { signIn: string; verifyNumber: string; update: string; optInConfirmation: string }
 }
 
 /** One language's page. */
@@ -276,13 +282,13 @@ export function renderSmsOptInMarkup(
       s.changeIdentifier,
     ]) +
     `<p>${escapeHtml(page.codeText)}</p>` +
-    bubble(fill(product.sms.signIn, { code: '123456', productName: product.productName }), page.messageFrom)
-  // Last, the box beside a number being added, before the code that checks it.
-  const textUpdates = quoted(
-    page.wordingHeading,
-    [u.heading, u.intro, u.consent, u.save, c.verifyNumber],
-    true,
-  )
+    bubble(fill(product.sms.signIn, { code: SAMPLE_CODE }), page.messageFrom)
+  // Last, the box beside a number being added, and then the text carrying
+  // the code that checks it.
+  const textUpdates =
+    quoted(page.wordingHeading, [u.heading, u.intro, u.consent, u.save, c.verifyNumber], true) +
+    `<p>${escapeHtml(page.verifyCodeText)}</p>` +
+    bubble(fill(product.sms.verifyNumber, { code: SAMPLE_CODE }), page.messageFrom)
   const confirmation = quoted(page.wordingHeading, [fill(u.on, { phone: masked(SAMPLE_PHONE) })])
   const confirmationText = bubble(product.sms.optInConfirmation, page.messageFrom)
   const replies = [

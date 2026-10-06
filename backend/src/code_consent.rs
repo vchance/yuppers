@@ -38,6 +38,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::auth::Purpose;
 use crate::domain::Rules;
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
@@ -59,8 +60,9 @@ pub struct SmsCodeConsent {
     pub language: String,
 }
 
-/// Why a code was texted, as the record names it. Each has its own words
-/// beside the box.
+/// Why a code was asked for, as the record names it. Each has its own words
+/// beside the box, and its own text message carrying the code
+/// (`sms` in the wording files).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodePurpose {
     SignIn,
@@ -75,6 +77,17 @@ impl CodePurpose {
             CodePurpose::SignIn => "SIGN_IN",
             CodePurpose::DeleteAccount => "DELETE_ACCOUNT",
             CodePurpose::VerifyNumber => "VERIFY_NUMBER",
+        }
+    }
+
+    /// What the code itself is good for, which decides how it is stored,
+    /// limited and checked. A number being added is proved with a sign-in
+    /// code, as any identifier added to an account always has been: only
+    /// the text that carries it says what it is for here.
+    pub fn code_purpose(self) -> Purpose {
+        match self {
+            CodePurpose::SignIn | CodePurpose::VerifyNumber => Purpose::SignIn,
+            CodePurpose::DeleteAccount => Purpose::DeleteAccount,
         }
     }
 }
@@ -256,6 +269,16 @@ mod tests {
             language: "?".to_owned(),
         };
         assert!(request(Some(&nonsense)).check(&email).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_number_being_added_is_proved_with_a_sign_in_code() {
+        assert_eq!(CodePurpose::SignIn.code_purpose(), Purpose::SignIn);
+        assert_eq!(CodePurpose::VerifyNumber.code_purpose(), Purpose::SignIn);
+        assert_eq!(
+            CodePurpose::DeleteAccount.code_purpose(),
+            Purpose::DeleteAccount
+        );
     }
 
     #[test]

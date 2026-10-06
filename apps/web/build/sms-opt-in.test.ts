@@ -39,6 +39,18 @@ const parse = (language: string) => new DOMParser().parseFromString(html(languag
 const fill = (message: string, values: Record<string, string>) =>
   message.replace(/\{(\w+)\}/g, (marker, name: string) => values[name] ?? marker)
 
+/** The code texts as the service sends them, word for word (`backend/src/notifications/sms.rs`). */
+const CODE_TEXTS: Record<string, { signIn: string; verifyNumber: string }> = {
+  en: {
+    signIn: 'Yuppers.app: 123456 is your sign-in code. Do not share it with anyone.',
+    verifyNumber: 'Yuppers.app: 123456 is your code to confirm this phone number. Do not share it with anyone.',
+  },
+  es: {
+    signIn: 'Yuppers.app: 123456 es tu código para entrar. No se lo des a nadie.',
+    verifyNumber: 'Yuppers.app: 123456: código para confirmar tu número. No lo compartas.',
+  },
+}
+
 describe('the page on how people opt in to texts', () => {
   test('one per language: /sms-opt-in in the default, /{language}/sms-opt-in in the others', () => {
     expect(pages.map((page) => [page.path, page.fileName])).toEqual([
@@ -97,13 +109,18 @@ describe('the page on how people opt in to texts', () => {
     expect(quoted(2)).toEqual(
       expect.arrayContaining([
         fill(product.signIn.codeSent, { identifier: SAMPLE_PHONE }),
-        fill(product.sms.signIn, { code: '123456', productName: 'Yuppers' }),
+        CODE_TEXTS[language].signIn,
       ]),
     )
+    expect(quoted(2)).toContain(fill(product.sms.signIn, { code: '123456' }))
     // (d) The box beside the consent wording, its addresses links, and the
     // box beside a number being added.
     expect(quoted(3)).toContain(product.smsUpdates.consent)
     expect(quoted(3)).toContain(product.smsCode.verifyNumber)
+    // The text carrying the code that checks the number, last.
+    expect(quoted(3).at(-1)).toBe(CODE_TEXTS[language].verifyNumber)
+    expect(quoted(3).at(-1)).toBe(fill(product.sms.verifyNumber, { code: '123456' }))
+    expect(steps[3].textContent).toContain(wording.verifyCodeText)
     expect(links(3)).toEqual([...addresses, ...addresses])
     // (e) The confirmation on screen.
     expect(quoted(4)).toEqual([
@@ -305,5 +322,12 @@ describe('the page on how people opt in to texts', () => {
     // And the link to give for the mobile app's screens is this page's part on it.
     expect(guide).toContain('https://yuppers.app/sms-opt-in#mobile-app')
     expect(read('sms-opt-in/es.json').replies).toEqual(replies)
+    // The samples of the code texts are the service's, in both languages.
+    for (const language of ['en', 'es']) {
+      const { sms } = read(`${language}.json`)
+      for (const text of [sms.signIn, sms.deleteAccount, sms.verifyNumber]) {
+        expect(guide).toContain(`"${fill(text, { code: '123456' })}"`)
+      }
+    }
   })
 })

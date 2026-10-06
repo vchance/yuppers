@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { apiEnvironment, apiLog, port, repoRoot, webRoot, workerBinary } from './support/env'
 import { expect, test } from './support/fixtures'
 import { agree, move, type ItemSpec } from './support/flows'
-import { number, textsTo, waitFor } from './support/texts'
+import { codeIn, number, textsTo, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -50,7 +50,12 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   await sendCode.click()
   await expect(control.getByText(fill(w.codeSent, { phone: `+1 •••-•••-${phone.slice(-4)}` }))).toBeVisible()
   const codeText = await waitFor(() => textsTo(phone, apiLog)[before], 'the code by text')
-  const code = /^\d{6}/.exec(codeText)![0]
+  const code = codeIn(codeText)
+  // The text says what the code is for: confirming the number, not signing in.
+  expect(codeText).toBe(
+    `Yuppers.app: ${code} is your code to confirm this phone number. Do not share it with anyone.`,
+  )
+  expect(codeText).toBe(fill(en.sms.verifyNumber, { code }))
   await control.getByLabel(w.codeLabel).fill(code)
   await control.getByRole('button', { name: w.addPhone, exact: true }).click()
 

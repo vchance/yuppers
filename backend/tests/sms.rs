@@ -24,6 +24,7 @@ use tokio::sync::MutexGuard;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, LogSender, Purpose, SendFuture};
+use yuppers_backend::code_consent::CodePurpose;
 use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::metrics::{self, Text};
 use yuppers_backend::notifications::sms::{
@@ -128,6 +129,14 @@ fn router(phone: &Arc<Phone>, mailbox: &Arc<Mailbox>) -> Arc<CodeRouter> {
     ))
 }
 
+/// The code in a text: the six digits after the program's name.
+fn code_in(text: &str) -> String {
+    let code = text
+        .strip_prefix("Yuppers.app: ")
+        .unwrap_or_else(|| panic!("{text:?} does not begin with the program's name"));
+    code[..6].to_owned()
+}
+
 /// The SMS counts for this hour, as the API's metrics show them.
 async fn counted(app: &App, cap: i64) -> String {
     let mut text = Text::new();
@@ -156,19 +165,18 @@ async fn a_phone_number_gets_its_code_by_sms_in_its_language_and_an_email_addres
     assert_eq!(sent[0].0, es);
     assert_eq!(sent[1].0, en);
     let (spanish, english) = (&sent[0].1, &sent[1].1);
-    let code = |text: &str| text[..6].to_owned();
     assert_eq!(
         *spanish,
         format!(
-            "{} es tu código de Yuppers para entrar. No se lo des a nadie.",
-            code(spanish)
+            "Yuppers.app: {} es tu código para entrar. No se lo des a nadie.",
+            code_in(spanish)
         )
     );
     assert_eq!(
         *english,
         format!(
-            "{} is your Yuppers sign-in code. Do not share it with anyone.",
-            code(english)
+            "Yuppers.app: {} is your sign-in code. Do not share it with anyone.",
+            code_in(english)
         )
     );
     for text in [spanish, english] {
@@ -180,6 +188,103 @@ async fn a_phone_number_gets_its_code_by_sms_in_its_language_and_an_email_addres
             .await
             .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 2")
     );
+}
+
+/// A code asked for by a signed-in account, which is only ever to add a
+/// number to it, says it confirms the number; one to delete the account
+/// says so; and signing in, as above, says it signs in. In each language.
+#[tokio::test]
+async fn each_code_text_says_what_its_code_was_asked_for() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    let (app, _turn) = start(50, router(&phone, &mailbox)).await;
+    let wording = Wording::embedded().unwrap();
+
+    for language in ["en", "es"] {
+        // Adding a number, from a signed-in account.
+        let ana = app.user("Ana").await;
+        let added = number();
+        let reply = app
+            .call(
+                Some(&ana),
+                Method::POST,
+                "/v1/auth/codes",
+                Some(json!({ "identifier": added, "sms_consent": common::sms_consent() })),
+                &[("accept-language", language)],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+        let (to, text) = phone.0.lock().unwrap().last().unwrap().clone();
+        assert_eq!(to, added);
+        assert_eq!(
+            text,
+            wording.code_sms(language, CodePurpose::VerifyNumber, &code_in(&text))
+        );
+        // Its code is a sign-in code: it adds the number.
+        let reply = app
+            .call(
+                Some(&ana),
+                Method::POST,
+                "/v1/me/identifiers",
+                Some(json!({ "identifier": added, "code": code_in(&text) })),
+                &[],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+
+        // Deleting an account by its number, in the account's language.
+        sqlx::query("UPDATE account SET language = $2 WHERE id = $1")
+            .bind(ana.id)
+            .bind(language)
+            .execute(&app.owner)
+            .await
+            .unwrap();
+        let reply = app
+            .call(
+                Some(&ana),
+                Method::POST,
+                "/v1/me/deletion/codes",
+                Some(json!({ "channel": "PHONE", "sms_consent": common::sms_consent() })),
+                &[],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
+        let (to, text) = phone.0.lock().unwrap().last().unwrap().clone();
+        assert_eq!(to, added);
+        assert_eq!(
+            text,
+            wording.code_sms(language, CodePurpose::DeleteAccount, &code_in(&text))
+        );
+
+        // Signing in, with nobody signed in.
+        let signing_in = number();
+        assert_eq!(
+            ask(&app, &signing_in, language).await.status,
+            StatusCode::NO_CONTENT
+        );
+        let (to, text) = phone.0.lock().unwrap().last().unwrap().clone();
+        assert_eq!(to, signing_in);
+        assert_eq!(
+            text,
+            wording.code_sms(language, CodePurpose::SignIn, &code_in(&text))
+        );
+    }
+    // Three different texts in each language, every one of them sent.
+    let sent: Vec<String> = phone
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, text)| text.clone())
+        .collect();
+    assert_eq!(sent.len(), 6);
+    assert!(sent[0].contains("confirm this phone number"), "{sent:?}");
+    assert!(sent[1].contains("delete your account"), "{sent:?}");
+    assert!(sent[2].contains("sign-in code"), "{sent:?}");
+    assert!(sent[3].contains("confirmar tu número"), "{sent:?}");
+    assert!(sent[4].contains("eliminar tu cuenta"), "{sent:?}");
+    assert!(sent[5].contains("para entrar"), "{sent:?}");
+    // No email for any of them.
+    assert!(mailbox.0.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -684,7 +789,7 @@ async fn with_an_api_key_twilio_is_sent_the_key_as_basic_auth_and_the_account_in
     twilio_with_key(addr)
         .send(Sms {
             to: "+15551234567",
-            text: "123456 is your Yuppers sign-in code. Do not share it with anyone.",
+            text: "Yuppers.app: 123456 is your sign-in code. Do not share it with anyone.",
         })
         .await
         .unwrap();
@@ -759,7 +864,7 @@ async fn twilio_is_sent_the_message_in_the_shape_its_api_takes() {
     )
     .await;
     let sender = twilio(addr, "+15550000000");
-    let text = "123456 es tu código de Yuppers para entrar. No se lo des a nadie.";
+    let text = "Yuppers.app: 123456 es tu código para entrar. No se lo des a nadie.";
     sender
         .send(Sms {
             to: "+15551234567",
@@ -922,7 +1027,7 @@ async fn no_log_holds_a_whole_phone_number_and_only_the_development_delivery_hol
     LogSmsSender
         .send(Sms {
             to: number,
-            text: "111111 is your Yuppers sign-in code. Do not share it with anyone.",
+            text: "Yuppers.app: 111111 is your sign-in code. Do not share it with anyone.",
         })
         .await
         .unwrap();
@@ -933,6 +1038,7 @@ async fn no_log_holds_a_whole_phone_number_and_only_the_development_delivery_hol
             to: &phone,
             code: "222222",
             purpose: Purpose::SignIn,
+            reason: CodePurpose::SignIn,
             language: "en",
         },
     )

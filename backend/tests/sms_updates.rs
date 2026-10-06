@@ -900,7 +900,18 @@ async fn a_number_is_verified_by_a_code_and_replacing_it_ends_the_old_numbers_up
             .await;
             let (to, text) = codes.sent().pop().unwrap();
             assert_eq!(to, phone);
-            let code = &text[..6];
+            // The text says the code confirms the number.
+            let code = text
+                .strip_prefix("Yuppers.app: ")
+                .and_then(|rest| rest.get(..6))
+                .unwrap();
+            assert_eq!(
+                text,
+                format!(
+                    "Yuppers.app: {code} is your code to confirm this phone number. \
+                     Do not share it with anyone."
+                )
+            );
             app.post(
                 ben,
                 "/v1/me/identifiers",

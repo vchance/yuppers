@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
  * writes each text it would have sent, the number masked but for its last
  * two digits:
  *
- *   ... text message (development delivery) to="+1••••••••23" text="123456 is your Yuppers sign-in code. ..."
+ *   ... text message (development delivery) to="+1••••••••23" text="Yuppers.app: 123456 is your sign-in code. ..."
  */
 
 /** A US number nobody else uses, as the service stores it. */
@@ -27,6 +27,13 @@ export function textsTo(phone: string, log: string): string[] {
     .split('\n')
     .filter((line) => line.includes('text message (development delivery)') && line.includes(masked))
     .map((line) => /text="((?:[^"\\]|\\.)*)"/.exec(line)?.[1]?.replaceAll('\\"', '"') ?? '')
+}
+
+/** The one-time code in a code's text, which begins with the program's name. */
+export function codeIn(text: string): string {
+  const code = /^Yuppers\.app: (\d{6})\b/.exec(text)?.[1]
+  if (code === undefined) throw new Error(`no code in ${JSON.stringify(text)}`)
+  return code
 }
 
 /** Waits until `find` finds something, and returns it. */

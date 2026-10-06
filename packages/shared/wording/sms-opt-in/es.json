@@ -38,7 +38,7 @@
     },
     "textUpdates": {
       "title": "Paso 4. Activar las actualizaciones por mensaje de un acuerdo",
-      "caption": "En un acuerdo del que la persona es parte, “Actualizaciones por mensaje” muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. Si la cuenta aún no tiene número de teléfono, la persona primero escribe un número de EE. UU., que comprobamos con un código de un solo uso que le enviamos solo después de que marque una casilla junto al último texto de abajo.",
+      "caption": "En un acuerdo del que la persona es parte, “Actualizaciones por mensaje” muestra una casilla sin marcar junto al texto de consentimiento de abajo, cuyas dos direcciones son enlaces a los términos y a la política de privacidad. No se envía nada salvo que la persona marque la casilla y pulse Guardar. Si la cuenta aún no tiene número de teléfono, la persona primero escribe un número de EE. UU., que comprobamos con un código de un solo uso que le enviamos solo después de que marque una casilla junto al último texto citado abajo. El mensaje que lleva ese código se muestra después.",
       "alt": "La sección Actualizaciones por mensaje de un acuerdo en un teléfono: una casilla sin marcar junto al texto de consentimiento, con enlaces a los términos y a la política de privacidad, y un botón Guardar."
     },
     "confirmation": {
@@ -83,6 +83,7 @@
     }
   },
   "codeText": "El mensaje con el código para entrar:",
+  "verifyCodeText": "El mensaje con el código que comprueba un número que se añade:",
   "updateText": "Una actualización de un acuerdo, tal como llega:",
   "moreHeading": "Los términos y la política de privacidad",
   "more": "Los dos programas se describen en la sección sobre mensajes de texto de los {terms} y de la {privacy}.",

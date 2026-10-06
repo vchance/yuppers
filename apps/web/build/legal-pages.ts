@@ -93,7 +93,12 @@ function inline(message: string, context: Context): string {
   return legalInline(message, context.language, context.document, context.wording)
     .map((piece) => {
       if ('email' in piece) {
-        return `<a href="mailto:${escapeHtml(piece.email)}">${escapeHtml(piece.email)}</a>`
+        // Cloudflare's email obfuscation rewrites addresses in served HTML
+        // to "[email protected]", decoded only by a script. These pages are
+        // read without JavaScript (carrier and Twilio reviewers among them),
+        // and the contact address is required to be readable there, so it
+        // is marked to be left alone.
+        return `<!--email_off--><a href="mailto:${escapeHtml(piece.email)}">${escapeHtml(piece.email)}</a><!--/email_off-->`
       }
       if ('document' in piece) {
         const path = legalPagePath(piece.document, context.language, context.defaultLanguage)

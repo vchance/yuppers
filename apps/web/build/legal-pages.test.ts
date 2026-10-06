@@ -86,6 +86,17 @@ describe('the static pages of the privacy policy and the terms', () => {
     },
   )
 
+  test.each(cases)('%s in %s keeps its email addresses readable without JavaScript', (document, language) => {
+    // Cloudflare's email obfuscation would otherwise turn every address into
+    // "[email protected]" for anyone reading without scripts.
+    const page = html(document, language)
+    const addresses = page.match(/<a href="mailto:[^"]+">[^<]+<\/a>/g) ?? []
+    expect(addresses.length).toBeGreaterThan(0)
+    for (const address of addresses) {
+      expect(page).toContain(`<!--email_off-->${address}<!--/email_off-->`)
+    }
+  })
+
   test.each(cases)('%s in %s says what the SMS registration asks for', (document, language) => {
     for (const problem of smsRequirements(parse(document, language), document, language)) {
       expect.fail(problem)

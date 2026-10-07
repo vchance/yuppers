@@ -8,6 +8,11 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      },
       "bundleIdentifier": "app.yuppers",
       "config": {
         "usesNonExemptEncryption": false
@@ -70,7 +75,7 @@
     "android": {
       "package": "app.yuppers",
       "adaptiveIcon": {
-        "backgroundColor": "#0b57b0",
+        "backgroundColor": "#1A1B2E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -108,7 +113,7 @@
         "expo-notifications",
         {
           "icon": "./assets/android-icon-monochrome.png",
-          "color": "#0b57b0",
+          "color": "#2F4BE0",
           "defaultChannel": "default"
         }
       ],
@@ -118,10 +123,10 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 160,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#F4F4EF",
           "dark": {
             "image": "./assets/splash-icon.png",
-            "backgroundColor": "#0f1216"
+            "backgroundColor": "#111327"
           }
         }
       ]

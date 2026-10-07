@@ -350,6 +350,10 @@ test('a draft opens in the composer, with the platform’s own date control', as
   await screen.findByText(w.composer.titleFirst);
   expect(screen.getByLabelText(w.composer.otherName).props.defaultValue).toBe('Ben Ortiz');
   screen.getByText(w.composer.dateLabel);
+  await fireEvent.changeText(
+    await screen.findByLabelText(w.invitationLink.forLabel),
+    'ben@example.test',
+  );
 
   // Reviewing shows the complete terms and the consent step; nothing is sent yet.
   await fireEvent.press(screen.getByText(w.composer.review));

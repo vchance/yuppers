@@ -1,11 +1,13 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
 import {
-  boundToProblem,
   boundToProblemText,
   consentShown,
+  invitationBoundTo,
+  invitationForProblem,
   isInvitationSpent,
   isUnconfirmedClaimant,
   moneyIds,
+  NAMED_INVITATION,
   otherPartyName,
   remainingRequired,
   statusesOf,
@@ -14,6 +16,7 @@ import {
   useHistory,
   useSignInChannels,
   type ClosedReason,
+  type InvitationChoice,
   type IssuedInvitation,
 } from '@yuppers/shared'
 import {
@@ -400,23 +403,23 @@ function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
   const { wording, fmt } = useI18n()
   const link = wording.invitationLink
   const forId = useId()
-  const [boundTo, setBoundTo] = useState('')
+  const [invitee, setInvitee] = useState<InvitationChoice>(NAMED_INVITATION)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [checked, setChecked] = useState(false)
   const channels = useSignInChannels(api)
-  const problem = checked ? boundToProblem(boundTo, channels) : null
+  const problem = checked ? invitationForProblem(invitee, channels) : null
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setChecked(true)
-    if (boundToProblem(boundTo, channels)) {
+    if (invitationForProblem(invitee, channels)) {
       window.setTimeout(() => document.getElementById(forId)?.focus())
       return
     }
     setBusy(true)
     setFailure(null)
-    const bound = boundTo.trim() || null
+    const bound = invitationBoundTo(invitee)
     try {
       onIssued({ token: await api.reissueInvitation(exchange, bound), boundTo: bound })
       actions.close()
@@ -434,8 +437,8 @@ function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
     <Panel title={link.reissue}>
       <form noValidate onSubmit={submit}>
         <InvitationFor
-          value={boundTo}
-          onChange={setBoundTo}
+          choice={invitee}
+          onChange={setInvitee}
           channels={channels}
           id={forId}
           error={problem ? boundToProblemText(problem, link, channels, fmt) : null}

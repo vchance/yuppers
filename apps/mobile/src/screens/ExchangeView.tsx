@@ -1,12 +1,14 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
-  boundToProblem,
   boundToProblemText,
   consentShown,
   failureCode,
+  invitationBoundTo,
+  invitationForProblem,
   isUnconfirmedClaimant,
   labelText,
   moneyIds,
+  NAMED_INVITATION,
   otherPartyName,
   remainingRequired,
   statusesOf,
@@ -17,6 +19,7 @@ import {
   useSignInChannels,
   type Actions as ExchangeActions,
   type ClosedReason,
+  type InvitationChoice,
   type RevisionView,
 } from '@yuppers/shared';
 import { useIsFocused, useRouter } from 'expo-router';
@@ -392,20 +395,20 @@ interface ReissueProps {
 function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
   const { wording, fmt } = useI18n();
   const link = wording.invitationLink;
-  const [boundTo, setBoundTo] = useState('');
+  const [invitee, setInvitee] = useState<InvitationChoice>(NAMED_INVITATION);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [checked, setChecked] = useState(false);
   const channels = useSignInChannels(api);
-  const problem = checked ? boundToProblem(boundTo, channels) : null;
+  const problem = checked ? invitationForProblem(invitee, channels) : null;
 
   async function submit() {
     setChecked(true);
-    if (boundToProblem(boundTo, channels)) return;
+    if (invitationForProblem(invitee, channels)) return;
     setBusy(true);
     setFailure(null);
     try {
-      onIssued(await api.reissueInvitation(exchange, boundTo.trim() || null));
+      onIssued(await api.reissueInvitation(exchange, invitationBoundTo(invitee)));
       actions.close();
     } catch (error) {
       const code = failureCode(error);
@@ -420,8 +423,8 @@ function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
   return (
     <Panel title={link.reissue}>
       <InvitationFor
-        value={boundTo}
-        onChange={setBoundTo}
+        choice={invitee}
+        onChange={setInvitee}
         channels={channels}
         error={problem ? boundToProblemText(problem, link, channels, fmt) : null}
       />

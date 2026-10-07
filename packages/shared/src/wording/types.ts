@@ -489,10 +489,21 @@ export interface Wording {
     qrFailed: string
     unclaimed: string
     reissueIntro: string
+    /**
+     * Who the invitation is for (DESIGN.md §8), asked in the composer and when
+     * a link is replaced. Naming them is expected: `forIntro` asks the
+     * question and says why, `forHint` that they must sign in with exactly
+     * what is given, `forNoContact` that we do not contact them.
+     */
     forLabel: string
+    forIntro: string
     forHint: string
+    forNoContact: string
     /** `forLabel` where the service takes email addresses only (`GET /v1/meta`). */
     forLabelEmail: string
+    /** Said when nobody is named and a link for anyone was not chosen; `…Email` as for the label. */
+    forMissing: string
+    forMissingEmail: string
     /**
      * Said, before anything is sent, of what `forLabel` was given: not an
      * email address or phone number at all; not an email address where only
@@ -503,8 +514,18 @@ export interface Wording {
     forInvalidEmail: string
     forEmailOnly: string
     forCountry: string
+    /**
+     * The deliberate exception: a link for anyone. `forAnyone` chooses it,
+     * `forAnyoneText` says what it costs once chosen, `forNamed` goes back
+     * to naming them.
+     */
+    forAnyone: string
+    forAnyoneText: string
+    forNamed: string
     /** On the signing step, who the invitation is for: `{identifier}`, as typed. */
     boundSummary: string
+    /** On the signing step, for a link for anyone. */
+    forAnyoneSummary: string
     reissue: string
   }
   /**

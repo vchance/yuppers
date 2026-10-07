@@ -105,8 +105,48 @@ function phoneNumber(input: string): string | null {
   return digits.length >= 7 && digits.length <= 15 && !digits.startsWith('0') ? `+${digits}` : null
 }
 
-/** Why who an invitation is for would not do, if it would not. */
-export type BoundToProblem = 'invalid' | 'invalidEmail' | 'emailOnly' | 'country'
+/**
+ * Why who an invitation is for would not do, if it would not. `missing` is
+ * only for [`invitationForProblem`]: nobody named, and a link for anyone
+ * not chosen either.
+ */
+export type BoundToProblem = 'missing' | 'invalid' | 'invalidEmail' | 'emailOnly' | 'country'
+
+/**
+ * Who an invitation is for, as the composer and the panel that replaces a
+ * link ask it (DESIGN.md §8). Naming the person is what is expected: a named
+ * invitation needs no confirmation, so they can respond in full as soon as
+ * they sign in. A link for anyone is a deliberate choice, never what an
+ * empty field means. What was typed is kept while a link for anyone is
+ * chosen, so changing one's mind back loses nothing.
+ */
+export interface InvitationChoice {
+  anyone: boolean
+  /** Their email address or phone number, as typed. */
+  to: string
+}
+
+/** Where the question starts: naming them, with nothing typed yet. */
+export const NAMED_INVITATION: InvitationChoice = { anyone: false, to: '' }
+
+/**
+ * What is wrong with an [`InvitationChoice`], if anything: nothing for a
+ * link for anyone; otherwise someone has to be named, by an address they can
+ * sign in with ([`boundToProblem`]).
+ */
+export function invitationForProblem(
+  choice: InvitationChoice,
+  channels: SignInChannels | null,
+): BoundToProblem | null {
+  if (choice.anyone) return null
+  if (!choice.to.trim()) return 'missing'
+  return boundToProblem(choice.to, channels)
+}
+
+/** Whom the service is asked to bind the invitation to: nobody for a link for anyone. */
+export function invitationBoundTo(choice: InvitationChoice): string | null {
+  return choice.anyone ? null : choice.to.trim() || null
+}
 
 /**
  * Checks who an invitation is for before anything is signed, gently: only
@@ -144,6 +184,8 @@ export function boundToProblemText(
   fmt: (message: string, values: MessageValues) => string,
 ): string {
   switch (problem) {
+    case 'missing':
+      return phoneOffered(channels) ? w.forMissing : w.forMissingEmail
     case 'invalid':
       return w.forInvalid
     case 'invalidEmail':

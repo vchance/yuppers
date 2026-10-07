@@ -3,58 +3,105 @@ import {
   invitationLink,
   phoneOffered,
   shareAddresses,
+  type InvitationChoice,
   type SignInChannels,
 } from '@yuppers/shared'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { useI18n } from '../app/context'
 import { ErrorNote, Field, Notice } from './ui'
 import { Panel } from './Panel'
 
 /**
- * Naming who an invitation is for, so that only an account verified with
- * that email address or phone number can use the link (DESIGN.md §8). An
- * email address only, until the service says it texts codes (`channels`),
+ * Who an invitation is for (DESIGN.md §8). Naming them is what is expected:
+ * only an account verified with that email address or phone number can use
+ * the link, and needs no confirming, so they can respond in full as soon as
+ * they sign in. The field says why, that we do not contact them, and that
+ * they must sign in with exactly what is typed. A link for anyone is offered
+ * after it as a deliberate choice, which says what it costs once chosen.
+ *
+ * An email address only, until the service says it texts codes (`channels`),
  * as signing in asks: a phone number nobody can sign in with would make the
  * link useless.
  */
 export function InvitationFor({
-  value,
+  choice,
   onChange,
   channels,
   error,
-  id,
+  id: fixedId,
 }: {
-  value: string
-  onChange(value: string): void
+  choice: InvitationChoice
+  onChange(choice: InvitationChoice): void
   channels: SignInChannels | null
   /** What is wrong with it, said under it once the person has tried to go on. */
   error?: string | null
+  /** The field's id, for the keyboard to be taken to it. */
   id?: string
 }) {
   const { wording } = useI18n()
+  const w = wording.invitationLink
+  const generated = useId()
+  const id = fixedId ?? generated
+  const anyoneNote = useRef<HTMLDivElement>(null)
+  // Set when the person switches, so the keyboard follows them, and not
+  // when the form is first shown.
+  const switched = useRef(false)
+
+  useEffect(() => {
+    if (!switched.current) return
+    switched.current = false
+    if (choice.anyone) anyoneNote.current?.focus()
+    else document.getElementById(id)?.focus()
+  }, [choice.anyone, id])
+
+  function choose(anyone: boolean) {
+    switched.current = true
+    onChange({ ...choice, anyone })
+  }
+
+  if (choice.anyone) {
+    return (
+      <div className="invitation-for">
+        {/* Focused when chosen, so what it costs is read out at once. */}
+        <div className="notice notice-warning" ref={anyoneNote} tabIndex={-1}>
+          <p>{w.forAnyoneText}</p>
+        </div>
+        <div className="actions">
+          <button type="button" className="link" onClick={() => choose(false)}>
+            {w.forNamed}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <Field
-      label={boundToLabel(wording.invitationLink, channels)}
-      hint={wording.invitationLink.forHint}
-      error={error}
-      id={id}
-    >
-      {(control) => (
-        <input
-          {...control}
-          // A text field where a phone number may be typed, which a browser
-          // would otherwise take for a malformed email address.
-          type={phoneOffered(channels) ? 'text' : 'email'}
-          inputMode="email"
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      )}
-    </Field>
+    <div className="invitation-for">
+      <p>{w.forIntro}</p>
+      <p>{w.forNoContact}</p>
+      <Field label={boundToLabel(w, channels)} hint={w.forHint} error={error} id={id} required>
+        {(control) => (
+          <input
+            {...control}
+            // A text field where a phone number may be typed, which a browser
+            // would otherwise take for a malformed email address.
+            type={phoneOffered(channels) ? 'text' : 'email'}
+            inputMode="email"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={choice.to}
+            onChange={(event) => onChange({ ...choice, to: event.target.value })}
+          />
+        )}
+      </Field>
+      <div className="actions">
+        <button type="button" className="link" onClick={() => choose(true)}>
+          {w.forAnyone}
+        </button>
+      </div>
+    </div>
   )
 }
 

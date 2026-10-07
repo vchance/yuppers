@@ -2,7 +2,15 @@ import { expect, test } from 'vitest'
 
 import { wordingFor } from './language'
 import { formatMessage, type MessageValues } from './message'
-import { boundToLabel, boundToProblem, boundToProblemText, shareAddresses } from './share'
+import {
+  boundToLabel,
+  boundToProblem,
+  boundToProblemText,
+  invitationBoundTo,
+  invitationForProblem,
+  NAMED_INVITATION,
+  shareAddresses,
+} from './share'
 
 const LINK = 'https://yuppers.example/en/i#Abc_def-0123456789xyz'
 const MESSAGE = `I’ve sent you a yup to review: ${LINK}`
@@ -100,4 +108,32 @@ test('the field asks for an email address until phone numbers are offered, and s
   expect(boundToProblemText('country', w, both, fmt)).toBe(
     'We can only send sign-in codes to phone numbers starting +1, +52, so they couldn’t use the link with this number.',
   )
+})
+
+test('someone has to be named, unless a link for anyone is chosen on purpose', () => {
+  const w = wordingFor('en').invitationLink
+  const fmt = (message: string, values: MessageValues) => formatMessage(message, values, 'en')
+  const both = { phone: true, countryCodes: ['+1'], codeSender: null }
+  const emailOnly = { ...both, phone: false }
+
+  // Naming them is where it starts, and an empty field is not a choice.
+  expect(NAMED_INVITATION).toEqual({ anyone: false, to: '' })
+  expect(invitationForProblem(NAMED_INVITATION, both)).toBe('missing')
+  expect(invitationForProblem({ anyone: false, to: '   ' }, both)).toBe('missing')
+  expect(boundToProblemText('missing', w, both, fmt)).toBe(w.forMissing)
+  expect(boundToProblemText('missing', w, emailOnly, fmt)).toBe(w.forMissingEmail)
+  expect(boundToProblemText('missing', w, null, fmt)).toBe(w.forMissingEmail)
+
+  // Named, it is checked as before.
+  expect(invitationForProblem({ anyone: false, to: 'carla@' }, both)).toBe('invalid')
+  expect(invitationForProblem({ anyone: false, to: '+44 20 7946 0958' }, both)).toBe('country')
+  expect(invitationForProblem({ anyone: false, to: ' carla@example.test ' }, both)).toBeNull()
+  expect(invitationBoundTo({ anyone: false, to: ' carla@example.test ' })).toBe(
+    'carla@example.test',
+  )
+
+  // A link for anyone names nobody, whatever was typed before choosing it.
+  const anyone = { anyone: true, to: 'carla@' }
+  expect(invitationForProblem(anyone, both)).toBeNull()
+  expect(invitationBoundTo(anyone)).toBeNull()
 })

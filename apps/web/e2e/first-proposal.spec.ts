@@ -6,6 +6,7 @@ import {
   agreedItem,
   addItems,
   history,
+  inviteFor,
   move,
   reviewAndSend,
   setUpProfile,
@@ -29,6 +30,12 @@ test('a first proposal goes from a new draft to a completed exchange both can ta
   await signUp(ana)
   await startExchange(ana)
   await ana.page.getByLabel(en.composer.otherName).fill(bruno.name)
+  // She doesn't name him, which she has to choose to do: the link will be
+  // for anyone, and she is told what that costs.
+  await expect(ana.page.getByText(en.invitationLink.forIntro)).toBeVisible()
+  await expect(ana.page.getByText(en.invitationLink.forNoContact)).toBeVisible()
+  await inviteFor(ana.page, null)
+  await expect(ana.page.getByLabel(en.invitationLink.forLabel, { exact: true })).toHaveCount(0)
   await addItems(ana.page, [
     { from: 'me', kind: 'ITEM', description: BICYCLE },
     { from: 'them', kind: 'MONEY', description: PAYMENT, amount: '120' },

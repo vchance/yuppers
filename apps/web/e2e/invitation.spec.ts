@@ -1,5 +1,14 @@
 import { expect, test } from './support/fixtures'
-import { join, propose, setUpProfile, signIn, signUp, stateTag } from './support/flows'
+import {
+  composerItem,
+  join,
+  propose,
+  reviewAndSend,
+  setUpProfile,
+  signIn,
+  signUp,
+  stateTag,
+} from './support/flows'
 import { en, fill } from './support/wording'
 
 test('a replaced invitation link stops working, and the new one opens the proposal', async ({
@@ -12,13 +21,18 @@ test('a replaced invitation link stops working, and the new one opens the propos
     { from: 'me', kind: 'ITEM', description: 'A set of garden chairs' },
   ])
 
-  // Ana makes a new link, which replaces the one she had.
+  // Ana makes a new link, which replaces the one she had. It asks the same
+  // question as the composer, the same way: naming him is expected, and an
+  // empty field is not taken for a link for anyone.
   const card = ana.page.getByRole('region', { name: en.invitationLink.heading, exact: true })
   await card.getByRole('button', { name: en.invitationLink.reissue }).click()
-  await card
-    .getByRole('group', { name: en.invitationLink.reissue })
-    .getByRole('button', { name: en.invitationLink.reissue })
-    .click()
+  const panel = card.getByRole('group', { name: en.invitationLink.reissue })
+  await expect(panel.getByText(en.invitationLink.forNoContact)).toBeVisible()
+  await expect(panel.getByRole('button', { name: en.invitationLink.forAnyone })).toBeVisible()
+  await panel.getByRole('button', { name: en.invitationLink.reissue }).click()
+  await expect(panel.getByText(en.invitationLink.forMissing)).toBeVisible()
+  await panel.getByLabel(en.invitationLink.forLabel, { exact: true }).fill(bruno.email)
+  await panel.getByRole('button', { name: en.invitationLink.reissue }).click()
   const field = card.getByLabel(en.invitationLink.linkLabel, { exact: true })
   await expect(field).toHaveValue(/\/en\/i#/)
   await expect(field).not.toHaveValue(first)
@@ -128,4 +142,73 @@ test('a used link takes the person who used it back to the exchange, and claims 
   await carla.page.goto('/')
   await expect(carla.page.getByRole('heading', { name: en.home.title, level: 1 })).toBeVisible()
   await expect(carla.page.getByText(en.home.empty)).toBeVisible()
+})
+
+test('named, as the composer expects: the person it names can propose changes as soon as they sign in, with nobody to confirm them', async ({
+  person,
+}) => {
+  const ana = await person('Ana')
+  const bruno = await person('Bruno')
+  const carla = await person('Carla')
+  await signUp(ana)
+  const { id, link } = await propose(
+    ana,
+    bruno,
+    [{ from: 'me', kind: 'ITEM', description: 'A set of garden chairs' }],
+    { invitee: bruno.email },
+  )
+
+  // Someone signed in with another address is told it is for someone else
+  // and how to put that right, and cannot take it.
+  await carla.page.goto(link)
+  await signIn(carla)
+  await carla.page.getByRole('button', { name: en.invitation.respondNew, exact: true }).click()
+  await setUpProfile(carla)
+  await expect(carla.page.getByText(en.errors.INVITATION_NOT_FOR_YOU)).toBeVisible()
+  await expect(carla.page).toHaveURL(/\/en\/i$/)
+
+  // Bruno, signed in with the address Ana gave, is told he can respond in
+  // full, and is in the exchange as soon as he responds.
+  await bruno.page.goto(link)
+  await signIn(bruno)
+  await expect(
+    bruno.page.getByText(fill(en.invitation.introSignedIn, { name: ana.name })),
+  ).toBeVisible()
+  await expect(bruno.page.getByText(en.invitation.boundSignedIn)).toBeVisible()
+  await bruno.page.getByRole('button', { name: en.invitation.respondNew, exact: true }).click()
+  await setUpProfile(bruno)
+  await bruno.page.waitForURL(`**/exchanges/${id}`)
+  await expect(stateTag(bruno.page)).toHaveText(en.states.NEGOTIATING)
+  await expect(bruno.page.getByText(en.claimant.limits)).toHaveCount(0)
+  await expect(
+    bruno.page.getByText(fill(en.exchange.waitingConfirmation, { name: ana.name })),
+  ).toHaveCount(0)
+
+  // He proposes changes straight away; nobody confirmed him.
+  await bruno.page
+    .getByRole('region', { name: en.exchange.proposalHeading, exact: true })
+    .getByRole('link', { name: en.exchange.counter })
+    .click()
+  await expect(
+    bruno.page.getByRole('heading', { name: en.composer.titleCounter, level: 1 }),
+  ).toBeVisible()
+  await composerItem(bruno.page, 1)
+    .getByLabel(en.composer.descriptionLabel)
+    .fill('A set of garden chairs, with cushions')
+  await reviewAndSend(bruno.page)
+  await expect(
+    bruno.page
+      .getByRole('region', { name: en.exchange.proposalHeading, exact: true })
+      .getByText(en.exchange.sentByYou),
+  ).toBeVisible()
+
+  // Ana was never asked who opened it, and sees his version.
+  await ana.page.goto(`/exchanges/${id}`)
+  await expect(ana.page.getByRole('heading', { name: en.exchange.claimedHeading })).toHaveCount(0)
+  await expect(
+    ana.page.getByRole('button', { name: en.exchange.confirmCounterparty }),
+  ).toHaveCount(0)
+  await expect(
+    ana.page.getByText('A set of garden chairs, with cushions', { exact: true }).first(),
+  ).toBeVisible()
 })

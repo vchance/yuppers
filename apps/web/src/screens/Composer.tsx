@@ -2,7 +2,6 @@ import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/a
 import {
   amendmentEffects,
   baseRevision,
-  boundToProblem,
   boundToProblemText,
   buildTerms,
   canCompose,
@@ -14,7 +13,10 @@ import {
   draftFromTerms,
   dueOf,
   fractionDigitsOf,
+  invitationBoundTo,
+  invitationForProblem,
   lockedContributions,
+  NAMED_INVITATION,
   newContribution,
   otherSlot,
   parseDecimal,
@@ -26,6 +28,7 @@ import {
   type Draft,
   type DraftContribution,
   type DraftDue,
+  type InvitationChoice,
   type ItemEffect,
   type Problem,
   type ProblemField,
@@ -117,7 +120,7 @@ function Editor({ exchange, reload, onSent }: Props) {
   const [returned, setReturned] = useState(false)
   const [checked, setChecked] = useState(false)
   const [conflict, setConflict] = useState(false)
-  const [boundTo, setBoundTo] = useState('')
+  const [invitee, setInvitee] = useState<InvitationChoice>(NAMED_INVITATION)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -127,7 +130,7 @@ function Editor({ exchange, reload, onSent }: Props) {
   // Who a first proposal's invitation is for is asked for beside their
   // name, and checked with the rest before the signing step.
   const channels = useSignInChannels(api)
-  const boundProblem = kind === 'first' && checked ? boundToProblem(boundTo, channels) : null
+  const boundProblem = kind === 'first' && checked ? invitationForProblem(invitee, channels) : null
 
   // The working copy was started from terms that have since been replaced.
   const stale = base !== null && draft.base !== base.id
@@ -212,7 +215,7 @@ function Editor({ exchange, reload, onSent }: Props) {
     setChecked(true)
     setConflict(false)
     setFailure(null)
-    const bound = kind === 'first' ? boundToProblem(boundTo, channels) : null
+    const bound = kind === 'first' ? invitationForProblem(invitee, channels) : null
     if (built.ok && !bound) {
       setStep('sign')
       setReturned(true)
@@ -238,10 +241,10 @@ function Editor({ exchange, reload, onSent }: Props) {
     try {
       const result = await api.sendRevision(
         exchange.id,
-        revisionToSend(exchange, built, language, boundTo),
+        revisionToSend(exchange, built, language, invitationBoundTo(invitee) ?? ''),
       )
       saver.sent()
-      onSent(result, kind === 'first' ? boundTo.trim() || null : null)
+      onSent(result, kind === 'first' ? invitationBoundTo(invitee) : null)
     } catch (error) {
       const code = failureCode(error)
       saver.resume()
@@ -305,8 +308,12 @@ function Editor({ exchange, reload, onSent }: Props) {
           />
         </section>
         {predicted && <Effects effects={predicted} />}
-        {kind === 'first' && boundTo.trim() && (
-          <p>{fmt(wording.invitationLink.boundSummary, { identifier: boundTo.trim() })}</p>
+        {kind === 'first' && (
+          <p>
+            {invitee.anyone
+              ? wording.invitationLink.forAnyoneSummary
+              : fmt(wording.invitationLink.boundSummary, { identifier: invitee.to.trim() })}
+          </p>
         )}
         <Consent
           signLabel={w.signAndSend}
@@ -416,8 +423,8 @@ function Editor({ exchange, reload, onSent }: Props) {
           </Field>
           {kind === 'first' && (
             <InvitationFor
-              value={boundTo}
-              onChange={setBoundTo}
+              choice={invitee}
+              onChange={setInvitee}
               channels={channels}
               id={BOUND_TO}
               error={

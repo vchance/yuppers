@@ -206,10 +206,23 @@ export type { Actions, CommandOutcome, CommandSender, FocusKeeper } from './acti
 export { createI18n, isComplete } from './i18n'
 export type { I18n } from './i18n'
 export { invitationLink, invitationPath, invitationToken, invitationTokenIn } from './invitation'
-export { boundToLabel, boundToProblem, boundToProblemText, shareAddresses } from './share'
+export {
+  boundToLabel,
+  boundToProblem,
+  boundToProblemText,
+  invitationBoundTo,
+  invitationForProblem,
+  NAMED_INVITATION,
+  shareAddresses,
+} from './share'
 export { QR_QUIET_ZONE, qrRuns } from './qr'
 export type { QrModules, QrRun } from './qr'
-export type { BoundToProblem, IssuedInvitation, ShareAddresses } from './share'
+export type {
+  BoundToProblem,
+  InvitationChoice,
+  IssuedInvitation,
+  ShareAddresses,
+} from './share'
 export {
   baseRevision,
   canCompose,

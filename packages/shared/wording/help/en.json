@@ -21,7 +21,7 @@
           ]
         },
         { "h": "The invitation link" },
-        { "p": "An invitation link can be used for {invitationDays} days, and you see it only once. If you lose it, create a new one; the old one stops working. You can tie a link to the other person’s email address or phone number, so that only they can use it. If you don’t, whoever opens the link is asked to sign in, and you confirm that they are the person you meant to invite. Until you do, they can read and sign, but their signature only takes effect once you confirm them." },
+        { "p": "An invitation link can be used for {invitationDays} days, and you see it only once. If you lose it, create a new one; the old one stops working. You give the other person’s email address or phone number, so that only they can use the link, and they can respond straight away, including proposing changes. We don’t contact them: you send the link yourself, and they have to sign in with exactly that address or number. You can choose a link for anyone instead. Then whoever opens it is asked to sign in, and you confirm that they are the person you meant to invite. Until you do, they can read and sign but can’t propose changes or decline, and their signature only takes effect once you confirm them." },
         { "h": "Versions and counteroffers" },
         { "p": "Each set of terms that is sent is a version, numbered in order. Only one version waits to be signed at a time." },
         { "p": "Proposing changes sends a counteroffer: a new version that replaces the one before it. Whoever sends it signs it by sending it, and the other person can then sign it, decline it, or propose changes in turn. Before signing a counteroffer you see what it changes, compared with the version it answers." },

@@ -113,7 +113,7 @@
         { "p": "Si ninguno de los dos hace nada en un acuerdo durante {inactivityPromptDays} días, contados desde la última fecha de vencimiento si es posterior, les preguntamos a ambos si sigue en marcha. Si no pasa nada en los {inactivityCloseDays} días siguientes, se cierra sin resolver, y cada elemento conserva el estado que tenga. Cualquier cosa que haga cualquiera de los dos reinicia la cuenta." },
         { "h": "Cómo te avisamos" },
         { "p": "Cuando la otra persona hace algo en un yup, o un elemento vence pronto o está atrasado, te enviamos un correo. Los correos nunca incluyen los términos; inicia sesión para verlos." },
-        { "p": "Si la app de tu teléfono ofrece notificaciones, puedes activarlas en la página de tu cuenta. Solo dicen que un yup tiene novedades, nunca los términos, los nombres ni los importes, y al tocar una se abre el yup. Los correos te siguen llegando." },
+        { "p": "Si la app de tu teléfono ofrece notificaciones, puedes activarlas en la página de tu cuenta. Solo dicen que un yup tiene novedades, nunca los términos, los nombres ni los montos, y al tocar una se abre el yup. Los correos te siguen llegando." },
         { "p": "Donde enviamos mensajes de texto, llevan códigos de inicio de sesión, que nuestro proveedor Twilio envía y comprueba con su servicio de verificación, Twilio Verify, y, si las activas para un acuerdo con “Actualizaciones por mensaje” en su página, un mensaje cada vez que cambia su estado. Una actualización por mensaje solo dice que algo cambió, con un enlace al yup. Responde STOP a una actualización por mensaje para detener todos nuestros mensajes, incluidos los códigos de inicio de sesión." },
         { "p": "Si tu cuenta tiene solo un número de teléfono, no podemos enviarte correos, así que las notificaciones de la app y las actualizaciones por mensaje que actives son las únicas formas de avisarte sobre tus yups. Sin ellas, revisa tus yups en la app o en la web." }
       ]
@@ -136,7 +136,7 @@
           ]
         },
         { "h": "Firmar un cambio que te enviaron" },
-        { "p": "Encima de la forma de firmar, ves qué hace el cambio campo por campo, comparado con el acuerdo vigente, y cómo quedará cada elemento cuando ambos lo hayan firmado. Las versiones anteriores siguen en el registro." }
+        { "p": "Encima de donde firmas, ves qué hace el cambio campo por campo, comparado con el acuerdo vigente, y cómo quedará cada elemento cuando ambos lo hayan firmado. Las versiones anteriores siguen en el registro." }
       ]
     },
     "blocking": {
@@ -149,7 +149,7 @@
           "ul": [
             "Ninguno de los dos puede unirse a un yup que inicie el otro, mientras dure el bloqueo.",
             "Toda propuesta que siga pendiente de firma entre ustedes termina: una que enviaste se retira, y una que te enviaron se rechaza. Eso incluye un cambio propuesto a un acuerdo.",
-            "Si habías abierto su invitación y todavía no te había confirmado, sales de ese yup, y lo que hayas firmado en él queda anulado."
+            "Si habías abierto su invitación y todavía no te había confirmado, sales de ese yup, y lo que hayas firmado en él queda sin efecto."
           ]
         },
         { "h": "Qué no hace el bloqueo" },
@@ -160,7 +160,7 @@
             "Desbloquear no recupera nada de lo que terminó con el bloqueo."
           ]
         },
-        { "p": "Nada de lo que mostramos le dice que la bloqueaste: un enlace de invitación tuyo deja de funcionarle igual que un enlace ya usado o vencido. Aun así, alguien decidido a averiguarlo podría lograrlo, por ejemplo con una segunda cuenta." },
+        { "p": "Nada de lo que mostramos le dice a esa persona que la bloqueaste: un enlace de invitación tuyo deja de funcionarle igual que un enlace ya usado o vencido. Aun así, alguien decidido a averiguarlo podría lograrlo, por ejemplo con una segunda cuenta." },
         { "p": "Tus bloqueos aparecen en la página de tu cuenta, en “Personas que bloqueaste”, donde puedes quitarlos." },
         { "h": "Denunciar" },
         { "p": "Denuncia un yup o una propuesta si algo está mal, como acoso, una estafa, algo ilegal, alguien que se hace pasar por otra persona o alguien menor de 18 años. A la persona denunciada no se le avisa de que la denunciaste." },

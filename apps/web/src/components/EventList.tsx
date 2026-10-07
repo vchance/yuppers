@@ -36,7 +36,7 @@ export function EventList({ events, parties, reader, when, money }: Props) {
       {events.map((event) => {
         const { message, values } = eventMessage(event, w.events, reader, parties, money)
         return (
-          <li key={event.sequence} className="history-entry">
+          <li key={event.sequence} className={`history-entry ${sideOf(event, reader)}`}>
             <p className="hint">
               <time dateTime={event.at}>{when(event.at)}</time>
             </p>
@@ -61,4 +61,17 @@ export function EventList({ events, parties, reader, when, money }: Props) {
       })}
     </ol>
   )
+}
+
+/**
+ * Where an entry sits: what the reader did, what the other party did, or
+ * what happened to both (and every entry, where nobody reads as "you").
+ * Something done from the invited party's place by someone since removed
+ * from it was done by neither party as they are now.
+ */
+function sideOf(event: RecordEvent, reader: Schemas['Slot'] | null): string {
+  if (reader === null || event.actor === 'SYSTEM' || event.by_removed_claimant) {
+    return 'history-system'
+  }
+  return event.actor === reader ? 'history-you' : 'history-them'
 }

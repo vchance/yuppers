@@ -43,6 +43,9 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer, le
   // Named beside each due date when the reader's device keeps another zone.
   const zone = useMemo(() => dueDateZone(timezone), [timezone])
   const nameOf = (slot: Slot) => (slot === 'A' ? terms.party_a_name : terms.party_b_name)
+  // Whose side is drawn in the reader's colour. Someone who has not joined
+  // yet is reading an invitation to take the invited party's place.
+  const coloured = you ?? 'B'
 
   function due(contribution: Contribution): string {
     const condition = contribution.due
@@ -77,7 +80,7 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer, le
       {(['A', 'B'] as const).map((slot) => {
         const provided = terms.contributions.filter((contribution) => contribution.from === slot)
         return (
-          <section key={slot}>
+          <section key={slot} className={slot === coloured ? 'party party-you' : 'party'}>
             <H>
               {slot === you ? (
                 w.youProvide
@@ -123,10 +126,10 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer, le
                     )}
                     <p>{due(contribution)}</p>
                     {contribution.completion_criteria && (
-                      <>
+                      <div className="criteria">
                         <p className="label">{w.criteriaLabel}</p>
                         <Written>{contribution.completion_criteria}</Written>
-                      </>
+                      </div>
                     )}
                     {footer?.(contribution)}
                   </li>

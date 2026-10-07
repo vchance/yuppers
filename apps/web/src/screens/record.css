@@ -22,9 +22,11 @@
 }
 
 @media print {
-  /* Ink on white, whatever the screen was showing. */
-  :root:has(.record-page) {
+  /* Ink on white, whatever the screen was showing or this device chose. */
+  :root:has(.record-page),
+  :root[data-theme]:has(.record-page) {
     color-scheme: light;
+    background: #ffffff;
   }
 
   body:has(.record-page) header.site,
@@ -55,6 +57,8 @@
     border: 0;
     border-block-start: 1px solid var(--line);
     border-radius: 0;
+    background: none;
+    box-shadow: none;
   }
 
   /* A heading stays with what it heads, and short things stay whole. */

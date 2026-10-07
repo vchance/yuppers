@@ -1,30 +1,175 @@
 /*
- * Plain, accessible defaults: one column, system fonts, the browser's own
- * controls. Light and dark both come from `color-scheme`, and every
- * colour pair below meets WCAG AA contrast in both.
+ * Tandem: two people, two colours, and where they meet it turns green. A
+ * light, cool page with ink actions; the parties' colours are kept to the
+ * agreement itself. Light and dark both come from `color-scheme`, and every
+ * colour pair below meets WCAG AA contrast in both (`contrast.test.ts`).
+ *
+ * The page follows the device's setting unless this device chose Light or
+ * Dark: `data-theme` on `<html>` (`src/lib/theme.ts`, and before the first
+ * paint `build/theme-script.ts`) sets `color-scheme`, and with it every
+ * `light-dark()` below.
  *
  * Everything is laid out with logical properties (inline/block, start/end),
  * so a right-to-left language mirrors without any change here.
  */
 
+/* Self-hosted, from the designers' own releases, each with its OFL.txt beside
+   it in `src/fonts/`. Nothing is fetched from anywhere else. */
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/instrument-sans/InstrumentSans-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/instrument-sans/InstrumentSans-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/instrument-sans/InstrumentSans-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/instrument-sans/InstrumentSans-Italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: Gabarito;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/gabarito/Gabarito-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: Gabarito;
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('./fonts/gabarito/Gabarito-Black.woff2') format('woff2');
+}
+
 :root {
   color-scheme: light dark;
 
-  --text: light-dark(#1b1b1b, #f1f1f1);
-  --muted: light-dark(#4f4f4f, #bdbdbd);
-  --page: light-dark(#ffffff, #141414);
-  --raised: light-dark(#f3f3f1, #212121);
-  --line: light-dark(#767676, #8c8c8c);
-  --accent: light-dark(#0b57b0, #9cc2ff);
-  --on-accent: light-dark(#ffffff, #0a1a33);
-  --alert: light-dark(#a1160f, #ffaaa3);
-  --alert-surface: light-dark(#fdecea, #3a1512);
-  --warning-surface: light-dark(#fff4d6, #3a2f0b);
+  /* Surfaces, from the page up. */
+  --page: light-dark(#f4f4ef, #111327);
+  --raised: light-dark(#ffffff, #1b1e36);
+  --surface-raised: light-dark(#ffffff, #252946);
+  --surface-strong: light-dark(#1a1b2e, #2b3056);
+  --on-strong: light-dark(#ffffff, #f1f0ea);
+  --on-strong-muted: light-dark(#d9d8e4, #b4b5c8);
+  --divider: light-dark(#dcdce3, #2f3352);
 
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
+  /* Text, lines, links and actions. Links and the focus ring are pool blue,
+     apart from the ink of the actions. */
+  --text: light-dark(#1a1b2e, #f1f0ea);
+  --muted: light-dark(#4f5066, #b4b5c8);
+  --line: light-dark(#7a7b90, #7d80a0);
+  --link: light-dark(#2f4be0, #9db0ff);
+  --focus: light-dark(#2f4be0, #9db0ff);
+  --accent: light-dark(#1a1b2e, #f1f0ea);
+  --on-accent: light-dark(#ffffff, #111327);
+
+  /* The parties: you in sun yellow, the other party in pool blue, and where
+     they meet, agree green. The fills carry text only in their own ink. */
+  --you: light-dark(#ffd23f, #f2c94c);
+  --on-you: light-dark(#1a1b2e, #111327);
+  --warning-surface: light-dark(#fff1c2, #3b3420);
+  --them: light-dark(#2f4be0, #7b93ff);
+  --on-them: light-dark(#ffffff, #111327);
+  --them-surface: light-dark(#e3e9ff, #1f2a5c);
+  --them-text: light-dark(#2f4be0, #9db0ff);
+  --agree: light-dark(#1b9a5c, #3fcb85);
+  --on-agree: light-dark(#1a1b2e, #111327);
+
+  /* Where a contribution stands. Settled is farthest from the page; disputed
+     is the only warm colour, and is used for nothing else. */
+  --waiting: light-dark(#d9d8e4, #3a3d5c);
+  --on-waiting: light-dark(#1a1b2e, #f1f0ea);
+  --disputed: light-dark(#c2410c, #ff8a5c);
+  --on-disputed: light-dark(#ffffff, #111327);
+  --alert: light-dark(#c2410c, #ff8a5c);
+  --alert-surface: light-dark(#fde8df, #3a1d14);
+  --confirmed: light-dark(#1a1b2e, #f1f0ea);
+  --on-confirmed: light-dark(#ffffff, #111327);
+  --confirmed-icon: light-dark(#4bd18c, #15803d);
+
+  --font-text: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: Gabarito, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-s: 0.625rem;
+  --radius-m: 1rem;
+  --radius-l: 1.625rem;
+  --radius-xl: 2.5rem;
+  --radius-pill: 999px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --type-body: 1.0625rem;
+  --type-hint: 0.9375rem;
+  --type-caption: 0.8125rem;
+  --type-subheading: 1.125rem;
+  --type-heading: 1.3125rem;
+  --type-title: 1.625rem;
+  --type-display: 2.5rem;
+
+  /* One tilted callout per screen at most, and only the yup card itself:
+     never terms, controls, status or history. */
+  --tilt-callout: -1.5deg;
+  --tilt-callout-alt: 2deg;
+  --tilt-art: 3deg;
+  --elev-callout: 0 18px 30px -18px rgb(26 27 46 / 45%), 0 0 0 1px var(--divider);
+
+  /* The mark, two circles and their overlap, as an image for the header. */
+  --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 112 80'%3E%3Ccircle cx='40' cy='40' r='36' fill='%23FFD23F'/%3E%3Ccircle cx='72' cy='40' r='36' fill='%232F4BE0'/%3E%3Cpath d='M56 7.75A36 36 0 0 1 56 72.25A36 36 0 0 1 56 7.75Z' fill='%231B9A5C'/%3E%3C/svg%3E");
+
+  font-family: var(--font-text);
+  font-size: var(--type-body);
+  line-height: 1.42;
   color: var(--text);
   background: var(--page);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* What `light-dark()` cannot hold: a shadow's shape and an image. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --elev-callout: 0 18px 30px -14px rgb(0 0 0 / 75%), 0 0 0 1px var(--divider);
+    --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 112 80'%3E%3Ccircle cx='40' cy='40' r='36' fill='%23F2C94C'/%3E%3Ccircle cx='72' cy='40' r='36' fill='%237B93FF'/%3E%3Cpath d='M56 7.75A36 36 0 0 1 56 72.25A36 36 0 0 1 56 7.75Z' fill='%233FCB85'/%3E%3C/svg%3E");
+  }
+}
+
+:root[data-theme='dark'] {
+  --elev-callout: 0 18px 30px -14px rgb(0 0 0 / 75%), 0 0 0 1px var(--divider);
+  --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 112 80'%3E%3Ccircle cx='40' cy='40' r='36' fill='%23F2C94C'/%3E%3Ccircle cx='72' cy='40' r='36' fill='%237B93FF'/%3E%3Cpath d='M56 7.75A36 36 0 0 1 56 72.25A36 36 0 0 1 56 7.75Z' fill='%233FCB85'/%3E%3C/svg%3E");
 }
 
 *,
@@ -38,8 +183,8 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
 }
 
 /* A heading focused after a page change, or the page reached by the skip
@@ -50,7 +195,7 @@ main:focus {
   outline: none;
 }
 
-/* Nothing on these pages moves by itself, and nothing should start to: for
+/* Only the both-signed moment moves, once, as it settles straight. For
    someone who has asked for less motion, scrolling jumps and nothing is
    animated (WCAG 2.3.3). */
 @media (prefers-reduced-motion: reduce) {
@@ -65,22 +210,33 @@ main:focus {
 }
 
 a {
-  color: var(--accent);
+  color: var(--link);
+  text-underline-offset: 0.15em;
+}
+
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.02em;
 }
 
 h1 {
-  font-size: 1.6rem;
-  line-height: 1.25;
+  font-size: clamp(2rem, 1.4rem + 2.5vw, var(--type-display));
+  line-height: 1.05;
+  letter-spacing: -0.035em;
   margin-block: 0 1rem;
 }
 
 h2 {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
+  line-height: 1.15;
   margin-block: 0 0.5rem;
 }
 
 h3 {
-  font-size: 1.05rem;
+  font-size: var(--type-subheading);
+  line-height: 1.35;
   margin-block: 1.25rem 0.25rem;
 }
 
@@ -90,7 +246,7 @@ p {
 
 hr {
   border: 0;
-  border-block-start: 1px solid var(--line);
+  border-block-start: 1px solid var(--divider);
   margin-block: 1.5rem;
 }
 
@@ -134,15 +290,41 @@ header.site {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
-  padding: 0.5rem 1rem;
-  border-block-end: 1px solid var(--line);
+  gap: 0.5rem 1.25rem;
+  padding: 0.75rem 1rem;
 }
 
+/* The mark and the whole word, lower case as the wordmark is drawn. */
 header.site .brand {
-  font-weight: 700;
+  gap: 0.5rem;
   color: var(--text);
   text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.75rem;
+  letter-spacing: -0.04em;
+  text-transform: lowercase;
+}
+
+header.site .brand::before {
+  content: '';
+  flex: none;
+  inline-size: 2.75rem;
+  block-size: 1.96rem;
+  background: var(--mark) center / contain no-repeat;
+}
+
+/* The trademark, small and set up, and not read out. */
+header.site .brand::after {
+  content: 'TM' / '';
+  align-self: flex-start;
+  margin-block-start: 0.6rem;
+  margin-inline-start: -0.25rem;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
 }
 
 /* Links that stand alone in the header are targets of their own, so they
@@ -157,12 +339,13 @@ header.site nav a {
 header.site nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 1rem;
+  gap: 0 1.25rem;
+  font-weight: 500;
 }
 
 header.site nav a[aria-current='page'] {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 header.site .language {
@@ -175,7 +358,7 @@ header.site .language select {
 }
 
 main {
-  max-inline-size: 40rem;
+  max-inline-size: 42rem;
   margin-inline: auto;
   padding: 1.5rem 1rem 4rem;
 }
@@ -183,20 +366,35 @@ main {
 footer.site {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 1rem;
-  padding: 0.5rem 1rem;
-  border-block-start: 1px solid var(--line);
+  align-items: center;
+  gap: 0 1.25rem;
+  padding: 0.75rem 1rem 1.5rem;
+  border-block-start: 1px solid var(--divider);
+  font-size: var(--type-hint);
 }
 
-footer.site a {
+footer.site a,
+footer.site button.link {
   display: inline-flex;
   align-items: center;
   min-block-size: 2.75rem;
 }
 
+footer.site button.link {
+  padding-inline: 0;
+  font-size: inherit;
+}
+
 footer.site a[aria-current='page'] {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* The appearance switch, opened from the footer, on a line of its own. */
+footer.site .appearance {
+  flex-basis: 100%;
+  max-inline-size: 26rem;
+  margin-block: 0.5rem;
 }
 
 /* ---- Controls -------------------------------------------------------------- */
@@ -210,16 +408,18 @@ textarea {
 }
 
 input[type='text'],
+input[type='email'],
+input[type='tel'],
 input[type='date'],
 select,
 textarea {
   display: block;
   inline-size: 100%;
-  min-block-size: 2.75rem;
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--line);
-  border-radius: 0.375rem;
-  background: var(--page);
+  min-block-size: 3rem;
+  padding: 0.5rem 0.875rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--raised);
 }
 
 textarea {
@@ -227,26 +427,33 @@ textarea {
   resize: vertical;
 }
 
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+}
+
 input[aria-invalid='true'],
 select[aria-invalid='true'],
 textarea[aria-invalid='true'] {
   border-color: var(--alert);
-  border-width: 2px;
 }
 
 input.code {
   max-inline-size: 10rem;
   font-size: 1.25rem;
+  font-weight: 700;
   letter-spacing: 0.2em;
 }
 
 button,
 a.button {
   min-block-size: 2.75rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.375rem;
+  padding: 0.5rem 1.125rem;
+  border: 2px solid var(--text);
+  border-radius: var(--radius-pill);
   background: var(--raised);
+  color: var(--text);
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -255,22 +462,27 @@ a.button {
   min-inline-size: 2.75rem;
   display: inline-flex;
   align-items: center;
-  color: var(--text);
   text-decoration: none;
 }
 
 button.primary {
+  min-block-size: 3rem;
+  padding-inline: 1.5rem;
   border-color: var(--accent);
   background: var(--accent);
   color: var(--on-accent);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--type-subheading);
 }
 
 button.link {
   border-color: transparent;
   background: none;
-  color: var(--accent);
+  color: var(--link);
+  font-weight: 400;
   text-decoration: underline;
+  text-underline-offset: 0.15em;
   padding-inline: 0.25rem;
 }
 
@@ -296,19 +508,20 @@ textarea:disabled {
 .field > label:not(.check),
 .label {
   display: block;
-  font-weight: 600;
+  font-weight: 700;
   margin-block-end: 0.25rem;
 }
 
 .hint {
   color: var(--muted);
-  font-size: 0.9375rem;
+  font-size: var(--type-hint);
+  line-height: 1.4;
   margin-block-end: 0.375rem;
 }
 
 .field-error {
   color: var(--alert);
-  font-weight: 600;
+  font-weight: 700;
   margin-block: 0.25rem 0;
 }
 
@@ -331,8 +544,8 @@ fieldset {
   min-inline-size: 0;
   margin: 0 0 1rem;
   padding: 0.75rem 1rem 0.25rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border: 2px solid var(--divider);
+  border-radius: var(--radius-l);
 }
 
 legend {
@@ -347,13 +560,74 @@ legend {
   align-items: start;
 }
 
+/* System, Light or Dark: three radio buttons drawn as one segmented control.
+   Each choice is its word, a target as tall as a button. */
+.appearance {
+  padding: 0;
+  border: 0;
+}
+
+.appearance legend {
+  padding: 0;
+  margin-block-end: 0.25rem;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--raised);
+}
+
+.segmented label {
+  position: relative;
+  display: flex;
+}
+
+.segmented input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmented span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 2.75rem;
+  padding-inline: 0.5rem;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  text-align: center;
+}
+
+.segmented input:checked + span {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.segmented input:focus-visible + span {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* ---- Content --------------------------------------------------------------- */
 
 .notice {
   margin-block-end: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem 1rem;
   border-inline-start: 0.25rem solid var(--line);
-  background: var(--raised);
+  border-radius: var(--radius-m);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 1px var(--divider);
 }
 
 /* A notice holding more than one line of text ends where its last part does. */
@@ -365,13 +639,17 @@ legend {
   margin-block-end: 0;
 }
 
+/* The text stays the page's own colour; the edge says it is a problem. */
 .notice-error {
   border-color: var(--alert);
   background: var(--alert-surface);
+  box-shadow: none;
 }
 
 .notice-warning {
+  border-color: var(--you);
   background: var(--warning-surface);
+  box-shadow: none;
 }
 
 ul.plain {
@@ -382,9 +660,10 @@ ul.plain {
 
 .card {
   margin-block-end: 1rem;
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-l);
+  background: var(--raised);
+  box-shadow: 0 0 0 1px var(--divider);
 }
 
 .card > :last-child {
@@ -394,13 +673,15 @@ ul.plain {
 /* An open report older than the time reports are reviewed within. Said in
    words too, by its tag. */
 .card-overdue {
-  border: 2px solid var(--alert);
+  box-shadow: 0 0 0 2px var(--alert);
 }
 
 .card-link {
   display: block;
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: 700;
+  line-height: 1.25;
   margin-block-end: 0.375rem;
 }
 
@@ -413,10 +694,11 @@ ul.plain {
 
 .tag {
   display: inline-block;
-  padding: 0.0625rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
+  padding: 0.0625rem 0.625rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-s);
   font-size: 0.875rem;
+  font-weight: 700;
 }
 
 .tag-alert {
@@ -427,7 +709,7 @@ ul.plain {
 /* What a person wrote, as opposed to what the product says. */
 .written {
   padding-inline-start: 0.75rem;
-  border-inline-start: 0.1875rem solid var(--accent);
+  border-inline-start: 0.1875rem solid var(--line);
   font-family: ui-serif, Georgia, serif;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -440,7 +722,7 @@ ul.plain {
 
 .contribution {
   padding-block: 0.75rem;
-  border-block-start: 1px solid var(--line);
+  border-block-start: 1px solid var(--divider);
 }
 
 .contribution > :last-child {
@@ -448,19 +730,261 @@ ul.plain {
 }
 
 .status {
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* Each party's side of the terms is a block in their colour, the reader's
+   in yellow and the other party's in blue, with each thing they provide on
+   a card of its own. The heading names whose side it is. */
+.party {
+  margin-block: 1rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-l);
+  background: var(--them);
+  color: var(--on-them);
+}
+
+.party-you {
+  background: var(--you);
+  color: var(--on-you);
+}
+
+.party > h2,
+.party > h3 {
+  margin: 0.25rem 0.5rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  font-weight: 900;
+}
+
+.party > p {
+  margin: 0.25rem 0.5rem 0.5rem;
+}
+
+.party .contribution {
+  margin-block-start: 0.5rem;
+  padding: 1rem;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--raised);
+  color: var(--text);
+}
+
+/* "Done when", in the other party's tint. */
+.criteria {
+  margin-block: 0.5rem 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-m);
+  background: var(--them-surface);
+}
+
+.criteria > :last-child {
+  margin-block-end: 0;
+}
+
+/* Where a contribution stands, as a chip whose fill and icon both say it:
+   an outline for not yet, a half for waiting, the warm colour only for a
+   dispute, the darkest (in dark, the lightest) for confirmed, a dashed
+   outline for waived or removed. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.75rem 0.125rem 0.5rem;
+  border: 2px solid transparent;
+  border-radius: var(--radius-s);
+  font-size: var(--type-hint);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.chip svg {
+  flex: none;
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chip .filled {
+  fill: currentcolor;
+  stroke: none;
+}
+
+.chip-pending {
+  border-color: var(--text);
+  background: var(--raised);
+  color: var(--text);
+}
+
+.chip-claimed {
+  background: var(--waiting);
+  color: var(--on-waiting);
+}
+
+.chip-disputed {
+  background: var(--disputed);
+  color: var(--on-disputed);
+}
+
+.chip-accepted {
+  background: var(--confirmed);
+  color: var(--on-confirmed);
+}
+
+.chip-accepted svg {
+  stroke: var(--confirmed-icon);
+  stroke-width: 2.8;
+}
+
+.chip-waived,
+.chip-removed {
+  border-style: dashed;
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 .panel {
   margin-block: 0.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: var(--raised);
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-m);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 2px var(--divider);
 }
 
 .panel > :last-child {
   margin-block-end: 0;
+}
+
+/* Signed by both: the two circles with their overlap and a check, settling
+   straight as it appears. It is the one thing on the page that is ever
+   tilted, and only while it settles; the terms below stay as they are. */
+.agreed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  max-inline-size: 22rem;
+  margin: 0.75rem auto 1.25rem;
+  padding: 1rem 1.25rem 1.25rem;
+  border-radius: var(--radius-l);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-callout);
+}
+
+.agreed svg {
+  inline-size: 8.5rem;
+  block-size: auto;
+}
+
+.agreed-text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .agreed {
+    animation: settle 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.2s both;
+  }
+}
+
+@keyframes settle {
+  from {
+    transform: translateY(-0.5rem) rotate(var(--tilt-callout-alt)) scale(0.96);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+/* The mark, drawn from the tokens so it follows the theme. */
+.mark-you {
+  fill: var(--you);
+}
+
+.mark-them {
+  fill: var(--them);
+}
+
+.mark-agree {
+  fill: var(--agree);
+}
+
+.mark-check {
+  fill: none;
+  stroke: var(--on-agree);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The invitation's summary card: who it is from in their colour, who it is
+   for in theirs, the mark on the seam. Tilted, the one callout on the page;
+   it holds no terms, which stay straight below. */
+.yup-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-inline-size: 24rem;
+  min-block-size: 7rem;
+  margin: 0.5rem auto 1.5rem;
+  border-radius: var(--radius-l);
+  overflow: hidden;
+  box-shadow: var(--elev-callout);
+  transform: rotate(var(--tilt-callout));
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.yup-card > span {
+  display: flex;
+  align-items: flex-end;
+  padding: 1rem 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.yup-card-them {
+  background: var(--them);
+  color: var(--on-them);
+}
+
+.yup-card-you {
+  justify-content: flex-end;
+  background: var(--you);
+  color: var(--on-you);
+  text-align: end;
+}
+
+.yup-card > .yup-card-seam {
+  position: absolute;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  padding: 0.5rem;
+  border-radius: 50%;
+  background: var(--raised);
+}
+
+[dir='rtl'] .yup-card > .yup-card-seam {
+  translate: 50% 0;
+}
+
+.yup-card-seam svg {
+  display: block;
+  inline-size: 2.75rem;
+  block-size: auto;
 }
 
 /* The ways of passing an invitation link on: a row of buttons that wraps. */
@@ -485,12 +1009,13 @@ ul.share-options {
   block-size: auto;
   aspect-ratio: 1;
   margin-block-end: 0.5rem;
+  border-radius: var(--radius-s);
 }
 
 .consent {
   margin-block-start: 1.5rem;
   padding-block-start: 0.5rem;
-  border-block-start: 1px solid var(--line);
+  border-block-start: 1px solid var(--divider);
 }
 
 section + section {
@@ -509,12 +1034,13 @@ section + section {
 .trouble-choices button {
   inline-size: 100%;
   text-align: start;
+  border-radius: var(--radius-m);
 }
 
 .trouble-way {
   margin-block: 1rem;
   padding-block-start: 0.75rem;
-  border-block-start: 1px solid var(--line);
+  border-block-start: 1px solid var(--divider);
 }
 
 .trouble-item {
@@ -525,7 +1051,7 @@ section + section {
 .proposal-changes {
   margin-block: 1rem;
   padding-block-start: 0.5rem;
-  border-block-start: 1px solid var(--line);
+  border-block-start: 1px solid var(--divider);
 }
 
 .change {
@@ -545,7 +1071,7 @@ section + section {
 /* A "Learn more" link: small and secondary, but still a target of its own
    (WCAG 2.5.8), since it stands on its own line. */
 .learn-more {
-  font-size: 0.9375rem;
+  font-size: var(--type-hint);
   margin-block: 0 0.5rem;
 }
 
@@ -560,7 +1086,7 @@ section + section {
 }
 
 .help-summary {
-  font-size: 1.0625rem;
+  font-size: var(--type-subheading);
 }
 
 .help-sections,
@@ -570,7 +1096,7 @@ section + section {
 
 .help-topics {
   padding-block-start: 1rem;
-  border-block-start: 1px solid var(--line);
+  border-block-start: 1px solid var(--divider);
 }
 
 .help-topics a,
@@ -582,7 +1108,7 @@ section + section {
 
 .help-topics a[aria-current='page'] {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .help-topics .hint {
@@ -601,8 +1127,8 @@ section + section {
 }
 
 .legal-note {
-  font-size: 1.0625rem;
-  font-weight: 600;
+  font-size: var(--type-subheading);
+  font-weight: 700;
 }
 
 .legal-languages ul {
@@ -619,11 +1145,15 @@ section + section {
 
 .legal-languages a[aria-current='page'] {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .legal section {
   margin-block-start: 2rem;
+}
+
+.legal h2 {
+  scroll-margin-block-start: 1rem;
 }
 
 .legal h3 {
@@ -643,5 +1173,28 @@ section + section {
   .learn-more,
   footer.site {
     display: none;
+  }
+
+  /* Paper has no backgrounds: the parties' sides and the callouts print as
+     plain text in ink. */
+  .party,
+  .party-you,
+  .party .contribution,
+  .criteria,
+  .agreed,
+  .yup-card {
+    padding-inline: 0;
+    background: none;
+    color: inherit;
+    box-shadow: none;
+    transform: none;
+    animation: none;
+  }
+
+  .chip {
+    padding-inline: 0;
+    border: 0;
+    background: none;
+    color: inherit;
   }
 }

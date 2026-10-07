@@ -16,6 +16,7 @@ import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Panel } from '../components/Panel'
+import { StatusChip } from '../components/StatusChip'
 import { Failure, Field } from '../components/ui'
 import type { Actions } from '../lib/actions'
 import type { Slot } from '../lib/api'
@@ -66,7 +67,9 @@ export function Fulfillment({
 
   return (
     <>
-      <p className="status">{statusWording(wording, status, money)}</p>
+      <p className="status">
+        <StatusChip status={status}>{statusWording(wording, status, money)}</StatusChip>
+      </p>
       {stuck && since && (
         <p className="notice">
           {fmt(money ? w.waitingLongMoney : w.waitingLong, {

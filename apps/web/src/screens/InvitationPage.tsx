@@ -1,10 +1,12 @@
 import type { ErrorCode } from '@yuppers/api-client'
+import { labelText } from '@yuppers/shared'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
 import { isComplete, useI18n, useSession } from '../app/context'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { invitationToken, paths } from '../app/routes'
+import { Mark } from '../components/Mark'
 import { TermsView } from '../components/TermsView'
 import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { useAnnouncement } from '../lib/announce'
@@ -205,6 +207,21 @@ function Proposal({ token }: { token: string }) {
 
       {preview && (
         <>
+          {/* The yup at a glance, the one tilted callout on the page: who it
+              is from in their colour and who it is for in the reader's. It
+              says nothing the terms below do not, so it is hidden from
+              assistive technology, and holds none of the terms. */}
+          <div className="yup-card" aria-hidden="true">
+            <span className="yup-card-them">
+              <bdi>{labelText(sender)}</bdi>
+            </span>
+            <span className="yup-card-you">
+              <bdi>{labelText(preview.revision.terms.party_b_name) || wording.party.other}</bdi>
+            </span>
+            <span className="yup-card-seam">
+              <Mark />
+            </span>
+          </div>
           {/* An invitation that names nobody can be opened by whoever holds
               the link, so its sender has to confirm them before they can do
               more than sign (DESIGN.md §8). */}

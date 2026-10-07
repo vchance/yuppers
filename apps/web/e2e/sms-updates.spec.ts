@@ -9,6 +9,7 @@ import {
   PART_ANCHORS,
   SCREENSHOTS,
   UPDATE_FORMS,
+  VERIFY_DELETION_SAMPLE,
   VERIFY_SAMPLE,
   codesAnchor,
   formAnchor,
@@ -175,8 +176,11 @@ test('the page on how people opt in shows each form on the website and in the ap
         await expect(among.locator(`h4#${formAnchor(form, surface)}`)).toHaveCount(1)
       }
       await expect(among.locator('section.step > h5')).toHaveCount(steps(CODE_FORMS))
-      // After each code is sent, the message Twilio Verify sends.
-      await expect(among.getByText(VERIFY_SAMPLE, { exact: true })).toHaveCount(CODE_FORMS.length)
+      // After each code is sent, the message Twilio Verify sends; the
+      // deletion service's names what its code is for.
+      await expect(among.getByText(VERIFY_SAMPLE, { exact: true })).toHaveCount(CODE_FORMS.length - 1)
+      const deletion = among.locator(`section.form:has(> h4#${formAnchor('deleteAccount', surface)})`)
+      await expect(deletion.getByText(VERIFY_DELETION_SAMPLE, { exact: true })).toHaveCount(1)
     }
     // Every picture is there, from this origin, served, and drawn.
     const images = page.locator('section.step img')

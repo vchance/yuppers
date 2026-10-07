@@ -12,6 +12,15 @@
 //   - the one wording file the page fetches before its first render, and what
 //     that imports.
 //
+// The fonts the page preloads (`build/font-preload.ts`, read from its
+// `<link rel="preload" as="font">` links) load alongside and are held to a
+// budget of their own, `fonts`, in bytes as stored: a WOFF2 file is already
+// compressed, and gzip or brotli on the way gains nothing. They are kept
+// apart because they do not hold up acting on the page (text shows in the
+// system font until they arrive, `font-display: swap`), and so that what the
+// code and the wording grow by is not hidden behind them. The fonts the page
+// does not preload are not counted: they load once text in them is drawn.
+//
 // Each language is counted on its own and the largest is held to the budget.
 // What loads only after someone acts (signing up, the composer, the other
 // screens) is not counted. The favicon is left out: it does not hold up the
@@ -24,8 +33,9 @@
 // Raising the budget is a decision, not a fix: when this fails, first look for
 // what grew and whether the invitation page needs it (a screen or a library
 // that could load later, wording that belongs to another screen). If the page
-// does need it, raise `gzip` and `brotli` in `budget.json` in the same change,
-// to the new size plus about 10%, and say why in the commit message.
+// does need it, raise `gzip` and `brotli` (or `fonts`) in `budget.json` in the
+// same change, to the new size plus about 10%, and say why in the commit
+// message.
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -96,6 +106,19 @@ function wordingChunk(code) {
   return key
 }
 
+/** The built files a page preloads as fonts, from its own `<link rel="preload" as="font">`. */
+function preloadedFonts(page) {
+  const html = readFileSync(dist + page, 'utf8')
+  return [...html.matchAll(/<link\b[^>]*>/g)]
+    .map(([link]) => link)
+    .filter((link) => /\brel="preload"/.test(link) && /\bas="font"/.test(link))
+    .map((link) => {
+      const href = /\bhref="\/([^"]+)"/.exec(link)?.[1]
+      if (!href) throw new Error(`${page} preloads a font with no same-origin href: ${link}`)
+      return href
+    })
+}
+
 function total(files) {
   const sum = { raw: 0, gzip: 0, brotli: 0 }
   for (const file of files) {
@@ -123,17 +146,26 @@ function table(title, files) {
 }
 
 const problems = []
-let largest = { gzip: 0, brotli: 0 }
+let largest = { gzip: 0, brotli: 0, fonts: 0 }
 for (const code of languages) {
-  const files = new Set([`${code}/i/index.html`, ...closure([entry, wordingChunk(code)])])
+  const page = `${code}/i/index.html`
+  const files = new Set([page, ...closure([entry, wordingChunk(code)])])
   const sum = table(`Invitation page, /${code}/i, before interaction`, files)
-  largest = { gzip: Math.max(largest.gzip, sum.gzip), brotli: Math.max(largest.brotli, sum.brotli) }
+  const fonts = table(`Invitation page, /${code}/i, preloaded fonts`, new Set(preloadedFonts(page)))
+  largest = {
+    gzip: Math.max(largest.gzip, sum.gzip),
+    brotli: Math.max(largest.brotli, sum.brotli),
+    fonts: Math.max(largest.fonts, fonts.raw),
+  }
   for (const method of ['gzip', 'brotli']) {
     if (sum[method] > budget[method]) {
       problems.push(
         `/${code}/i is ${sum[method]} bytes with ${method}, over its budget of ${budget[method]}`,
       )
     }
+  }
+  if (fonts.raw > budget.fonts) {
+    problems.push(`/${code}/i preloads ${fonts.raw} bytes of fonts, over their budget of ${budget.fonts}`)
   }
 }
 
@@ -146,7 +178,8 @@ if (home) {
 
 console.log(
   `\nBudget for the invitation page: ${budget.gzip} bytes gzip (largest ${largest.gzip}), ` +
-    `${budget.brotli} bytes brotli (largest ${largest.brotli}).`,
+    `${budget.brotli} bytes brotli (largest ${largest.brotli}); ` +
+    `preloaded fonts ${budget.fonts} bytes (largest ${largest.fonts}).`,
 )
 if (problems.length > 0) {
   console.error(`\n${problems.join('\n')}`)

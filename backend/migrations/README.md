@@ -189,6 +189,14 @@ Not `sms_consent` (0020): an opt-in there is always a person and an agreement, a
 
 One-time codes for phone numbers through Twilio Verify (README, "Signing in"; `backend/src/notifications/verify.rs`): Twilio makes, texts and checks the code, so the service never sees it and has no hash to keep. `one_time_code` gains `checked_by`, `SERVICE` for every code the service makes (email, and the development log) and `TWILIO_VERIFY` for the others, and `code_hash` may be empty, but only for `TWILIO_VERIFY`. Such a row records that a code was asked for, for which identifier and purpose, when and until when, so the hourly limits, the live codes, the wrong guesses per code and per day and the purpose binding hold as before. Once Twilio approves a code offered back, its keyed hash is written to the row, so that the same code is recognised again until it is used or expires: Twilio forgets an approved verification, and a deletion that found the account busy is retried with the same code. Rows already stored are `SERVICE`, as they were. The application role's grants on the table are unchanged. `backend/tests/verify.rs` checks it through the API, against a stand-in for Verify.
 
+## 0023_sms_inbound_seen
+
+`sms_inbound_seen`: the MessageSid of every STOP and START the webhook took (`backend/src/http/sms.rs`), and when. Twilio's signature has no time in it, so a request captured once would check out again, and a START replayed after a later STOP would lift the opt-out; a MessageSid already here is answered as taken and changes nothing. Only the SID and the time: no number, no text. The application role may read, add and remove rows; the worker removes them after 30 days (`sms_updates::INBOUND_SEEN_RETENTION`). `backend/tests/sms_updates.rs` posts the same signed START twice.
+
+## 0024_sms_consent_no_longer_a_party
+
+`sms_consent.source` takes `NO_LONGER_A_PARTY`: a party removed from an agreement before the other party confirmed them, or who left it then, loses its text updates with the rest of what was theirs alone in it (`exchanges::repo::vacate`), and the ending is recorded as every other is.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

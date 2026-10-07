@@ -262,8 +262,8 @@ fn signature_shaped(header: &str) -> bool {
 /// nothing read, unless `X-Twilio-Signature` is Twilio's signature, under
 /// the account's auth token, of this URL as Twilio requested it (the web
 /// origin and this path) and the posted parameters; refused with 413 when
-/// the body is larger than [`INBOUND_BODY_LIMIT`] or carries more than a
-/// hundred parameters. A stop keyword puts the number on the opt-out list
+/// the body is larger than 32 KB (`INBOUND_BODY_LIMIT`) or carries more
+/// than a hundred parameters. A stop keyword puts the number on the opt-out list
 /// and turns off every agreement's updates to it; a start keyword takes it
 /// off the list. A message already taken (by its `MessageSid`) changes
 /// nothing again, so a request posted twice, or replayed, is answered the

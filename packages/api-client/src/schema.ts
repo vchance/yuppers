@@ -663,10 +663,14 @@ export interface paths {
          * Twilio's webhook for a text sent to our number. Refused with 403, and
          *     nothing read, unless `X-Twilio-Signature` is Twilio's signature, under
          *     the account's auth token, of this URL as Twilio requested it (the web
-         *     origin and this path) and the posted parameters. A stop keyword puts the
-         *     number on the opt-out list and turns off every agreement's updates to
-         *     it; a start keyword takes it off the list. Answered at once, with an
-         *     empty TwiML document: Twilio's Advanced Opt-Out sends the replies.
+         *     origin and this path) and the posted parameters; refused with 413 when
+         *     the body is larger than 32 KB (`INBOUND_BODY_LIMIT`) or carries more
+         *     than a hundred parameters. A stop keyword puts the number on the opt-out list
+         *     and turns off every agreement's updates to it; a start keyword takes it
+         *     off the list. A message already taken (by its `MessageSid`) changes
+         *     nothing again, so a request posted twice, or replayed, is answered the
+         *     same but does nothing. Answered at once, with an empty TwiML document:
+         *     Twilio's Advanced Opt-Out sends the replies.
          */
         post: operations["inbound"];
         delete?: never;
@@ -3823,6 +3827,13 @@ export interface operations {
             };
             /** @description Not signed by Twilio, or no auth token to check it with */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too large, or too many parameters, to be Twilio's */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

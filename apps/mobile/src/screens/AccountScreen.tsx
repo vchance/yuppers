@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Appearance } from '../components/Appearance';
 import { BuildVersion } from '../components/BuildVersion';
 import { NotificationsSetting } from '../components/Notifications';
 import { LegalLinks } from '../components/LegalLinks';
@@ -14,7 +15,10 @@ import { ProfileForm } from './AccountSetup';
 import { BlockedPeople } from './BlockedPeople';
 import { DeleteAccount } from './DeleteAccount';
 
-/** The account: what it is verified with, its name and language, notifications, and signing out. */
+/**
+ * The account: what it is verified with, its name and language,
+ * notifications, this device's appearance, and signing out.
+ */
 export function AccountScreen() {
   const { wording, language } = useI18n();
   const { account, signOut } = useSession();
@@ -55,6 +59,7 @@ export function AccountScreen() {
       ) : null}
       <ProfileForm account={account} first={false} />
       <NotificationsSetting account={account} />
+      <Appearance />
       <BlockedPeople />
       <Actions>
         <Button
@@ -66,7 +71,7 @@ export function AccountScreen() {
         />
       </Actions>
       <LegalLinks />
-      <View style={[styles.rule, { backgroundColor: colors.border }]} />
+      <View style={[styles.rule, { backgroundColor: colors.divider }]} />
       <Actions>
         <Button label={wording.nav.signOut} disabled={leaving} onPress={() => void leave()} />
       </Actions>

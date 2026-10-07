@@ -8,10 +8,18 @@ import { readFileSync } from 'node:fs'
  *   ... text message (development delivery) to="+1••••••••23" text="Yuppers.app: an agreement you turned on updates for has changed. ..."
  */
 
+/**
+ * Area codes of the United States only: +1 also covers Canada and the
+ * Caribbean, whose numbers the service does not text (942, say, is
+ * Toronto's), so a random area code would fail now and then.
+ */
+const US_AREA_CODES = ['212', '305', '312', '415', '503', '617', '702', '713', '808', '917']
+
 /** A US number nobody else uses, as the service stores it. */
 export function number(): string {
   const digits = () => Math.floor(Math.random() * 10)
-  return `+1${7 + (digits() % 3)}${digits()}${digits()}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
+  const area = US_AREA_CODES[Math.floor(Math.random() * US_AREA_CODES.length)]
+  return `+1${area}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
 }
 
 /** The texts a log shows were sent to `phone`, oldest first. */

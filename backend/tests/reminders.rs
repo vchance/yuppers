@@ -928,12 +928,8 @@ async fn a_party_who_cannot_be_emailed_is_passed_over_and_not_tried_again() {
     let repair = Uuid::new_v4();
     let pair = agreed(&app, "UTC", vec![owed(repair, "A", on(due))]).await;
     // Ana, who owes the repair, has a phone number and no email address.
-    sqlx::query("UPDATE account SET email = NULL, phone = $2 WHERE id = $1")
-        .bind(pair.ana.id)
-        .bind(format!("+1555{:07}", Uuid::new_v4().as_u128() % 10_000_000))
-        .execute(&app.db)
-        .await
-        .unwrap();
+    let phone = format!("+1555{:07}", Uuid::new_v4().as_u128() % 10_000_000);
+    common::set_phone(&app.db, pair.ana.id, &phone, true).await;
 
     // The reminder is recorded, with nobody to send it to, and later passes
     // do not keep coming back to it.

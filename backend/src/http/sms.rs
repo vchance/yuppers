@@ -25,12 +25,13 @@ use uuid::Uuid;
 
 use super::extract::{ApiJson, Session};
 use super::{AppState, ClientAddress, client_address};
-use crate::client_version;
+use crate::contact::{self, Field};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
 use crate::notifications::sms::twilio_signature_valid;
 use crate::notifications::sms_updates::{self, Consent, Keyword, Source};
+use crate::{auth, client_version};
 
 /// Where the signed-in party stands on text updates for one agreement.
 #[derive(Debug, Serialize, ToSchema)]
@@ -192,20 +193,19 @@ pub async fn set_sms_updates(
     let mut tx = state.db.begin().await?;
     // The number as it is now, held while the updates are turned on, so a
     // change of number at the same moment cannot slip between.
-    let phone: Option<String> =
-        sqlx::query_scalar("SELECT phone FROM account WHERE id = $1 FOR NO KEY UPDATE")
+    let encrypted: Option<Vec<u8>> =
+        sqlx::query_scalar("SELECT phone_encrypted FROM account WHERE id = $1 FOR NO KEY UPDATE")
             .bind(session.account_id)
             .fetch_one(&mut *tx)
             .await?;
-    let phone = phone.ok_or(ErrorCode::ActionNotAllowed)?;
+    // Decrypted for the record of consent, which keeps it encrypted in its
+    // own column (`crate::contact`).
+    let phone = contact::keys()
+        .reveal(Field::ACCOUNT_PHONE, encrypted.as_deref())?
+        .ok_or(ErrorCode::ActionNotAllowed)?;
     let identifier = Identifier::parse(&phone).map_err(|_| ErrorCode::ActionNotAllowed)?;
     state.settings.auth.check_taken(&identifier)?;
-    let opted_out: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
-            .bind(&phone)
-            .fetch_one(&mut *tx)
-            .await?;
-    if opted_out {
+    if auth::is_opted_out(&mut tx, &identifier).await? {
         return Err(ErrorCode::PhoneOptedOut.into());
     }
     let user_agent = headers

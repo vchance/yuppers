@@ -1,7 +1,8 @@
 //! Signing in, sessions and the account endpoints, exercised through the HTTP
 //! router against a real database.
 //!
-//! Needs PostgreSQL and the connection strings from `.env`. Each test uses
+//! Needs PostgreSQL and the connection strings from `.env`, and runs in a
+//! database of its own, created fresh for each run. Each test uses
 //! identifiers of its own under a reserved test domain and number range, and
 //! removes what it created. Each also makes its requests from network
 //! addresses of its own, so that the limits per address count its requests
@@ -23,7 +24,9 @@ use tower::ServiceExt;
 use uuid::Uuid;
 use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture, token_hash};
 use yuppers_backend::code_consent::{self, CODE_CONSENT_VERSION, phone_hash};
-use yuppers_backend::db;
+use yuppers_backend::contact;
+
+mod common;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
 
@@ -66,21 +69,19 @@ struct App {
     router: Router,
     outbox: Arc<Outbox>,
     owner: PgPool,
+    /// The application role's connection string, for running the worker's
+    /// jobs as the service does.
+    app_url: String,
     /// Where the requests come from: the connection's peer.
     peer: IpAddr,
 }
 
-fn env(name: &str) -> String {
-    dotenvy::dotenv().ok();
-    std::env::var(name).unwrap_or_else(|_| panic!("{name} must be set; see .env.example"))
-}
-
-async fn connect(url_var: &str) -> PgPool {
+async fn connect(url: &str) -> PgPool {
     PgPoolOptions::new()
         .max_connections(3)
-        .connect(&env(url_var))
+        .connect(url)
         .await
-        .unwrap_or_else(|error| panic!("cannot connect using {url_var}: {error}"))
+        .unwrap_or_else(|error| panic!("cannot connect to {url}: {error}"))
 }
 
 fn email() -> String {
@@ -112,12 +113,14 @@ fn other_than(codes: &[&str]) -> String {
 
 impl App {
     async fn start() -> Self {
-        let owner = connect("MIGRATION_DATABASE_URL").await;
-        db::MIGRATOR.run(&owner).await.expect("migrations apply");
+        // A database of its own, created fresh for each run, with the
+        // contact data key stored and installed as `migrate` and the api do.
+        let (owner_url, app_url) = common::database("yuppers_test_auth").await;
+        let owner = connect(owner_url).await;
 
         let outbox = Arc::new(Outbox::default());
         let state = AppState {
-            db: connect("DATABASE_URL").await,
+            db: connect(app_url).await,
             settings: Arc::new(Settings {
                 app_secret: b"test-secret-test-secret-test-secret".to_vec(),
                 web_origin: WEB_ORIGIN.to_owned(),
@@ -136,16 +139,13 @@ impl App {
             metrics: Default::default(),
         };
 
-        let app = Self {
+        Self {
             router: http::router(state, None),
             outbox,
             owner,
+            app_url: app_url.clone(),
             peer: address(),
-        };
-        // Clear what an earlier, interrupted run may have left.
-        app.remove_test_rows("created_at < now() - interval '10 minutes'")
-            .await;
-        app
+        }
     }
 
     async fn send(
@@ -247,42 +247,20 @@ impl App {
         )
     }
 
-    async fn remove_test_rows(&self, condition: &str) {
-        let accounts = format!(
-            "SELECT id FROM account
-             WHERE (email LIKE '%@{EMAIL_DOMAIN}' OR phone LIKE '{PHONE_PREFIX}%') AND {condition}"
-        );
-        let statements = [
-            format!("DELETE FROM account_session WHERE account_id IN ({accounts})"),
-            format!("DELETE FROM sms_code_consent WHERE account_id IN ({accounts})"),
-            format!("DELETE FROM account WHERE id IN ({accounts})"),
-            format!(
-                "DELETE FROM one_time_code
-                 WHERE (identifier LIKE '%@{EMAIL_DOMAIN}' OR identifier LIKE '{PHONE_PREFIX}%')
-                   AND {condition}"
-            ),
-        ];
-        for statement in statements {
-            sqlx::query(sqlx::AssertSqlSafe(statement))
-                .execute(&self.owner)
-                .await
-                .unwrap();
-        }
-    }
-
-    /// Removes the rows belonging to the identifiers this test used.
+    /// Removes the rows belonging to the identifiers this test used, found
+    /// by their blind indexes, as the service stores them.
     async fn finish(self, identifiers: &[&str]) {
         for identifier in identifiers {
             for statement in [
                 "DELETE FROM account_session WHERE account_id IN
-                    (SELECT id FROM account WHERE email = $1 OR phone = $1)",
+                    (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
                 "DELETE FROM sms_code_consent WHERE account_id IN
-                    (SELECT id FROM account WHERE email = $1 OR phone = $1)",
-                "DELETE FROM account WHERE email = $1 OR phone = $1",
-                "DELETE FROM one_time_code WHERE identifier = $1",
+                    (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
+                "DELETE FROM account WHERE email_index = $1 OR phone_index = $1",
+                "DELETE FROM one_time_code WHERE identifier_index = $1",
             ] {
                 sqlx::query(statement)
-                    .bind(identifier)
+                    .bind(common::index(identifier))
                     .execute(&self.owner)
                     .await
                     .unwrap();
@@ -699,8 +677,8 @@ async fn many_wrong_guesses_from_one_address_never_say_who_is_signing_in() {
 
     // The guess at the live code was still charged to it.
     let charged: i16 =
-        sqlx::query_scalar("SELECT failed_attempts FROM one_time_code WHERE identifier = $1")
-            .bind(target)
+        sqlx::query_scalar("SELECT failed_attempts FROM one_time_code WHERE identifier_index = $1")
+            .bind(common::index(target))
             .fetch_one(&app.owner)
             .await
             .unwrap();
@@ -748,7 +726,7 @@ async fn counts_from_windows_long_past_are_forgotten() {
         .unwrap();
     }
 
-    let service = connect("DATABASE_URL").await;
+    let service = connect(&app.app_url).await;
     yuppers_backend::auth::purge_sign_in_limits(&service)
         .await
         .unwrap();
@@ -792,27 +770,29 @@ async fn codes_are_removed_a_day_after_they_are_done_with() {
         ),
     ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
-            "UPDATE one_time_code SET {change} WHERE identifier = $1"
+            "UPDATE one_time_code SET {change} WHERE identifier_index = $1"
         )))
-        .bind(email)
+        .bind(common::index(email))
         .execute(&app.owner)
         .await
         .unwrap();
     }
 
-    let service = connect("DATABASE_URL").await;
+    let service = connect(&app.app_url).await;
     yuppers_backend::auth::purge_one_time_codes(&service)
         .await
         .unwrap();
 
-    let left: Vec<String> = sqlx::query_scalar(
-        "SELECT identifier FROM one_time_code WHERE identifier = ANY($1) ORDER BY created_at",
+    let index = common::index;
+    let left: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT identifier_index FROM one_time_code WHERE identifier_index = ANY($1)
+         ORDER BY created_at",
     )
-    .bind(vec![old.clone(), used.clone(), live.clone()])
+    .bind(vec![index(&old), index(&used), index(&live)])
     .fetch_all(&app.owner)
     .await
     .unwrap();
-    assert_eq!(left, [used.clone(), live.clone()]);
+    assert_eq!(left, [index(&used), index(&live)]);
 
     app.finish(&[&old, &used, &live]).await;
 }
@@ -823,8 +803,8 @@ async fn an_expired_code_is_refused() {
     let email = email();
     let code = app.request_code(&email).await;
 
-    sqlx::query("UPDATE one_time_code SET expires_at = now() WHERE identifier = $1")
-        .bind(&email)
+    sqlx::query("UPDATE one_time_code SET expires_at = now() WHERE identifier_index = $1")
+        .bind(common::index(&email))
         .execute(&app.owner)
         .await
         .unwrap();
@@ -1162,8 +1142,8 @@ async fn a_suspended_account_is_shut_out() {
     let email = email();
     let (token, _) = app.sign_in(&email).await;
 
-    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE email = $1")
-        .bind(&email)
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE email_index = $1")
+        .bind(common::index(&email))
         .execute(&app.owner)
         .await
         .unwrap();
@@ -1190,8 +1170,8 @@ async fn neither_codes_nor_tokens_are_stored() {
     let code = app.request_code(&email).await;
 
     let stored: Vec<u8> =
-        sqlx::query_scalar("SELECT code_hash FROM one_time_code WHERE identifier = $1")
-            .bind(&email)
+        sqlx::query_scalar("SELECT code_hash FROM one_time_code WHERE identifier_index = $1")
+            .bind(common::index(&email))
             .fetch_one(&app.owner)
             .await
             .unwrap();
@@ -1204,9 +1184,9 @@ async fn neither_codes_nor_tokens_are_stored() {
     let token = reply.body["token"].as_str().unwrap();
     let hashes: Vec<Vec<u8>> = sqlx::query_scalar(
         "SELECT s.token_hash FROM account_session s JOIN account a ON a.id = s.account_id
-         WHERE a.email = $1",
+         WHERE a.email_index = $1",
     )
-    .bind(&email)
+    .bind(common::index(&email))
     .fetch_all(&app.owner)
     .await
     .unwrap();
@@ -1220,12 +1200,17 @@ async fn neither_codes_nor_tokens_are_stored() {
 /// `APP_SECRET` as these tests set it, which keys a number's hash.
 const SECRET: &[u8] = b"test-secret-test-secret-test-secret";
 
-/// One record of consent to a code by text, as stored.
+/// One record of consent to a code by text, as stored, its number
+/// decrypted.
 #[derive(Debug, PartialEq, sqlx::FromRow)]
 struct CodeConsent {
+    /// Read to decrypt the number, which is bound to it; then left out.
+    id: i64,
     purpose: String,
     account_id: Option<Uuid>,
+    #[sqlx(skip)]
     phone: Option<String>,
+    phone_encrypted: Option<Vec<u8>>,
     source: String,
     consent_version: String,
     consent_language: String,
@@ -1233,11 +1218,14 @@ struct CodeConsent {
     user_agent: Option<String>,
 }
 
-/// Every consent recorded for a number, oldest first.
+/// Every consent recorded for a number, oldest first. The encrypted number
+/// is decrypted into `phone` and then left out, so that records compare by
+/// what they say.
 async fn code_consents(app: &App, phone: &str) -> Vec<CodeConsent> {
-    sqlx::query_as(
-        "SELECT c.purpose, c.account_id, c.phone, c.source, c.consent_version,
-                c.consent_language, host(n.ip_address) AS ip_address, n.user_agent
+    let records: Vec<CodeConsent> = sqlx::query_as(
+        "SELECT c.id, c.purpose, c.account_id, c.phone_encrypted,
+                c.source, c.consent_version, c.consent_language,
+                host(n.ip_address) AS ip_address, n.user_agent
          FROM sms_code_consent c
          LEFT JOIN sms_code_consent_network n ON n.consent_id = c.id
          WHERE c.phone_hash = $1
@@ -1246,7 +1234,23 @@ async fn code_consents(app: &App, phone: &str) -> Vec<CodeConsent> {
     .bind(phone_hash(SECRET, phone).as_slice())
     .fetch_all(&app.owner)
     .await
-    .unwrap()
+    .unwrap();
+    records
+        .into_iter()
+        .map(|record| {
+            let field = contact::Field::SMS_CODE_CONSENT_PHONE.row(record.id);
+            let phone = record
+                .phone_encrypted
+                .as_deref()
+                .map(|sealed| common::open(field, sealed));
+            CodeConsent {
+                id: 0,
+                phone,
+                phone_encrypted: None,
+                ..record
+            }
+        })
+        .collect()
 }
 
 /// Removes the consents recorded for numbers this test used.
@@ -1342,9 +1346,11 @@ async fn a_code_by_text_is_recorded_with_its_consent() {
         .await;
     assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
     let first = CodeConsent {
+        id: 0,
         purpose: "SIGN_IN".to_owned(),
         account_id: None,
         phone: None,
+        phone_encrypted: None,
         source: "IOS".to_owned(),
         consent_version: CODE_CONSENT_VERSION.to_owned(),
         consent_language: "es".to_owned(),
@@ -1352,14 +1358,21 @@ async fn a_code_by_text_is_recorded_with_its_consent() {
         user_agent: Some(user_agent.to_owned()),
     };
     assert_eq!(code_consents(&app, &phone).await, [first]);
-    let in_full: i64 = sqlx::query_scalar("SELECT count(*) FROM sms_code_consent WHERE phone = $1")
-        .bind(&phone)
-        .fetch_one(&app.owner)
-        .await
-        .unwrap();
-    assert_eq!(in_full, 0, "the number itself is nowhere in the record");
+    let in_full: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sms_code_consent
+         WHERE phone_hash = $1 AND phone_encrypted IS NOT NULL",
+    )
+    .bind(phone_hash(SECRET, &phone).as_slice())
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        in_full, 0,
+        "the number itself is nowhere in the record, not even encrypted"
+    );
 
-    // Signed up with it, the number is the account's: kept in full with it.
+    // Signed up with it, the number is the account's: kept in full with it,
+    // encrypted.
     let code = app.last_code(&phone);
     let account: Uuid = app.create_session(&phone, &code).await.body["account"]["id"]
         .as_str()
@@ -1521,7 +1534,7 @@ async fn code_consents_are_kept_for_their_retention_and_their_addresses_for_less
     .unwrap();
 
     // As the worker runs it, as the service's own role.
-    let service = connect("DATABASE_URL").await;
+    let service = connect(&app.app_url).await;
     code_consent::purge(&service, &rules, OffsetDateTime::now_utc())
         .await
         .unwrap();

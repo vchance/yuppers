@@ -43,6 +43,7 @@ use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 use crate::code_consent::{self, CodeRequest};
+use crate::contact::{self, Kind};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
 use crate::{languages, nanp};
@@ -366,14 +367,11 @@ pub async fn language_for(
     identifier: &Identifier,
     accept_language: Option<&str>,
 ) -> String {
-    let column = match identifier {
-        Identifier::Email(_) => "email",
-        Identifier::Phone(_) => "phone",
-    };
+    let (_, index) = Kind::of(identifier).account_columns();
     let preference: Option<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT language FROM account WHERE {column} = $1 AND status = 'ACTIVE'"
+        "SELECT language FROM account WHERE {index} = $1 AND status = 'ACTIVE'"
     )))
-    .bind(identifier.as_str())
+    .bind(contact::keys().index_of(identifier).as_slice())
     .fetch_optional(db)
     .await
     .unwrap_or_default();
@@ -604,18 +602,20 @@ fn requester_network(address: IpAddr) -> String {
 
 /// One request at a time per identifier and purpose, so that counting,
 /// inserting and checking codes cannot be raced. Sign-in and deletion take
-/// different locks, so neither waits on the other.
+/// different locks, so neither waits on the other. The lock is named by the
+/// identifier's blind index, so the address never reaches the database.
 async fn lock_codes(
     conn: &mut PgConnection,
     identifier: &Identifier,
     purpose: Purpose,
 ) -> Result<(), sqlx::Error> {
+    let index: String = contact::keys()
+        .index_of(identifier)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-        .bind(format!(
-            "one-time-code:{}:{}",
-            purpose.as_str(),
-            identifier.as_str()
-        ))
+        .bind(format!("one-time-code:{}:{index}", purpose.as_str()))
         .execute(conn)
         .await?;
     Ok(())
@@ -664,7 +664,7 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// How long a code is kept once it has expired or been used: long enough to
 /// be counted against the hourly limit on codes per identifier, which is
 /// all an old row is read for, and no longer. Until then a row holds the
-/// email address or phone number it went to in full.
+/// blind index of the email address or phone number it went to.
 pub const SPENT_CODE_RETENTION: Duration = Duration::days(1);
 
 /// Removes codes that expired or were used more than
@@ -780,6 +780,8 @@ pub async fn request_code(
     }
 
     lock_codes(&mut tx, identifier, purpose).await?;
+    // Codes are stored, found and limited by the identifier's blind index.
+    let index = contact::keys().index_of(identifier);
 
     // Whoever has used up their wrong guesses for the day would be refused
     // any code sent now, right or wrong, so none is sent: for signing in the
@@ -814,9 +816,10 @@ pub async fn request_code(
     if purpose == Purpose::SignIn {
         let recent: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM one_time_code
-             WHERE identifier = $1 AND purpose = $2 AND created_at > now() - interval '1 hour'",
+             WHERE identifier_index = $1 AND purpose = $2
+               AND created_at > now() - interval '1 hour'",
         )
-        .bind(identifier.as_str())
+        .bind(index.as_slice())
         .bind(purpose.as_str())
         .fetch_one(&mut *tx)
         .await?;
@@ -883,16 +886,16 @@ pub async fn request_code(
     // first one it resends expires: never longer here than there.
     sqlx::query(
         "INSERT INTO one_time_code
-             (identifier, purpose, code_hash, checked_by, expires_at, created_at)
+             (identifier_index, purpose, code_hash, checked_by, expires_at, created_at)
          VALUES ($1, $2, $3, $4,
                  LEAST(clock_timestamp() + $5 * interval '1 second',
                        (SELECT min(expires_at) FROM one_time_code
                         WHERE $4 = 'TWILIO_VERIFY' AND checked_by = 'TWILIO_VERIFY'
-                          AND identifier = $1 AND purpose = $2
+                          AND identifier_index = $1 AND purpose = $2
                           AND consumed_at IS NULL AND expires_at > clock_timestamp())),
                  clock_timestamp())",
     )
-    .bind(identifier.as_str())
+    .bind(index.as_slice())
     .bind(purpose.as_str())
     .bind(hash.as_ref().map(<[u8; 32]>::as_slice))
     .bind(if verifier.is_some() {
@@ -907,21 +910,21 @@ pub async fn request_code(
     // Only the newest few stay live.
     sqlx::query(
         "UPDATE one_time_code SET consumed_at = now()
-         WHERE identifier = $1 AND purpose = $2 AND consumed_at IS NULL
+         WHERE identifier_index = $1 AND purpose = $2 AND consumed_at IS NULL
            AND id NOT IN (
                SELECT id FROM one_time_code
-               WHERE identifier = $1 AND purpose = $2
+               WHERE identifier_index = $1 AND purpose = $2
                ORDER BY created_at DESC
                LIMIT $3)",
     )
-    .bind(identifier.as_str())
+    .bind(index.as_slice())
     .bind(purpose.as_str())
     .bind(rules.live_codes)
     .execute(&mut *tx)
     .await?;
     // The consent the code was texted on, with it.
     if let Some(consent) = consent {
-        code_consent::record(&mut tx, secret, identifier.as_str(), request, consent).await?;
+        code_consent::record(&mut tx, secret, identifier, request, consent).await?;
     }
     tx.commit().await?;
 
@@ -973,11 +976,11 @@ pub async fn is_opted_out(
     conn: &mut PgConnection,
     identifier: &Identifier,
 ) -> Result<bool, sqlx::Error> {
-    let Identifier::Phone(phone) = identifier else {
+    if !matches!(identifier, Identifier::Phone(_)) {
         return Ok(false);
-    };
-    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
-        .bind(phone)
+    }
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone_index = $1)")
+        .bind(contact::keys().index_of(identifier).as_slice())
         .fetch_one(conn)
         .await
 }
@@ -1164,11 +1167,11 @@ impl OfferedCode<'_> {
     async fn live(&self, conn: &mut PgConnection) -> Result<Vec<LiveCode>, sqlx::Error> {
         sqlx::query_as(
             "SELECT id, code_hash FROM one_time_code
-             WHERE identifier = $1 AND purpose = $2
+             WHERE identifier_index = $1 AND purpose = $2
                AND consumed_at IS NULL AND expires_at > now() AND failed_attempts < $3
              FOR UPDATE",
         )
-        .bind(self.identifier.as_str())
+        .bind(contact::keys().index_of(self.identifier).as_slice())
         .bind(self.requester.purpose().as_str())
         .bind(self.rules.code_max_failed_attempts)
         .fetch_all(conn)
@@ -1308,9 +1311,9 @@ impl OfferedCode<'_> {
         if matches {
             sqlx::query(
                 "UPDATE one_time_code SET consumed_at = now()
-                 WHERE identifier = $1 AND purpose = $2 AND consumed_at IS NULL",
+                 WHERE identifier_index = $1 AND purpose = $2 AND consumed_at IS NULL",
             )
-            .bind(identifier.as_str())
+            .bind(contact::keys().index_of(identifier).as_slice())
             .bind(purpose.as_str())
             .execute(&mut *conn)
             .await?;

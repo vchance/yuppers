@@ -29,8 +29,11 @@ test('the service offers phone numbers here, and the screen asks for them with t
 test('a phone number gets its code by text only once the box beside it is ticked', async ({ person }) => {
   const sam = await person('Sam')
   const { page } = sam
+  // A US area code: +1 covers Canada and the Caribbean too, which the
+  // service does not text.
   const digits = () => Math.floor(Math.random() * 10)
-  const phone = `+1${7 + (digits() % 3)}${digits()}${digits()}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
+  const area = ['212', '415', '617', '713', '917'][Math.floor(Math.random() * 5)]
+  const phone = `+1${area}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
   const asked: unknown[] = []
   page.on('request', (request) => {
     if (request.url().endsWith('/v1/auth/codes')) asked.push(request.postDataJSON())

@@ -23,9 +23,10 @@
 //! why the code was asked for, the account where there is one, the number,
 //! the wording's version and language, the client and the time, with the
 //! request's address and user agent kept apart for as long as a signature's
-//! (`sms_code_consent_network`). The number is kept in full only where it is
-//! already the account's own; a number not yet shown to be anyone's is kept
-//! as a keyed hash, which is enough to find the record from the number. The
+//! (`sms_code_consent_network`). The number is kept in full, encrypted
+//! (`crate::contact`), only where it is already the account's own; a number
+//! not yet shown to be anyone's is kept only as a keyed hash, which is
+//! enough to find the record from the number. The
 //! worker removes records after `Rules::sms_consent_retention`, as for the
 //! updates' consent ([`purge`]).
 
@@ -40,6 +41,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::auth::Purpose;
+use crate::contact::{self, Field};
 use crate::domain::Rules;
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
@@ -148,14 +150,15 @@ pub fn phone_hash(secret: &[u8], phone: &str) -> [u8; 32] {
 pub(crate) async fn record(
     conn: &mut PgConnection,
     secret: &[u8],
-    phone: &str,
+    phone: &Identifier,
     request: &CodeRequest<'_>,
     checked: Checked,
 ) -> Result<(), sqlx::Error> {
+    let keys = contact::keys();
     // Whose number it is now, if anyone's.
     let holder: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM account WHERE phone = $1 AND status = 'ACTIVE'")
-            .bind(phone)
+        sqlx::query_scalar("SELECT id FROM account WHERE phone_index = $1 AND status = 'ACTIVE'")
+            .bind(keys.index_of(phone).as_slice())
             .fetch_optional(&mut *conn)
             .await?;
     let account = match request.purpose {
@@ -163,23 +166,31 @@ pub(crate) async fn record(
         CodePurpose::SignIn => holder,
         CodePurpose::DeleteAccount | CodePurpose::VerifyNumber => request.account,
     };
-    // In full only where it is that account's own number already.
-    let kept = (account.is_some() && account == holder).then_some(phone);
-    let id: i64 = sqlx::query_scalar(
+    // In full, encrypted, only where it is that account's own number
+    // already.
+    let kept = account.is_some() && account == holder;
+    // The record's ID first: the number is encrypted bound to it.
+    let id: i64 = sqlx::query_scalar("SELECT nextval('sms_code_consent_id_seq')")
+        .fetch_one(&mut *conn)
+        .await?;
+    let encrypted = kept.then(|| keys.seal(Field::SMS_CODE_CONSENT_PHONE.row(id), phone.as_str()));
+    sqlx::query(
         "INSERT INTO sms_code_consent
-             (purpose, account_id, phone, phone_hash, source, consent_version, consent_language)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id",
+             (id, purpose, account_id, phone_encrypted, phone_hash, source,
+              consent_version, consent_language)
+         OVERRIDING SYSTEM VALUE
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
+    .bind(id)
     .bind(request.purpose.as_str())
     .bind(account)
-    .bind(kept)
-    .bind(phone_hash(secret, phone).as_slice())
+    .bind(encrypted)
+    .bind(phone_hash(secret, phone.as_str()).as_slice())
     .bind(request.source.as_str())
     // [`CodeRequest::check`] has held it to this one.
     .bind(CODE_CONSENT_VERSION)
     .bind(checked.language)
-    .fetch_one(&mut *conn)
+    .execute(&mut *conn)
     .await?;
     let user_agent: Option<String> = request
         .user_agent

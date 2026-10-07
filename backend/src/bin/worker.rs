@@ -12,6 +12,7 @@ use tokio::sync::watch;
 use yuppers_backend::auth::{purge_one_time_codes, purge_sign_in_limits};
 use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::WorkerConfig;
+use yuppers_backend::contact::{self, store};
 use yuppers_backend::domain::Rules;
 use yuppers_backend::error::Redacted;
 use yuppers_backend::exchanges::reminders::run_reminders;
@@ -32,6 +33,13 @@ async fn main() -> anyhow::Result<()> {
     BuildInfo::current().log_start("worker");
     let config = WorkerConfig::from_env()?;
     let db = db::pool(&config.database_url)?;
+    // Every email address and phone number is stored encrypted under
+    // CONTACT_DATA_KEY (yuppers_backend::contact). Nothing runs until the
+    // database shows that the key is its own.
+    let keys = store::open_when_reachable(&db, &config.contact)
+        .await
+        .context("CONTACT_DATA_KEY")?;
+    contact::install(keys);
     let rules = Rules::default();
     // Wallet pass updates, when a platform is configured (crate::wallet).
     let wallet =

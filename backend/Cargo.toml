@@ -10,6 +10,7 @@ axum = "0.8.9"
 # standard alphabet for Apple's tokens; and Basic credentials for the SMS
 # provider (`notifications::sms`).
 base64 = "0.22.1"
+chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc"] }
 # Wallet passes: the CMS (PKCS #7) structures of an Apple pass's signature.
 # Only the ASN.1 types are used, with der and x509-cert below; the signing
 # itself is ring's. The `builder` feature stays off: it would pull in the
@@ -20,6 +21,7 @@ der = { version = "0.7.10", features = ["std", "oid"] }
 dotenvy = "0.15.7"
 form_urlencoded = "1.2.2"
 getrandom = "0.4.3"
+hkdf = "0.13.0"
 hmac = "0.13.0"
 # The HTTP client for Apple's push service for passes (HTTP/2, with the pass
 # type certificate as the client certificate) and Google's Wallet API, and

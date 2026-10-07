@@ -2,7 +2,14 @@
 
 use time::OffsetDateTime;
 
-use super::identity::Identifier;
+/// Whom an invitation names: an email address or a phone number, as its
+/// blind index (`crate::contact`). The same value has the same index
+/// wherever it is stored, so comparing indexes compares the values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Binding {
+    Email([u8; 32]),
+    Phone([u8; 32]),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invitation {
@@ -10,14 +17,16 @@ pub struct Invitation {
     pub claimed: bool,
     pub revoked: bool,
     /// Set when the initiator named who the invitation is for.
-    pub bound_to: Option<Identifier>,
+    pub bound_to: Option<Binding>,
 }
 
 /// The verified account trying to claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Claimant {
-    pub email: Option<String>,
-    pub phone: Option<String>,
+    /// The blind index of its email address, if it has one.
+    pub email: Option<[u8; 32]>,
+    /// The blind index of its phone number, if it has one.
+    pub phone: Option<[u8; 32]>,
     /// The claimant is the person who sent the invitation.
     pub is_initiator: bool,
     /// Either party has blocked the other.
@@ -72,10 +81,10 @@ pub fn claim(
 
     match &invitation.bound_to {
         None => Ok(Claim { pre_bound: false }),
-        Some(Identifier::Email(email)) if claimant.email.as_ref() == Some(email) => {
+        Some(Binding::Email(email)) if claimant.email.as_ref() == Some(email) => {
             Ok(Claim { pre_bound: true })
         }
-        Some(Identifier::Phone(phone)) if claimant.phone.as_ref() == Some(phone) => {
+        Some(Binding::Phone(phone)) if claimant.phone.as_ref() == Some(phone) => {
             Ok(Claim { pre_bound: true })
         }
         Some(_) => Err(Refusal::BoundToSomeoneElse),
@@ -100,10 +109,16 @@ mod tests {
         }
     }
 
+    /// Stand-ins for the blind indexes of Ben's address and number, and of
+    /// Carla's address.
+    const BEN_EMAIL: [u8; 32] = [1; 32];
+    const BEN_PHONE: [u8; 32] = [2; 32];
+    const CARLA_EMAIL: [u8; 32] = [3; 32];
+
     fn ben() -> Claimant {
         Claimant {
-            email: Some("ben@example.com".into()),
-            phone: Some("+12025550142".into()),
+            email: Some(BEN_EMAIL),
+            phone: Some(BEN_PHONE),
             is_initiator: false,
             blocked: false,
         }
@@ -119,15 +134,15 @@ mod tests {
 
     #[test]
     fn a_bound_invitation_is_claimed_by_the_person_it_names() {
-        for bound in ["ben@example.com", "+12025550142"] {
+        for bound in [Binding::Email(BEN_EMAIL), Binding::Phone(BEN_PHONE)] {
             let invitation = Invitation {
-                bound_to: Some(Identifier::parse(bound).unwrap()),
+                bound_to: Some(bound),
                 ..invitation()
             };
             assert_eq!(
                 claim(&invitation, &ben(), NOW),
                 Ok(Claim { pre_bound: true }),
-                "{bound}"
+                "{bound:?}"
             );
         }
     }
@@ -135,8 +150,17 @@ mod tests {
     #[test]
     fn a_bound_invitation_is_refused_to_anyone_else() {
         let invitation = Invitation {
-            bound_to: Some(Identifier::parse("carla@example.com").unwrap()),
+            bound_to: Some(Binding::Email(CARLA_EMAIL)),
             ..invitation()
+        };
+        assert_eq!(
+            claim(&invitation, &ben(), NOW),
+            Err(Refusal::BoundToSomeoneElse)
+        );
+        // An address's index is not a number's, whatever its bytes.
+        let invitation = Invitation {
+            bound_to: Some(Binding::Phone(BEN_EMAIL)),
+            ..self::invitation()
         };
         assert_eq!(
             claim(&invitation, &ben(), NOW),
@@ -145,7 +169,7 @@ mod tests {
 
         // A phone-bound invitation is not satisfied by an account with only an email.
         let invitation = Invitation {
-            bound_to: Some(Identifier::parse("+12025550142").unwrap()),
+            bound_to: Some(Binding::Phone(BEN_PHONE)),
             ..self::invitation()
         };
         let email_only = Claimant {

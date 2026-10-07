@@ -180,12 +180,13 @@ async fn a_phone_number_gets_its_code_by_sms_in_its_language_and_an_email_addres
     );
     // The service keeps no hash of a code it never saw, only that one was
     // asked for.
-    let stored: Vec<(Option<Vec<u8>>, String)> =
-        sqlx::query_as("SELECT code_hash, checked_by FROM one_time_code WHERE identifier = $1")
-            .bind(&es)
-            .fetch_all(&app.owner)
-            .await
-            .unwrap();
+    let stored: Vec<(Option<Vec<u8>>, String)> = sqlx::query_as(
+        "SELECT code_hash, checked_by FROM one_time_code WHERE identifier_index = $1",
+    )
+    .bind(common::index(&es))
+    .fetch_all(&app.owner)
+    .await
+    .unwrap();
     assert_eq!(stored, [(None, "TWILIO_VERIFY".to_owned())]);
     assert_eq!(*mailbox.0.lock().unwrap(), ["ana@example.test"]);
     assert!(
@@ -322,8 +323,8 @@ async fn all_counts(app: &App) -> i64 {
 }
 
 async fn codes_for(app: &App, identifier: &str) -> i64 {
-    sqlx::query_scalar("SELECT count(*) FROM one_time_code WHERE identifier = $1")
-        .bind(identifier)
+    sqlx::query_scalar("SELECT count(*) FROM one_time_code WHERE identifier_index = $1")
+        .bind(common::index(identifier))
         .fetch_one(&app.owner)
         .await
         .unwrap()
@@ -345,12 +346,7 @@ async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_
     // Deleting an account whose number was taken before the setting said
     // otherwise.
     let ana = app.user("Ana").await;
-    sqlx::query("UPDATE account SET phone = $1 WHERE id = $2")
-        .bind(mexico)
-        .bind(ana.id)
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    common::set_phone(&app.owner, ana.id, mexico, false).await;
     app.call(
         Some(&ana),
         Method::POST,
@@ -372,11 +368,12 @@ async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_
     )
     .await
     .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
-    let added: Option<String> = sqlx::query_scalar("SELECT phone FROM account WHERE id = $1")
-        .bind(ben.id)
-        .fetch_one(&app.owner)
-        .await
-        .unwrap();
+    let added: Option<Vec<u8>> =
+        sqlx::query_scalar("SELECT phone_index FROM account WHERE id = $1")
+            .bind(ben.id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
     assert_eq!(added, None);
 
     // Nothing sent, stored or counted against anyone: not the address, not
@@ -546,12 +543,7 @@ async fn with_sms_off_no_update_text_is_offered_queued_or_sent() {
 
     let deal = app.active().await;
     let phone = number();
-    sqlx::query("UPDATE account SET phone = $2 WHERE id = $1")
-        .bind(deal.ben.id)
-        .bind(&phone)
-        .execute(&app.db)
-        .await
-        .unwrap();
+    common::set_phone(&app.db, deal.ben.id, &phone, false).await;
     let path = format!("/v1/exchanges/{}/sms-updates", deal.exchange);
     let view = app.get(&deal.ben, &path).await.ok();
     assert_eq!(view["available"], false);
@@ -567,13 +559,15 @@ async fn with_sms_off_no_update_text_is_offered_queued_or_sent() {
 
     // Turned on while texts were sent: still nothing is queued now.
     let exchange: Uuid = deal.exchange.parse().unwrap();
-    sqlx::query("INSERT INTO sms_update (account_id, exchange_id, phone) VALUES ($1, $2, $3)")
-        .bind(deal.ben.id)
-        .bind(exchange)
-        .bind(&phone)
-        .execute(&app.db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO sms_update (account_id, exchange_id, phone_index) VALUES ($1, $2, $3)",
+    )
+    .bind(deal.ben.id)
+    .bind(exchange)
+    .bind(common::index(&phone))
+    .execute(&app.db)
+    .await
+    .unwrap();
     app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
         .await
         .ok();

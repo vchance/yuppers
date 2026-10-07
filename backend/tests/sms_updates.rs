@@ -24,6 +24,7 @@ use uuid::Uuid;
 use yuppers_backend::auth::{
     AuthRules, CheckFuture, CodeMessage, CodeSender, CodeVerifier, Purpose, SendFuture,
 };
+use yuppers_backend::contact::Field;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::notifications::outbox::{Delivered, DeliveryRules};
 use yuppers_backend::notifications::sms::{
@@ -169,15 +170,11 @@ async fn start() -> Texting {
     }
 }
 
-/// Gives an account a verified phone number, as adding one would.
+/// Gives an account a verified phone number, as adding one would: stored
+/// encrypted and indexed.
 async fn give_phone(app: &App, user: &User) -> String {
     let phone = number();
-    sqlx::query("UPDATE account SET phone = $2 WHERE id = $1")
-        .bind(user.id)
-        .bind(&phone)
-        .execute(&app.db)
-        .await
-        .unwrap();
+    common::set_phone(&app.db, user.id, &phone, false).await;
     phone
 }
 
@@ -231,12 +228,29 @@ type Record = (
     Option<String>,
 );
 
+/// Found by the number's blind index. Every one that holds the number
+/// encrypted decrypts to it.
 async fn records(db: &PgPool, phone: &str) -> Vec<Record> {
+    let index = common::index(phone);
+    let sealed: Vec<(i64, Option<Vec<u8>>)> =
+        sqlx::query_as("SELECT id, phone_encrypted FROM sms_consent WHERE phone_index = $1")
+            .bind(&index)
+            .fetch_all(db)
+            .await
+            .unwrap();
+    for (id, encrypted) in sealed {
+        if let Some(encrypted) = encrypted {
+            assert_eq!(
+                common::open(Field::SMS_CONSENT_PHONE.row(id), &encrypted),
+                phone
+            );
+        }
+    }
     sqlx::query_as(
         "SELECT action, account_id, exchange_id, source, keyword, consent_version, consent_language
-         FROM sms_consent WHERE phone = $1 ORDER BY id",
+         FROM sms_consent WHERE phone_index = $1 ORDER BY id",
     )
-    .bind(phone)
+    .bind(&index)
     .fetch_all(db)
     .await
     .unwrap()
@@ -305,9 +319,9 @@ async fn ticking_the_box_records_the_consent_and_queues_the_confirmation() {
     let (at, address, agent): (OffsetDateTime, Option<String>, Option<String>) = sqlx::query_as(
         "SELECT c.created_at, host(n.ip_address), n.user_agent
          FROM sms_consent c JOIN sms_consent_network n ON n.consent_id = c.id
-         WHERE c.phone = $1",
+         WHERE c.phone_index = $1",
     )
-    .bind(&phone)
+    .bind(common::index(&phone))
     .fetch_one(&app.db)
     .await
     .unwrap();
@@ -387,8 +401,8 @@ async fn updates_are_turned_on_only_by_a_party_with_a_number_that_may_be_texted(
         .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
 
     // A number that replied STOP is not texted.
-    sqlx::query("INSERT INTO sms_opt_out (phone) VALUES ($1)")
-        .bind(&phone)
+    sqlx::query("INSERT INTO sms_opt_out (phone_index) VALUES ($1)")
+        .bind(common::index(&phone))
         .execute(&app.db)
         .await
         .unwrap();
@@ -401,15 +415,13 @@ async fn updates_are_turned_on_only_by_a_party_with_a_number_that_may_be_texted(
     // Nor is a number outside the countries served.
     let abroad = app.user("Dana").await;
     let deal = app.active_between(deal.ana.clone(), abroad).await;
-    sqlx::query("UPDATE account SET phone = $2 WHERE id = $1")
-        .bind(deal.ben.id)
-        .bind(format!(
-            "+44770{:07}",
-            Uuid::new_v4().as_u128() % 10_000_000
-        ))
-        .execute(&app.db)
-        .await
-        .unwrap();
+    common::set_phone(
+        &app.db,
+        deal.ben.id,
+        &format!("+44770{:07}", Uuid::new_v4().as_u128() % 10_000_000),
+        false,
+    )
+    .await;
     set(&app, &deal.ben, &deal, turn_on_body("en"))
         .await
         .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
@@ -700,13 +712,15 @@ async fn a_number_that_replied_stop_is_never_texted() {
 
     // Should a text be queued all the same (the row written by hand here),
     // the worker drops it.
-    sqlx::query("INSERT INTO sms_update (account_id, exchange_id, phone) VALUES ($1, $2, $3)")
-        .bind(deal.ben.id)
-        .bind(exchange_uuid(&deal))
-        .bind(&phone)
-        .execute(&app.db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO sms_update (account_id, exchange_id, phone_index) VALUES ($1, $2, $3)",
+    )
+    .bind(deal.ben.id)
+    .bind(exchange_uuid(&deal))
+    .bind(common::index(&phone))
+    .execute(&app.db)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO outbox (kind, recipient_account_id, exchange_id, payload)
          VALUES ('SMS', $1, $2, '{\"sms\": \"UPDATE\", \"notice\": \"DELIVERY_CONFIRMED\"}')",
@@ -793,11 +807,13 @@ async fn the_webhook_takes_only_requests_twilio_signed() {
         ("Body".to_owned(), "STOP".to_owned()),
     ];
     let opted_out = || async {
-        sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
-            .bind(&phone)
-            .fetch_one(&app.db)
-            .await
-            .unwrap()
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone_index = $1)",
+        )
+        .bind(common::index(&phone))
+        .fetch_one(&app.db)
+        .await
+        .unwrap()
     };
 
     // No signature, a signature under another token, of another URL, or of
@@ -849,8 +865,8 @@ async fn the_webhook_takes_only_requests_twilio_signed() {
 
 /// Whether `phone` is on the opt-out list.
 async fn opted_out(app: &App, phone: &str) -> bool {
-    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
-        .bind(phone)
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone_index = $1)")
+        .bind(common::index(phone))
         .fetch_one(&app.db)
         .await
         .unwrap()
@@ -1016,8 +1032,8 @@ async fn stop_ends_every_text_to_the_number_and_start_allows_them_again() {
         let other = number();
         inbound(&app, &other, word, None).await;
         let stopped: bool =
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
-                .bind(&other)
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone_index = $1)")
+                .bind(common::index(&other))
                 .fetch_one(&app.db)
                 .await
                 .unwrap();
@@ -1112,8 +1128,9 @@ async fn deleting_the_account_removes_its_number_and_updates_and_keeps_the_recor
         .await;
     assert!(reply.status.is_success(), "{}", reply.body);
 
-    let (account_phone, updates, queued_texts): (Option<String>, i64, i64) = sqlx::query_as(
-        "SELECT (SELECT phone FROM account WHERE id = $1),
+    let (account_phone, updates, queued_texts): (i32, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT num_nonnulls(phone_encrypted, phone_index)
+                 FROM account WHERE id = $1),
                 (SELECT count(*) FROM sms_update WHERE account_id = $1),
                 (SELECT count(*) FROM outbox WHERE kind = 'SMS' AND recipient_account_id = $1)",
     )
@@ -1121,7 +1138,7 @@ async fn deleting_the_account_removes_its_number_and_updates_and_keeps_the_recor
     .fetch_one(&app.owner)
     .await
     .unwrap();
-    assert_eq!((account_phone, updates, queued_texts), (None, 0, 0));
+    assert_eq!((account_phone, updates, queued_texts), (0, 0, 0));
     // The record of consent stays, as the privacy policy says, with the end
     // of the updates beside it.
     let kept = records(&app.db, &phone).await;
@@ -1151,9 +1168,9 @@ async fn consent_records_are_kept_for_their_retention_unless_still_in_force() {
         .unwrap();
     let network: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sms_consent_network n JOIN sms_consent c ON c.id = n.consent_id
-         WHERE c.phone = $1",
+         WHERE c.phone_index = $1",
     )
-    .bind(&phone)
+    .bind(common::index(&phone))
     .fetch_one(&app.db)
     .await
     .unwrap();
@@ -1190,9 +1207,9 @@ async fn an_opt_in_is_kept_until_the_retention_has_passed_since_its_updates_ende
     for (action, age) in [("OPT_IN", "5 years"), ("OPT_OUT", "1 day")] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE sms_consent SET created_at = now() - interval '{age}'
-             WHERE phone = $1 AND action = $2"
+             WHERE phone_index = $1 AND action = $2"
         )))
-        .bind(&phone)
+        .bind(common::index(&phone))
         .bind(action)
         .execute(&app.owner)
         .await

@@ -15,6 +15,7 @@ use super::{AppState, ClientAddress, Settings};
 use crate::auth::{self, Requester};
 use crate::client_version;
 use crate::code_consent::{CodePurpose, CodeRequest, SmsCodeConsent};
+use crate::contact::{self, Kind};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
@@ -172,14 +173,17 @@ pub async fn create_session(
 
     let mut tx = state.db.begin().await?;
 
-    let (column, method) = match identifier {
-        Identifier::Email(_) => ("email", "EMAIL_OTP"),
-        Identifier::Phone(_) => ("phone", "PHONE_OTP"),
+    let method = match identifier {
+        Identifier::Email(_) => "EMAIL_OTP",
+        Identifier::Phone(_) => "PHONE_OTP",
     };
+    // Found by its blind index, and stored encrypted (`crate::contact`).
+    let (encrypted, index) = Kind::of(&identifier).account_columns();
+    let sealed = contact::keys().sealed(&identifier);
     let existing: Option<(Uuid, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT id, status FROM account WHERE {column} = $1"
+        "SELECT id, status FROM account WHERE {index} = $1"
     )))
-    .bind(identifier.as_str())
+    .bind(sealed.index.as_slice())
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -193,11 +197,12 @@ pub async fn create_session(
                 .and_then(languages::resolve)
                 .unwrap_or(languages::default());
             sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-                "INSERT INTO account ({column}, display_name, language)
-                 VALUES ($1, '', $2)
+                "INSERT INTO account ({encrypted}, {index}, display_name, language)
+                 VALUES ($1, $2, '', $3)
                  RETURNING id"
             )))
-            .bind(identifier.as_str())
+            .bind(&sealed.encrypted)
+            .bind(sealed.index.as_slice())
             .bind(language)
             .fetch_one(&mut *tx)
             .await?

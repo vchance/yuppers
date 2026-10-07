@@ -10,6 +10,32 @@ use sqlx::{Connection, Transaction};
 use tokio::sync::OnceCell;
 use yuppers_backend::db;
 
+/// What a phone number is stored as (migration 0025), for these tests,
+/// where the bytes do not matter: a stand-in of the blind index's length,
+/// or, for a value that is not a number, bytes of another length, which
+/// the table refuses as it refused the malformed number.
+fn phone_index(phone: &str) -> Vec<u8> {
+    if phone.starts_with('+') {
+        let mut index = phone.as_bytes().to_vec();
+        index.resize(32, 0);
+        index
+    } else {
+        phone.as_bytes().to_vec()
+    }
+}
+
+/// A number as a record of consent keeps it encrypted, likewise: a
+/// stand-in of a ciphertext's length, or of another for a malformed one.
+fn phone_encrypted(phone: &str) -> Vec<u8> {
+    if phone.starts_with('+') {
+        let mut sealed = phone.as_bytes().to_vec();
+        sealed.resize(50, 0);
+        sealed
+    } else {
+        phone.as_bytes().to_vec()
+    }
+}
+
 const FOREIGN_KEY: &str = "23503";
 const UNIQUE: &str = "23505";
 const CHECK: &str = "23514";
@@ -89,8 +115,11 @@ struct Agreement {
 
 async fn account(conn: &mut PgConnection) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO account (email, display_name, adult_confirmed_at)
-         VALUES (gen_random_uuid() || '@example.test', 'Test', now())
+        // An address as the service stores one (migration 0025): its
+        // encrypted copy and blind index, whose bytes do not matter here.
+        "INSERT INTO account (email_encrypted, email_index, display_name, adult_confirmed_at)
+         VALUES (decode(repeat('00', 50), 'hex'), sha256(gen_random_uuid()::text::bytea),
+                 'Test', now())
          RETURNING id",
     )
     .fetch_one(conn)
@@ -1204,16 +1233,16 @@ async fn sign_in_limits_are_counted_by_keyed_hash_and_the_service_can_forget_the
         tx,
         CHECK,
         sqlx::query(
-            "INSERT INTO one_time_code (identifier, purpose, code_hash, expires_at)
-             VALUES ('ana@example.com', 'anything', $1, now())",
+            "INSERT INTO one_time_code (identifier_index, purpose, code_hash, expires_at)
+             VALUES (sha256('ana@example.com'), 'anything', $1, now())",
         )
         .bind(subject.clone())
     );
     // A code with no hash is one Twilio Verify made (migration 0022), and
     // only such a one; no other maker is known.
     sqlx::query(
-        "INSERT INTO one_time_code (identifier, purpose, code_hash, checked_by, expires_at)
-         VALUES ('+12025550142', 'sign-in', NULL, 'TWILIO_VERIFY', now())",
+        "INSERT INTO one_time_code (identifier_index, purpose, code_hash, checked_by, expires_at)
+         VALUES (sha256('+12025550142'), 'sign-in', NULL, 'TWILIO_VERIFY', now())",
     )
     .execute(&mut *tx)
     .await
@@ -1222,16 +1251,16 @@ async fn sign_in_limits_are_counted_by_keyed_hash_and_the_service_can_forget_the
         tx,
         CHECK,
         sqlx::query(
-            "INSERT INTO one_time_code (identifier, purpose, code_hash, expires_at)
-             VALUES ('ana@example.com', 'sign-in', NULL, now())",
+            "INSERT INTO one_time_code (identifier_index, purpose, code_hash, expires_at)
+             VALUES (sha256('ana@example.com'), 'sign-in', NULL, now())",
         )
     );
     refused!(
         tx,
         CHECK,
         sqlx::query(
-            "INSERT INTO one_time_code (identifier, purpose, code_hash, checked_by, expires_at)
-             VALUES ('+12025550142', 'sign-in', $1, 'SOMEONE_ELSE', now())",
+            "INSERT INTO one_time_code (identifier_index, purpose, code_hash, checked_by, expires_at)
+             VALUES (sha256('+12025550142'), 'sign-in', $1, 'SOMEONE_ELSE', now())",
         )
         .bind(subject.clone())
     );
@@ -1385,10 +1414,12 @@ async fn text_updates_keep_a_record_of_consent_the_service_cannot_rewrite() {
     let phone = format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000);
 
     let subscribe = |phone: String| {
-        sqlx::query("INSERT INTO sms_update (account_id, exchange_id, phone) VALUES ($1, $2, $3)")
-            .bind(account)
-            .bind(exchange)
-            .bind(phone)
+        sqlx::query(
+            "INSERT INTO sms_update (account_id, exchange_id, phone_index) VALUES ($1, $2, $3)",
+        )
+        .bind(account)
+        .bind(exchange)
+        .bind(phone_index(&phone))
     };
     refused!(tx, CHECK, subscribe("5551234567".to_owned()));
     subscribe(phone.clone()).execute(&mut *tx).await.unwrap();
@@ -1399,14 +1430,14 @@ async fn text_updates_keep_a_record_of_consent_the_service_cannot_rewrite() {
         |action: &'static str, version: Option<&'static str>, keyword: Option<&'static str>| {
             sqlx::query(
                 "INSERT INTO sms_consent
-                 (action, account_id, exchange_id, phone, source, keyword,
+                 (action, account_id, exchange_id, phone_index, source, keyword,
                   consent_version, consent_language)
              VALUES ($1, $2, $3, $4, 'WEB', $5, $6, $7)",
             )
             .bind(action)
             .bind(account)
             .bind(exchange)
-            .bind(phone.clone())
+            .bind(phone_index(&phone))
             .bind(keyword)
             .bind(version)
             .bind(version.map(|_| "en"))
@@ -1431,27 +1462,28 @@ async fn text_updates_keep_a_record_of_consent_the_service_cannot_rewrite() {
         tx,
         CHECK,
         sqlx::query(
-            "INSERT INTO sms_consent (action, phone, source, consent_version, consent_language)
+            "INSERT INTO sms_consent (action, phone_index, source, consent_version, consent_language)
              VALUES ('OPT_IN', $1, 'WEB', 'v1', 'en')",
         )
-        .bind(&phone)
+        .bind(phone_index(&phone))
     );
     refused!(
         tx,
         CHECK,
         sqlx::query(
-            "INSERT INTO sms_consent (action, phone, source, keyword)
+            "INSERT INTO sms_consent (action, phone_index, source, keyword)
              VALUES ('STOP', $1, 'SOMEWHERE', 'STOP')",
         )
-        .bind(&phone)
+        .bind(phone_index(&phone))
     );
 
-    let id: i64 =
-        sqlx::query_scalar("SELECT id FROM sms_consent WHERE phone = $1 AND action = 'OPT_IN'")
-            .bind(&phone)
-            .fetch_one(&mut *tx)
-            .await
-            .unwrap();
+    let id: i64 = sqlx::query_scalar(
+        "SELECT id FROM sms_consent WHERE phone_index = $1 AND action = 'OPT_IN'",
+    )
+    .bind(phone_index(&phone))
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO sms_consent_network (consent_id, ip_address, user_agent)
          VALUES ($1, '192.0.2.1', 'test')",
@@ -1464,7 +1496,7 @@ async fn text_updates_keep_a_record_of_consent_the_service_cannot_rewrite() {
     refused!(
         tx,
         INSUFFICIENT_PRIVILEGE,
-        sqlx::query("UPDATE sms_consent SET phone = '+15550000000' WHERE id = $1").bind(id)
+        sqlx::query("UPDATE sms_consent SET phone_encrypted = NULL WHERE id = $1").bind(id)
     );
     refused!(
         tx,
@@ -1487,7 +1519,9 @@ async fn text_updates_keep_a_record_of_consent_the_service_cannot_rewrite() {
     assert_eq!(network, 0);
 
     // The opt-out list: one row a number.
-    let stop = || sqlx::query("INSERT INTO sms_opt_out (phone) VALUES ($1)").bind(phone.clone());
+    let stop = || {
+        sqlx::query("INSERT INTO sms_opt_out (phone_index) VALUES ($1)").bind(phone_index(&phone))
+    };
     stop().execute(&mut *tx).await.unwrap();
     refused!(tx, UNIQUE, stop());
 
@@ -1822,11 +1856,14 @@ async fn the_deletion_log_holds_an_account_once_and_the_service_only_adds_to_it(
         error.to_string().contains("only a deleted account"),
         "{error}"
     );
-    sqlx::query("UPDATE account SET status = 'DELETED', email = NULL WHERE id = $1")
-        .bind(account)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE account SET status = 'DELETED', email_encrypted = NULL, email_index = NULL
+         WHERE id = $1",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
     log(account).execute(&mut *tx).await.unwrap();
     // An account is deleted once, and only an account that exists.
     refused!(tx, UNIQUE, log(account));
@@ -1994,13 +2031,14 @@ async fn a_code_by_text_keeps_a_record_of_consent_the_service_cannot_rewrite() {
                    language: &'static str| {
         sqlx::query(
             "INSERT INTO sms_code_consent
-                 (purpose, account_id, phone, phone_hash, source, consent_version, consent_language)
+                 (purpose, account_id, phone_encrypted, phone_hash, source, consent_version,
+                  consent_language)
              VALUES ($1, $2, $3, $4, $5, '2026-10-06', $6)
              RETURNING id",
         )
         .bind(purpose)
         .bind(account)
-        .bind(phone.map(str::to_owned))
+        .bind(phone.map(phone_encrypted))
         .bind(hash.to_vec())
         .bind(source)
         .bind(language)
@@ -2102,7 +2140,7 @@ async fn a_code_by_text_keeps_a_record_of_consent_the_service_cannot_rewrite() {
     refused!(
         tx,
         INSUFFICIENT_PRIVILEGE,
-        sqlx::query("UPDATE sms_code_consent SET phone = NULL WHERE id = $1").bind(id)
+        sqlx::query("UPDATE sms_code_consent SET phone_encrypted = NULL WHERE id = $1").bind(id)
     );
     refused!(
         tx,

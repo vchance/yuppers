@@ -8,7 +8,9 @@
 # exported before restoring, or else the .deletions file of the newest
 # backup there is, whichever backup was restored. Connects as the
 # application role: -d, or else DATABASE_URL. Run it after restore.sh and
-# migrate, before the api and the worker start on the copy.
+# migrate, before the api and the worker start on the copy, with
+# CONTACT_DATA_KEY set to the key the backup was made under, which the
+# binary needs (docs/operations.md, "Contact data key").
 #
 # Each account is deleted through the service's own deletion, by the
 # replay-deletions binary (REPLAY_BIN, default

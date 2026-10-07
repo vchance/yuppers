@@ -2,6 +2,7 @@
 import {
   languages,
   LEGAL_DOCUMENTS,
+  LEGAL_EFFECTIVE_DATES,
   LEGAL_SECTIONS,
   legalInline,
   PRIVACY_EMAIL,
@@ -78,7 +79,7 @@ describe.each(cases)('%s in %s', (kind, language) => {
     // Where to write is a link to write to.
     const email = kind === 'privacy' ? PRIVACY_EMAIL : SUPPORT_EMAIL
     expect(main.querySelector(`a[href="mailto:${email}"]`)?.textContent).toBe(email)
-    expect(main.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-06')
+    expect(main.querySelector('time')?.getAttribute('datetime')).toBe(LEGAL_EFFECTIVE_DATES[kind])
     // The address stays the one the page is read at, and the footer marks it.
     expect(window.location.pathname).toBe(address(kind, language))
     const footer = document.querySelector('footer')!

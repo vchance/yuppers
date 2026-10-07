@@ -7,6 +7,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   LEGAL_DOCUMENTS,
+  LEGAL_EFFECTIVE_DATES,
   LEGAL_SECTIONS,
   PRIVACY_EMAIL,
   SUPPORT_EMAIL,
@@ -79,7 +80,9 @@ describe('the static pages of the privacy policy and the terms', () => {
       }
       const email = document === 'privacy' ? PRIVACY_EMAIL : SUPPORT_EMAIL
       expect(root.querySelector(`a[href="mailto:${email}"]`)?.textContent).toBe(email)
-      expect(root.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-06')
+      expect(root.querySelector('time')?.getAttribute('datetime')).toBe(
+        LEGAL_EFFECTIVE_DATES[document],
+      )
       expect(root.textContent).not.toMatch(/[{}]|\*\*/)
       // Each links to the other.
       const other = document === 'privacy' ? 'terms' : 'privacy'

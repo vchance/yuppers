@@ -27,6 +27,13 @@ fi
 restored_url="$1"
 restored_app_url="$2"
 source_url="${3:-$1}"
+# The api refuses to start without the key the backup's contact details
+# are encrypted under (docs/operations.md, "Contact data key"): the copy
+# kept outside the platform, which this proves still opens it.
+if [ -z "${CONTACT_DATA_KEY:-}" ]; then
+    echo "$0: set CONTACT_DATA_KEY to the key the backup was made under" >&2
+    exit 2
+fi
 bin="${PG_BIN:+$PG_BIN/}"
 api_bin="${API_BIN:-backend/target/debug/api}"
 port="${PORT:-8095}"

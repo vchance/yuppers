@@ -8,6 +8,8 @@
 
 #![allow(dead_code)]
 
+pub mod texting;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -24,14 +26,67 @@ use tower::ServiceExt;
 use uuid::Uuid;
 use yuppers_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
 use yuppers_backend::client_version::MinimumClientVersions;
+use yuppers_backend::contact::{self, Key, KeyConfig, store};
 use yuppers_backend::db;
 use yuppers_backend::domain::Rules;
+use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
 use yuppers_backend::metrics::HttpMetrics;
 use yuppers_backend::notifications::smtp::Secret;
 use yuppers_backend::wallet::Wallet;
 
 pub const CONSENT_VERSION: &str = "test-1";
+
+/// The `CONTACT_DATA_KEY` every test runs with, and gives the processes it
+/// starts: fixed, and for tests alone.
+pub const CONTACT_DATA_KEY: &str = "ynS/WXUM1m1WI7fr0aperankrkmPmF/RkljW3na68ag=";
+
+pub fn contact_config() -> KeyConfig {
+    KeyConfig::new(
+        Key::parse("CONTACT_DATA_KEY", CONTACT_DATA_KEY).unwrap(),
+        None,
+    )
+    .unwrap()
+}
+
+/// An identifier as an account stores it, encrypted and indexed under the
+/// test key.
+pub fn sealed(identifier: &str) -> contact::Sealed {
+    contact::keys().sealed(&Identifier::parse(identifier).unwrap())
+}
+
+/// The blind index an email address or phone number is stored and found by.
+pub fn index(identifier: &str) -> Vec<u8> {
+    contact::keys()
+        .index_of(&Identifier::parse(identifier).unwrap())
+        .to_vec()
+}
+
+/// Decrypts what a column of `field` holds, as the service would to send to
+/// it.
+pub fn open(field: contact::Field, sealed: &[u8]) -> String {
+    contact::keys().open(field, sealed).unwrap()
+}
+
+/// Gives an account `phone` as its number, stored as the service stores
+/// one, and with `drop_email`, takes its email address away.
+pub async fn set_phone(db: &PgPool, account: Uuid, phone: &str, drop_email: bool) {
+    let number = sealed(phone);
+    sqlx::query(
+        "UPDATE account
+         SET phone_encrypted = $2, phone_index = $3,
+             email_encrypted = CASE WHEN $4 THEN NULL ELSE email_encrypted END,
+             email_index = CASE WHEN $4 THEN NULL ELSE email_index END
+         WHERE id = $1",
+    )
+    .bind(account)
+    .bind(&number.encrypted)
+    .bind(number.index.as_slice())
+    .bind(drop_email)
+    .execute(db)
+    .await
+    .unwrap();
+}
 
 /// The address every test request appears to come from.
 pub const PEER: SocketAddr = SocketAddr::new(
@@ -74,7 +129,7 @@ fn checkout_tag() -> String {
 
 /// Creates the binary's database once per run and returns the owner and
 /// application connection strings for it.
-async fn database(name: &'static str) -> &'static (String, String) {
+pub async fn database(name: &'static str) -> &'static (String, String) {
     static URLS: OnceCell<(String, String)> = OnceCell::const_new();
     URLS.get_or_init(|| async move {
         let name = &format!("{name}_{}", checkout_tag());
@@ -112,6 +167,11 @@ async fn database(name: &'static str) -> &'static (String, String) {
         let owner_url = with_database(&owner_url, name);
         let owner = connect(&owner_url).await;
         db::MIGRATOR.run(&owner).await.expect("migrations apply");
+        // As `migrate` does, and as the api and the worker install them.
+        let keys = store::bootstrap(&owner, &contact_config())
+            .await
+            .expect("the contact data key is stored");
+        contact::install(keys);
         owner.close().await;
 
         (owner_url, with_database(&env("DATABASE_URL"), name))
@@ -150,6 +210,13 @@ pub struct User {
     pub id: Uuid,
     pub email: String,
     token: String,
+}
+
+impl User {
+    /// Someone who signed in through the API, with the token it gave.
+    pub fn signed_in(id: Uuid, email: String, token: String) -> Self {
+        Self { id, email, token }
+    }
 }
 
 pub struct App {
@@ -384,12 +451,15 @@ impl App {
 
     pub async fn user_with(&self, name: &str, adult: bool) -> User {
         let email = format!("{}@example.test", Uuid::new_v4().simple());
+        // Stored as the service stores an address (`contact`).
+        let address = sealed(&email);
         let id: Uuid = sqlx::query_scalar(
-            "INSERT INTO account (email, display_name, adult_confirmed_at)
-             VALUES ($1, $2, CASE WHEN $3 THEN now() END)
+            "INSERT INTO account (email_encrypted, email_index, display_name, adult_confirmed_at)
+             VALUES ($1, $2, $3, CASE WHEN $4 THEN now() END)
              RETURNING id",
         )
-        .bind(&email)
+        .bind(&address.encrypted)
+        .bind(address.index.as_slice())
         .bind(name)
         .bind(adult)
         .fetch_one(&self.db)

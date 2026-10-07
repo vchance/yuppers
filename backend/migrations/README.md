@@ -197,6 +197,17 @@ One-time codes for phone numbers through Twilio Verify (README, "Signing in"; `b
 
 `sms_consent.source` takes `NO_LONGER_A_PARTY`: a party removed from an agreement before the other party confirmed them, or who left it then, loses its text updates with the rest of what was theirs alone in it (`exchanges::repo::vacate`), and the ending is recorded as every other is.
 
+## 0025_contact_encryption
+
+Email addresses and phone numbers at rest (`backend/src/contact`; README, "Contact details at rest"). Each plaintext column that held one is dropped, and in its place: an encrypted copy (`*_encrypted`, XChaCha20-Poly1305 under a key derived from `CONTACT_DATA_KEY`, bound to its table and column) where the value must be read back, and a blind index (`*_index`, HMAC-SHA256 of the normalized value under the index key) where it must be found or compared. `account` has both, unique on the index; `invitation`, `one_time_code` and `sms_update` the index alone, and `sms_opt_out` the index as its key; `sms_consent` both, except an opt-out the service writes, which ties to its opt-in by the index alone; `sms_code_consent` the encrypted copy, beside its `phone_hash` under `APP_SECRET`.
+
+- **A fresh start.** Nothing stored before is converted: the migration refuses to run, changing nothing, while `account`, `invitation`, `one_time_code`, `sms_update`, `sms_opt_out`, `sms_consent` or `sms_code_consent` holds a row, and says to reset the database first (docs/deploy-render.md, "Contact data key"; for development, README, "Contact details at rest").
+- **`contact_key`**: the blind-index key, derived from the first `CONTACT_DATA_KEY` `migrate` is given and stored encrypted under it, so that rotating the key never moves an index. Only the owner writes it; the service reads it at start, which is how a wrong key is refused.
+- **The records of consent** stay the service's to add to and remove, never to change. A record's number is encrypted with the record's ID in its associated data, so a ciphertext copied from one record does not decrypt in another; the service takes the ID first, from the two sequences, on which it now has `USAGE`.
+- The `account` check that a live account can be reached counts the indexes.
+
+`backend/tests/contact.rs` checks what is written, the refusals and the migration's guard; `backend/tests/contact_scan.rs` that no address or number is anywhere in the database after a whole life through the API; `backend/tests/contact_rotation.rs` rotating the key. `scripts/restore-inventory.txt`, checked by `backend/tests/inventory.rs`, holds the new grants.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

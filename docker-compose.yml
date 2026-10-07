@@ -8,9 +8,19 @@
 #
 # The connection strings match .env.example. Everything here is for a
 # development machine: the roles' passwords are the well-known ones, codes and
-# notifications go to the containers' logs, and the application secret is the
-# development placeholder unless APP_SECRET is set in the environment or in
-# `.env`. A real deployment sets each of these (README, "Deploying").
+# notifications go to the containers' logs, and the application secret is
+# the development placeholder unless APP_SECRET is set in the environment or
+# in `.env`. CONTACT_DATA_KEY has no default here: the full stack takes it
+# from the environment or `.env`, and refuses to start without it. The
+# published development key in .env.example does not do here: migrate
+# refuses it for a database that is not on this machine, and this one is
+# another container. Make one once and keep it in `.env` for as long as the
+# volume lives (a new key cannot read what the old one sealed):
+#
+#   echo "CONTACT_DATA_KEY=$(openssl rand -base64 32)" >> .env
+#
+# (the last CONTACT_DATA_KEY line of `.env` is the one used). A real
+# deployment sets each of these (README, "Deploying").
 
 x-service: &service
   image: ${YUPPERS_IMAGE:-yuppers:local}
@@ -19,6 +29,11 @@ x-service: &service
 
 x-app-environment: &app-environment
   DATABASE_URL: postgres://exchange_app:exchange_app@postgres:5432/yuppers
+  # Encrypts the email addresses and phone numbers stored (README, "Contact
+  # details at rest"). From the environment or `.env`, never a default: the
+  # processes refuse to start without it, and refuse the published
+  # development keys (see the top of this file).
+  CONTACT_DATA_KEY: ${CONTACT_DATA_KEY:-}
   WEB_ORIGIN: http://localhost:8080
   RUST_LOG: ${RUST_LOG:-info}
   LOG_FORMAT: ${LOG_FORMAT:-text}
@@ -52,6 +67,7 @@ services:
     command: ["/usr/local/bin/migrate"]
     environment:
       MIGRATION_DATABASE_URL: postgres://exchange:exchange@postgres:5432/yuppers
+      CONTACT_DATA_KEY: ${CONTACT_DATA_KEY:-}
       RUST_LOG: ${RUST_LOG:-info}
     depends_on:
       postgres:

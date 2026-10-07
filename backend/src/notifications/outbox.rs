@@ -32,6 +32,7 @@ use uuid::Uuid;
 
 use super::wording::{Links, Wording};
 use super::{Email, EmailSender};
+use crate::contact::{self, Field};
 use crate::domain::notification::Notice;
 use crate::domain::reminder;
 use crate::domain::revision::ContributionId;
@@ -160,7 +161,7 @@ async fn insert(
     sqlx::query(
         "INSERT INTO outbox (kind, recipient_account_id, exchange_id, event_sequence, payload)
          SELECT 'EMAIL', id, $2, $3, $4 FROM account
-         WHERE id = $1 AND status = 'ACTIVE' AND email IS NOT NULL
+         WHERE id = $1 AND status = 'ACTIVE' AND email_index IS NOT NULL
          UNION ALL
          SELECT 'PUSH', a.id, $2, $3, $4 FROM account a
          WHERE a.id = $1 AND a.status = 'ACTIVE'
@@ -421,15 +422,25 @@ async fn prepare(
 
     // Read now, not when the message was queued: the person may have changed
     // their address or language since, or left.
-    let account: Option<(Option<String>, String)> =
-        sqlx::query_as("SELECT email, language FROM account WHERE id = $1 AND status = 'ACTIVE'")
-            .bind(row.recipient)
-            .fetch_optional(&mut *conn)
-            .await?;
-    let Some((Some(to), language)) = account else {
+    let account: Option<(Option<Vec<u8>>, String)> = sqlx::query_as(
+        "SELECT email_encrypted, language FROM account WHERE id = $1 AND status = 'ACTIVE'",
+    )
+    .bind(row.recipient)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((encrypted, language)) = account else {
         return Ok(Err(Attempt::Dropped(
             "not sent: the recipient can no longer be emailed",
         )));
+    };
+    let to = match recipient(encrypted) {
+        Ok(Some(to)) => to,
+        Ok(None) => {
+            return Ok(Err(Attempt::Dropped(
+                "not sent: the recipient can no longer be emailed",
+            )));
+        }
+        Err(attempt) => return Ok(Err(attempt)),
     };
 
     // A message about an event stays true: the event happened. A reminder
@@ -479,6 +490,15 @@ async fn prepare(
     }))
 }
 
+/// The address to send to, decrypted here and nowhere else on the way
+/// (`crate::contact`). A value that does not decrypt is a failure, tried
+/// again like any other, and its error names no address.
+fn recipient(encrypted: Option<Vec<u8>>) -> Result<Option<String>, Attempt> {
+    contact::keys()
+        .reveal(Field::ACCOUNT_EMAIL, encrypted.as_deref())
+        .map_err(|unreadable| Attempt::Failed(unreadable.to_string()))
+}
+
 /// The email telling a reviewer that a report is waiting (`crate::review`).
 /// Sent only to someone who is still a reviewer and can still be emailed.
 async fn staff_alert(
@@ -486,18 +506,22 @@ async fn staff_alert(
     delivery: &Delivery,
     row: Row<'_>,
 ) -> Result<Result<Email, Attempt>, sqlx::Error> {
-    let account: Option<(Option<String>, String)> = sqlx::query_as(
-        "SELECT a.email, a.language FROM account a
+    let account: Option<(Option<Vec<u8>>, String)> = sqlx::query_as(
+        "SELECT a.email_encrypted, a.language FROM account a
          JOIN staff_member s ON s.account_id = a.id
          WHERE a.id = $1 AND a.status = 'ACTIVE'",
     )
     .bind(row.recipient)
     .fetch_optional(&mut *conn)
     .await?;
-    let Some((Some(to), language)) = account else {
-        return Ok(Err(Attempt::Dropped(
-            "not sent: the recipient is no longer a reviewer who can be emailed",
-        )));
+    let gone = "not sent: the recipient is no longer a reviewer who can be emailed";
+    let Some((encrypted, language)) = account else {
+        return Ok(Err(Attempt::Dropped(gone)));
+    };
+    let to = match recipient(encrypted) {
+        Ok(Some(to)) => to,
+        Ok(None) => return Ok(Err(Attempt::Dropped(gone))),
+        Err(attempt) => return Ok(Err(attempt)),
     };
     let link = format!("{}/staff", delivery.web_origin);
     let rendered = delivery.wording.staff_alert(&language, &link);

@@ -49,9 +49,11 @@ use super::outbox::{Delivered, DeliveryRules};
 use super::sms::{Sms, SmsSender};
 use super::wording::Wording;
 use crate::auth::{AuthRules, SmsPlace};
+use crate::contact::{self, Field, Kind};
 use crate::domain::Rules;
 use crate::domain::identity::Identifier;
 use crate::domain::notification::Notice;
+use crate::error::Redacted;
 
 /// The version of the consent wording, `smsUpdates.consent`, that the
 /// clients show beside the box. A client must name it when it turns
@@ -128,9 +130,10 @@ async fn queue(
     sqlx::query(
         "INSERT INTO outbox (kind, recipient_account_id, exchange_id, event_sequence, payload)
          SELECT 'SMS', a.id, $2, $3, $4 FROM account a
-         JOIN sms_update u ON u.account_id = a.id AND u.exchange_id = $2 AND u.phone = a.phone
+         JOIN sms_update u
+           ON u.account_id = a.id AND u.exchange_id = $2 AND u.phone_index = a.phone_index
          WHERE a.id = $1 AND a.status = 'ACTIVE'
-           AND NOT EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone = a.phone)
+           AND NOT EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone_index = a.phone_index)
            AND (SELECT count(*) FROM outbox q
                 WHERE q.kind = 'SMS' AND q.recipient_account_id = $1
                   AND q.created_at >= date_trunc('day', now(), 'UTC')) < $5",
@@ -219,11 +222,13 @@ pub async fn standing(
     account: Uuid,
     exchange: Uuid,
 ) -> Result<Standing, sqlx::Error> {
-    let (phone, on, opted_out): (Option<String>, bool, bool) = sqlx::query_as(
-        "SELECT a.phone,
+    // Matched by blind index; the number is decrypted to show its owner.
+    let (phone, on, opted_out): (Option<Vec<u8>>, bool, bool) = sqlx::query_as(
+        "SELECT a.phone_encrypted,
                 EXISTS (SELECT 1 FROM sms_update u
-                        WHERE u.account_id = a.id AND u.exchange_id = $2 AND u.phone = a.phone),
-                EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone = a.phone)
+                        WHERE u.account_id = a.id AND u.exchange_id = $2
+                          AND u.phone_index = a.phone_index),
+                EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone_index = a.phone_index)
          FROM account a WHERE a.id = $1",
     )
     .bind(account)
@@ -232,7 +237,7 @@ pub async fn standing(
     .await?;
     Ok(Standing {
         on,
-        phone,
+        phone: contact::keys().reveal(Field::ACCOUNT_PHONE, phone.as_deref())?,
         opted_out,
     })
 }
@@ -249,39 +254,48 @@ pub async fn turn_on(
     phone: &str,
     consent: &Consent<'_>,
 ) -> Result<bool, sqlx::Error> {
-    let already: Option<String> = sqlx::query_scalar(
-        "SELECT phone FROM sms_update WHERE account_id = $1 AND exchange_id = $2 FOR UPDATE",
+    // The subscription keeps the number's blind index; the record of
+    // consent keeps it encrypted as well, bound to the record
+    // (`crate::contact`).
+    let keys = contact::keys();
+    let index = keys.index(Kind::Phone, phone);
+    let already: Option<Vec<u8>> = sqlx::query_scalar(
+        "SELECT phone_index FROM sms_update WHERE account_id = $1 AND exchange_id = $2 FOR UPDATE",
     )
     .bind(account)
     .bind(exchange)
     .fetch_optional(&mut *conn)
     .await?;
-    if already.as_deref() == Some(phone) {
+    if already.as_deref() == Some(index.as_slice()) {
         return Ok(false);
     }
     sqlx::query(
-        "INSERT INTO sms_update (account_id, exchange_id, phone) VALUES ($1, $2, $3)
+        "INSERT INTO sms_update (account_id, exchange_id, phone_index) VALUES ($1, $2, $3)
          ON CONFLICT (account_id, exchange_id)
-         DO UPDATE SET phone = EXCLUDED.phone, turned_on_at = now()",
+         DO UPDATE SET phone_index = EXCLUDED.phone_index, turned_on_at = now()",
     )
     .bind(account)
     .bind(exchange)
-    .bind(phone)
+    .bind(index.as_slice())
     .execute(&mut *conn)
     .await?;
-    let id: i64 = sqlx::query_scalar(
+    let id = next_consent_id(conn).await?;
+    sqlx::query(
         "INSERT INTO sms_consent
-             (action, account_id, exchange_id, phone, source, consent_version, consent_language)
-         VALUES ('OPT_IN', $1, $2, $3, $4, $5, $6)
-         RETURNING id",
+             (id, action, account_id, exchange_id, phone_encrypted, phone_index, source,
+              consent_version, consent_language)
+         OVERRIDING SYSTEM VALUE
+         VALUES ($1, 'OPT_IN', $2, $3, $4, $5, $6, $7, $8)",
     )
+    .bind(id)
     .bind(account)
     .bind(exchange)
-    .bind(phone)
+    .bind(keys.seal(Field::SMS_CONSENT_PHONE.row(id), phone))
+    .bind(index.as_slice())
     .bind(consent.source.as_str())
     .bind(consent.version)
     .bind(consent.language)
-    .fetch_one(&mut *conn)
+    .execute(&mut *conn)
     .await?;
     let user_agent: Option<String> = consent
         .user_agent
@@ -319,9 +333,9 @@ pub async fn turn_off(
     let removed = sqlx::query(
         "WITH gone AS (
              DELETE FROM sms_update WHERE account_id = $1 AND exchange_id = $2
-             RETURNING account_id, exchange_id, phone)
-         INSERT INTO sms_consent (action, account_id, exchange_id, phone, source)
-         SELECT 'OPT_OUT', account_id, exchange_id, phone, $3 FROM gone",
+             RETURNING account_id, exchange_id, phone_index)
+         INSERT INTO sms_consent (action, account_id, exchange_id, phone_index, source)
+         SELECT 'OPT_OUT', account_id, exchange_id, phone_index, $3 FROM gone",
     )
     .bind(account)
     .bind(exchange)
@@ -338,19 +352,19 @@ pub async fn turn_off(
 pub async fn forget_numbers(
     conn: &mut PgConnection,
     account: Uuid,
-    keep: Option<&str>,
+    keep: Option<&[u8; 32]>,
     source: Source,
 ) -> Result<u64, sqlx::Error> {
     let removed = sqlx::query(
         "WITH gone AS (
              DELETE FROM sms_update
-             WHERE account_id = $1 AND ($2::text IS NULL OR phone <> $2)
-             RETURNING account_id, exchange_id, phone)
-         INSERT INTO sms_consent (action, account_id, exchange_id, phone, source)
-         SELECT 'OPT_OUT', account_id, exchange_id, phone, $3 FROM gone",
+             WHERE account_id = $1 AND ($2::bytea IS NULL OR phone_index <> $2)
+             RETURNING account_id, exchange_id, phone_index)
+         INSERT INTO sms_consent (action, account_id, exchange_id, phone_index, source)
+         SELECT 'OPT_OUT', account_id, exchange_id, phone_index, $3 FROM gone",
     )
     .bind(account)
-    .bind(keep)
+    .bind(keep.map(<[u8; 32]>::as_slice))
     .bind(source.as_str())
     .execute(conn)
     .await?
@@ -428,29 +442,24 @@ pub async fn first_receipt(
 /// for it is sent. Returns how many agreements' updates were turned off.
 /// Run in a transaction, so that it is all or nothing.
 pub async fn stop(conn: &mut PgConnection, phone: &str, keyword: &str) -> Result<u64, sqlx::Error> {
+    // The list holds the number's blind index (`crate::contact`).
+    let index = contact::keys().index(Kind::Phone, phone);
     sqlx::query(
-        "INSERT INTO sms_opt_out (phone) VALUES ($1)
-         ON CONFLICT (phone) DO UPDATE SET opted_out_at = now()",
+        "INSERT INTO sms_opt_out (phone_index) VALUES ($1)
+         ON CONFLICT (phone_index) DO UPDATE SET opted_out_at = now()",
     )
-    .bind(phone)
+    .bind(index.as_slice())
     .execute(&mut *conn)
     .await?;
-    sqlx::query(
-        "INSERT INTO sms_consent (action, phone, source, keyword)
-         VALUES ('STOP', $1, 'SMS_REPLY', $2)",
-    )
-    .bind(phone)
-    .bind(keyword_text(keyword))
-    .execute(&mut *conn)
-    .await?;
+    record_keyword(conn, "STOP", phone, &index, keyword).await?;
     let turned_off = sqlx::query(
         "WITH gone AS (
-             DELETE FROM sms_update WHERE phone = $1
-             RETURNING account_id, exchange_id, phone)
-         INSERT INTO sms_consent (action, account_id, exchange_id, phone, source)
-         SELECT 'OPT_OUT', account_id, exchange_id, phone, 'SMS_REPLY' FROM gone",
+             DELETE FROM sms_update WHERE phone_index = $1
+             RETURNING account_id, exchange_id, phone_index)
+         INSERT INTO sms_consent (action, account_id, exchange_id, phone_index, source)
+         SELECT 'OPT_OUT', account_id, exchange_id, phone_index, 'SMS_REPLY' FROM gone",
     )
-    .bind(phone)
+    .bind(index.as_slice())
     .execute(&mut *conn)
     .await?
     .rows_affected();
@@ -461,17 +470,44 @@ pub async fn stop(conn: &mut PgConnection, phone: &str, keyword: &str) -> Result
 /// No agreement's updates come back on; each is turned on again by ticking
 /// its box. Run in a transaction.
 pub async fn start(conn: &mut PgConnection, phone: &str, keyword: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM sms_opt_out WHERE phone = $1")
-        .bind(phone)
+    let index = contact::keys().index(Kind::Phone, phone);
+    sqlx::query("DELETE FROM sms_opt_out WHERE phone_index = $1")
+        .bind(index.as_slice())
         .execute(&mut *conn)
         .await?;
+    record_keyword(conn, "START", phone, &index, keyword).await?;
+    Ok(())
+}
+
+/// The ID a new record of consent will have, taken first so that its number
+/// can be encrypted bound to it (`contact::Field::row`).
+async fn next_consent_id(conn: &mut PgConnection) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT nextval('sms_consent_id_seq')")
+        .fetch_one(conn)
+        .await
+}
+
+/// Records a STOP or a START from `phone`: its blind index, and the number
+/// encrypted bound to the record.
+async fn record_keyword(
+    conn: &mut PgConnection,
+    action: &str,
+    phone: &str,
+    index: &[u8; 32],
+    keyword: &str,
+) -> Result<(), sqlx::Error> {
+    let id = next_consent_id(conn).await?;
     sqlx::query(
-        "INSERT INTO sms_consent (action, phone, source, keyword)
-         VALUES ('START', $1, 'SMS_REPLY', $2)",
+        "INSERT INTO sms_consent (id, action, phone_encrypted, phone_index, source, keyword)
+         OVERRIDING SYSTEM VALUE
+         VALUES ($1, $2, $3, $4, 'SMS_REPLY', $5)",
     )
-    .bind(phone)
+    .bind(id)
+    .bind(action)
+    .bind(contact::keys().seal(Field::SMS_CONSENT_PHONE.row(id), phone))
+    .bind(index.as_slice())
     .bind(keyword_text(keyword))
-    .execute(&mut *conn)
+    .execute(conn)
     .await?;
     Ok(())
 }
@@ -527,11 +563,11 @@ pub async fn purge_consent(
                    WHERE e.id > c.id
                      AND ((e.account_id = c.account_id AND e.exchange_id = c.exchange_id
                            AND e.action IN ('OPT_OUT', 'OPT_IN'))
-                          OR (e.action = 'STOP' AND e.phone = c.phone))),
+                          OR (e.action = 'STOP' AND e.phone_index = c.phone_index))),
                    '-infinity') >= $1)
            AND NOT (c.action = 'STOP' AND EXISTS (
                    SELECT 1 FROM sms_opt_out o
-                   WHERE o.phone = c.phone AND o.opted_out_at <= c.created_at))",
+                   WHERE o.phone_index = c.phone_index AND o.opted_out_at <= c.created_at))",
     )
     .bind(at - rules.sms_consent_retention)
     .execute(db)
@@ -740,21 +776,31 @@ async fn prepare(
 
     // Read now, not when it was queued: the person may have turned updates
     // off, changed their number or replied STOP since.
-    let found: Option<(String, String, bool)> = sqlx::query_as(
-        "SELECT a.phone, a.language,
-                EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone = a.phone)
+    let found: Option<(Vec<u8>, String, bool)> = sqlx::query_as(
+        "SELECT a.phone_encrypted, a.language,
+                EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone_index = a.phone_index)
          FROM account a
-         JOIN sms_update u ON u.account_id = a.id AND u.exchange_id = $2 AND u.phone = a.phone
+         JOIN sms_update u
+           ON u.account_id = a.id AND u.exchange_id = $2 AND u.phone_index = a.phone_index
          WHERE a.id = $1 AND a.status = 'ACTIVE'",
     )
     .bind(recipient)
     .bind(exchange)
     .fetch_optional(&mut *conn)
     .await?;
-    let Some((phone, language, opted_out)) = found else {
+    let Some((sealed, language, opted_out)) = found else {
         return Ok(Err(Attempt::Dropped(
             "not sent: text updates are no longer on for this number",
         )));
+    };
+    // Decrypted here, to be sent to, and nowhere else. One that does not
+    // decrypt is a failure, tried again like any other, naming no number.
+    let phone = match contact::keys().open(Field::ACCOUNT_PHONE, &sealed) {
+        Ok(phone) => phone,
+        Err(unreadable) => {
+            let error = sqlx::Error::from(unreadable);
+            return Ok(Err(Attempt::Failed(Redacted(&error).to_string())));
+        }
     };
     if opted_out {
         return Ok(Err(Attempt::Dropped("not sent: the number replied STOP")));

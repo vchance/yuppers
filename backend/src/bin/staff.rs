@@ -16,6 +16,7 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use sqlx::postgres::PgPoolOptions;
+use yuppers_backend::contact::{self, store};
 use yuppers_backend::review;
 
 const USAGE: &str = "usage: staff grant <email|phone|account-id>
@@ -49,6 +50,10 @@ async fn run(args: Vec<String>) -> anyhow::Result<()> {
         .connect(&url)
         .await
         .context("cannot connect with MIGRATION_DATABASE_URL")?;
+    // Accounts are found by the blind index of their address, and the list
+    // shows each reviewer's address masked (yuppers_backend::contact).
+    let keys = yuppers_backend::config::contact_keys_from_env()?;
+    contact::install(store::open(&db, &keys).await.context("CONTACT_DATA_KEY")?);
 
     match args.as_slice() {
         ["grant", who] => {

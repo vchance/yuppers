@@ -6,11 +6,13 @@
 # are run by naming them (see docker-compose.yml), as is `replay-deletions`
 # after a restore (docs/operations.md, "Replaying deletions"), and `staff`,
 # the owner's command that names who reviews reports (docs/operations.md,
-# "Reviewing reports").
+# "Reviewing reports"), and `contact-data`, the owner's command that says how
+# far contact details are encrypted and re-encrypts them under a new key
+# (docs/operations.md, "Contact data key").
 #
-# Nothing secret is built in. Every setting, the database connection and
-# APP_SECRET first of all, comes from the environment at run time
-# (.env.example lists them).
+# Nothing secret is built in. Every setting, the database connection,
+# APP_SECRET and CONTACT_DATA_KEY first of all, comes from the environment
+# at run time (.env.example lists them).
 #
 # Which build it is, is built in: the git commit (`--build-arg GIT_SHA=...`,
 # or Render's RENDER_GIT_COMMIT) and the build time (`--build-arg
@@ -58,15 +60,15 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     export GIT_SHA="${GIT_SHA:-$RENDER_GIT_COMMIT}" \
     && export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
     && cd backend \
-    && cargo build --release --locked --bin api --bin worker --bin migrate --bin replay-deletions --bin staff \
+    && cargo build --release --locked --bin api --bin worker --bin migrate --bin replay-deletions --bin staff --bin contact-data \
     && mkdir -p /out \
-    && cp target/release/api target/release/worker target/release/migrate target/release/replay-deletions target/release/staff /out/
+    && cp target/release/api target/release/worker target/release/migrate target/release/replay-deletions target/release/staff target/release/contact-data /out/
 
 # ---- The image --------------------------------------------------------------
 # A libc and CA certificates, no shell and no package manager. The binaries
 # bring their own TLS (rustls), so nothing else is needed.
 FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
-COPY --from=backend /out/api /out/worker /out/migrate /out/replay-deletions /out/staff /usr/local/bin/
+COPY --from=backend /out/api /out/worker /out/migrate /out/replay-deletions /out/staff /out/contact-data /usr/local/bin/
 COPY --from=web /src/apps/web/dist /srv/web
 # Listen on every interface, since the container's own address is what the
 # host maps; serve the web app built above.

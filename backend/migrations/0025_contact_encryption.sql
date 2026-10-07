@@ -45,6 +45,10 @@ DECLARE
     place text;
     held  boolean;
 BEGIN
+    -- Held until the migration commits, so that nothing written between this
+    -- check and the columns being dropped is lost.
+    LOCK TABLE account, invitation, one_time_code, sms_update, sms_opt_out, sms_consent,
+        sms_code_consent IN ACCESS EXCLUSIVE MODE;
     FOREACH place IN ARRAY ARRAY['account', 'invitation', 'one_time_code', 'sms_update',
                                  'sms_opt_out', 'sms_consent', 'sms_code_consent'] LOOP
         EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I)', place) INTO held;

@@ -14,7 +14,9 @@
  */
 
 /* Self-hosted, from the designers' own releases, each with its OFL.txt beside
-   it in `src/fonts/`. Nothing is fetched from anywhere else. */
+   it in `src/fonts/`, subset to Latin (`src/fonts/README.md`). Nothing is
+   fetched from anywhere else. The invitation pages preload the 400 and
+   Gabarito 900 (`build/font-preload.ts`). */
 @font-face {
   font-family: 'Instrument Sans';
   font-style: normal;

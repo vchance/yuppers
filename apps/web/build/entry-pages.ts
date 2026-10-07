@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import type { Plugin } from 'vite'
 
+import { preloadedFontHrefs, withFontPreloads } from './font-preload.ts'
 import { readLegalPages, withDocument } from './legal-pages.ts'
 import { asSmsOptInPage, readSmsOptInPages } from './sms-opt-in.ts'
 import { withThemeScript } from './theme-script.ts'
@@ -126,9 +127,14 @@ export function readEntryPages(wordingDirectory: string): EntryPage[] {
  * without building.
  */
 export function entryPagesPlugin(wordingDirectory: string): Plugin {
+  let base = '/'
   return {
     name: 'exchange:entry-pages',
     enforce: 'post',
+
+    configResolved(config) {
+      base = config.base
+    },
 
     transformIndexHtml(html, context) {
       // The build fills the markers in `generateBundle`, once per page.
@@ -167,11 +173,17 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
       const template = String(built.source)
       const [home, ...invitations] = readEntryPages(wordingDirectory)
       built.source = renderEntryPage(template, home)
+      // The invitation pages preload the fonts their first screen is drawn
+      // in, by the names the build gave them (`font-preload.ts`).
+      const fonts = preloadedFontHrefs(
+        Object.values(bundle).filter((output) => output.type === 'asset'),
+        base,
+      )
       for (const page of invitations) {
         this.emitFile({
           type: 'asset',
           fileName: page.fileName,
-          source: renderEntryPage(template, page),
+          source: withFontPreloads(renderEntryPage(template, page), fonts),
         })
       }
       // The privacy policy and the terms, written into their pages (`legal-pages.ts`).

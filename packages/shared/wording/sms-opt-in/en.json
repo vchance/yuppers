@@ -166,8 +166,9 @@
       "caption": "Sent at once to the number, the same text as when updates are turned on on the website:"
     }
   },
-  "verifyText": "The text Twilio Verify sends with the code, the same for all three forms, in English:",
-  "verifyNote": "Twilio writes this message from its own template, with the name Yuppers.app. A code asked for in Spanish comes in Twilio’s own Spanish version of the same message. The code works for ten minutes.",
+  "verifyText": "The text Twilio Verify sends with the code, the same for signing in and for confirming a phone number, in English:",
+  "verifyDeletionText": "The text Twilio Verify sends with a code for deleting an account, from a Verify service of its own so that it says what the code is for, in English:",
+  "verifyNote": "Twilio writes this message from its own template, with the name of the Verify service that sends it. A code asked for in Spanish comes in Twilio’s own Spanish version of the same message. The code works for ten minutes from when it was first sent; asking again within that time resends the same code.",
   "messageFromVerify": "Text from Twilio Verify, for Yuppers.app",
   "updateText": "An agreement update, as received:",
   "moreHeading": "The terms and the privacy policy",
@@ -175,7 +176,7 @@
   "termsLink": "Terms and Conditions",
   "privacyLink": "Privacy policy",
   "replies": {
-    "help": "Yuppers.app: Text updates about agreements you turned them on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
+    "help": "Yuppers.app: Text updates about agreements you turned updates on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
     "stop": "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
   }
 }

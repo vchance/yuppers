@@ -17,6 +17,7 @@ pub mod exchanges;
 pub mod http;
 pub mod languages;
 pub mod metrics;
+pub mod nanp;
 pub mod notifications;
 pub mod outbound;
 pub mod review;

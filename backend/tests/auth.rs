@@ -768,6 +768,53 @@ async fn counts_from_windows_long_past_are_forgotten() {
         .unwrap();
 }
 
+/// A code, and with it the address or number it went to, is kept a day at
+/// most once it has expired or been used: long enough for the hourly limit
+/// per identifier to count it, and no longer.
+#[tokio::test]
+async fn codes_are_removed_a_day_after_they_are_done_with() {
+    let app = App::start().await;
+    let (old, used, live) = (email(), email(), email());
+    for email in [&old, &used, &live] {
+        app.request_code(email).await;
+    }
+    for (email, change) in [
+        (
+            &old,
+            "created_at = now() - interval '2 days', \
+             expires_at = now() - interval '2 days' + interval '10 minutes'",
+        ),
+        (
+            &used,
+            "created_at = now() - interval '2 hours', consumed_at = now() - interval '2 hours'",
+        ),
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE one_time_code SET {change} WHERE identifier = $1"
+        )))
+        .bind(email)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+
+    let service = connect("DATABASE_URL").await;
+    yuppers_backend::auth::purge_one_time_codes(&service)
+        .await
+        .unwrap();
+
+    let left: Vec<String> = sqlx::query_scalar(
+        "SELECT identifier FROM one_time_code WHERE identifier = ANY($1) ORDER BY created_at",
+    )
+    .bind(vec![old.clone(), used.clone(), live.clone()])
+    .fetch_all(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(left, [used.clone(), live.clone()]);
+
+    app.finish(&[&old, &used, &live]).await;
+}
+
 #[tokio::test]
 async fn an_expired_code_is_refused() {
     let app = App::start().await;

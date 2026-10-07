@@ -10,18 +10,21 @@
 //!   document, so the service itself never replies: Twilio's Advanced
 //!   Opt-Out answers HELP, STOP and START (docs/deploy-render.md).
 
+use std::sync::atomic::AtomicU64;
+
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{OriginalUri, Path, State};
 use axum::http::header::{CONTENT_TYPE, USER_AGENT};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, Session};
-use super::{AppState, ClientAddress};
+use super::{AppState, ClientAddress, client_address};
 use crate::client_version;
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
@@ -229,20 +232,51 @@ const EMPTY_TWIML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><
 /// The header Twilio signs its requests in.
 const SIGNATURE: &str = "x-twilio-signature";
 
+/// The largest request the webhook reads. Twilio's parameters for a text
+/// received, a long one with its media links included, take a few
+/// kilobytes; anything much larger is not Twilio's, and is refused with 413
+/// before it is read in full (`v1::router`).
+pub const INBOUND_BODY_LIMIT: usize = 32 * 1024;
+
+/// The most parameters a request to the webhook may carry. Twilio sends a
+/// few dozen at most, with ten media items; more is refused unread.
+const INBOUND_MAX_PARAMS: usize = 100;
+
+/// How long Twilio's signature is: an HMAC-SHA1.
+const SIGNATURE_BYTES: usize = 20;
+
+/// When a refused signature was last logged (`client_address::time_to_warn`):
+/// once a minute is enough to be noticed, and once per request would let
+/// anyone fill the logs.
+static LAST_REFUSAL_LOGGED: AtomicU64 = AtomicU64::new(0);
+
+/// Whether a header could be a signature at all: base64 for exactly
+/// [`SIGNATURE_BYTES`]. Checked before the body is parsed.
+fn signature_shaped(header: &str) -> bool {
+    base64::engine::general_purpose::STANDARD
+        .decode(header.trim())
+        .is_ok_and(|bytes| bytes.len() == SIGNATURE_BYTES)
+}
+
 /// Twilio's webhook for a text sent to our number. Refused with 403, and
 /// nothing read, unless `X-Twilio-Signature` is Twilio's signature, under
 /// the account's auth token, of this URL as Twilio requested it (the web
-/// origin and this path) and the posted parameters. A stop keyword puts the
-/// number on the opt-out list and turns off every agreement's updates to
-/// it; a start keyword takes it off the list. Answered at once, with an
-/// empty TwiML document: Twilio's Advanced Opt-Out sends the replies.
+/// origin and this path) and the posted parameters; refused with 413 when
+/// the body is larger than 32 KB (`INBOUND_BODY_LIMIT`) or carries more
+/// than a hundred parameters. A stop keyword puts the number on the opt-out list
+/// and turns off every agreement's updates to it; a start keyword takes it
+/// off the list. A message already taken (by its `MessageSid`) changes
+/// nothing again, so a request posted twice, or replayed, is answered the
+/// same but does nothing. Answered at once, with an empty TwiML document:
+/// Twilio's Advanced Opt-Out sends the replies.
 #[utoipa::path(
     post,
     path = "/v1/sms/inbound",
     request_body(content = String, content_type = "application/x-www-form-urlencoded", description = "Twilio's parameters for a message received: From, Body, OptOutType and the rest"),
     responses(
         (status = 200, description = "Taken: an empty TwiML document", content_type = "text/xml", body = String),
-        (status = 403, description = "Not signed by Twilio, or no auth token to check it with")
+        (status = 403, description = "Not signed by Twilio, or no auth token to check it with"),
+        (status = 413, description = "Too large, or too many parameters, to be Twilio's")
     )
 )]
 pub async fn inbound(
@@ -255,9 +289,18 @@ pub async fn inbound(
     let Some(token) = &state.settings.sms_webhook_token else {
         return forbidden();
     };
-    let Some(signature) = headers.get(SIGNATURE).and_then(|value| value.to_str().ok()) else {
+    let Some(signature) = headers
+        .get(SIGNATURE)
+        .and_then(|value| value.to_str().ok())
+        .filter(|signature| signature_shaped(signature))
+    else {
         return forbidden();
     };
+    // Counted before anything is parsed, so that a request of many small
+    // parameters costs no more than its bytes.
+    if body.split(|byte| *byte == b'&').count() > INBOUND_MAX_PARAMS {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
     let params: Vec<(String, String)> = form_urlencoded::parse(&body)
         .map(|(name, value)| (name.into_owned(), value.into_owned()))
         .collect();
@@ -268,7 +311,12 @@ pub async fn inbound(
         None => format!("{}{}", state.settings.web_origin, uri.path()),
     };
     if !twilio_signature_valid(token.expose(), &url, &params, signature) {
-        tracing::warn!("a request to the SMS webhook was refused: its signature is not Twilio's");
+        if client_address::time_to_warn(&LAST_REFUSAL_LOGGED, client_address::now_seconds()) {
+            tracing::warn!(
+                "a request to the SMS webhook was refused: its signature is not Twilio's \
+                 (logged at most once a minute)"
+            );
+        }
         return forbidden();
     }
 
@@ -283,26 +331,39 @@ pub async fn inbound(
     let keyword = param("OptOutType")
         .and_then(Keyword::of_opt_out_type)
         .or_else(|| Keyword::of_message(body));
-    if let (Some(Identifier::Phone(phone)), Some(keyword)) = (from, keyword) {
+    // HELP is Twilio's to answer, and changes nothing here.
+    if let (Some(Identifier::Phone(phone)), Some(keyword @ (Keyword::Stop | Keyword::Start))) =
+        (from, keyword)
+    {
         // The word itself, as received, for the record; OptOutType when the
         // message was a word Twilio's settings added.
         let word = Keyword::of_message(body)
             .map(|_| body)
             .or(param("OptOutType"))
             .unwrap_or(body);
-        let done = match keyword {
-            Keyword::Stop => sms_updates::stop(&state.db, &phone, word)
-                .await
-                .map(|turned_off| {
+        let done = async {
+            let mut tx = state.db.begin().await?;
+            // Twilio sends every message with its SID; one already taken is
+            // a retry or a replay, and changes nothing.
+            if let Some(sid) = param("MessageSid")
+                && !sms_updates::first_receipt(&mut tx, sid).await?
+            {
+                tracing::info!("a text already taken was posted again: nothing changed");
+                return Ok(());
+            }
+            match keyword {
+                Keyword::Stop => {
+                    let turned_off = sms_updates::stop(&mut tx, &phone, word).await?;
                     tracing::info!(turned_off, "STOP received: the number gets no more texts");
-                }),
-            Keyword::Start => sms_updates::start(&state.db, &phone, word)
-                .await
-                .map(|()| tracing::info!("START received: the number may be texted again")),
-            // Twilio answers HELP itself.
-            Keyword::Help => Ok(()),
+                }
+                _ => {
+                    sms_updates::start(&mut tx, &phone, word).await?;
+                    tracing::info!("START received: the number may be texted again");
+                }
+            }
+            tx.commit().await
         };
-        if let Err(error) = done {
+        if let Err(error) = done.await {
             return ApiError::from(error).into_response();
         }
     }

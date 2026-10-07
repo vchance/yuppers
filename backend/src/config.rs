@@ -20,6 +20,7 @@ use crate::client_version::{MinimumClientVersions, parse_version};
 use crate::domain::identity::Identifier;
 use crate::http::web::DEFAULT_ANDROID_PACKAGE;
 use crate::http::{AppLinks, TrustedProxies};
+use crate::nanp;
 use crate::notifications::expo::{EXPO_ORIGIN, ExpoPushSender};
 use crate::notifications::push::{LogPushSender, PushSender};
 use crate::notifications::sms::{
@@ -480,6 +481,7 @@ fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
             defaults.sms_codes_per_prefix_per_hour,
         )?,
         phone_country_codes: country_codes(get)?.unwrap_or(defaults.phone_country_codes),
+        phone_regions: regions(get)?.unwrap_or(defaults.phone_regions),
         ..defaults
     })
 }
@@ -534,30 +536,89 @@ fn country_codes(get: Lookup<'_>) -> anyhow::Result<Option<Vec<String>>> {
     Ok(Some(codes))
 }
 
+/// `SMS_ALLOWED_REGIONS`: the parts of the North American Numbering Plan
+/// whose `+1` numbers are taken, `US` or `US,CA` (`crate::nanp`). `None`
+/// when unset, for the default, the US alone.
+fn regions(get: Lookup<'_>) -> anyhow::Result<Option<Vec<nanp::Region>>> {
+    const NAME: &str = "SMS_ALLOWED_REGIONS";
+    let Some(value) = optional(get, NAME) else {
+        return Ok(None);
+    };
+    let regions = value
+        .split(',')
+        .map(nanp::Region::parse)
+        .collect::<Option<Vec<_>>>()
+        .with_context(|| format!("{NAME}={value} is not a comma-separated list of US and CA"))?;
+    Ok(Some(regions))
+}
+
 /// The application role's connection, for the api, the worker and
-/// `replay-deletions`: `DATABASE_URL`, or else `DATABASE_SERVER_URL` with its
-/// user and password replaced by `exchange_app` and `APP_DB_PASSWORD`. The
-/// second way is for a platform whose only connection string for the
-/// database is the owner's (docs/deploy-render.md): it says where the
-/// database is, and the credentials in it are never used. The password is
-/// the one `migrate` created the role with (`crate::app_role`).
+/// `replay-deletions`: `DATABASE_URL`; or else one made of `DATABASE_HOST`,
+/// `DATABASE_PORT` (optional) and `DATABASE_NAME`, with `exchange_app` and
+/// `APP_DB_PASSWORD`; or else `DATABASE_SERVER_URL` with its user and
+/// password replaced by those. The second and third ways are for a platform
+/// that gives the database's address but no connection string for any role
+/// but the owner (docs/deploy-render.md). The second is preferred, since it
+/// puts no owner's password in the process's environment; the third, the
+/// older way, is ignored when the second is set, so that a deployment can
+/// move from one to the other before removing it. The password is the one
+/// `migrate` created the role with (`crate::app_role`).
 fn database_url(get: Lookup<'_>) -> anyhow::Result<String> {
-    match (
-        optional(get, "DATABASE_URL"),
-        optional(get, "DATABASE_SERVER_URL"),
-    ) {
-        (Some(_), Some(_)) => {
-            bail!("set DATABASE_URL or DATABASE_SERVER_URL (with APP_DB_PASSWORD), not both")
+    let parts = optional(get, "DATABASE_HOST");
+    let server = optional(get, "DATABASE_SERVER_URL");
+    match (optional(get, "DATABASE_URL"), parts, server) {
+        (Some(_), None, None) | (None, ..) => {}
+        (Some(_), ..) => bail!(
+            "set DATABASE_URL, or DATABASE_HOST and DATABASE_NAME (with APP_DB_PASSWORD), not both"
+        ),
+    }
+    if let Some(url) = optional(get, "DATABASE_URL") {
+        return Ok(url);
+    }
+    let password = || -> anyhow::Result<AppRolePassword> {
+        AppRolePassword::new(
+            required(get, "APP_DB_PASSWORD")
+                .context("the application role's connection needs APP_DB_PASSWORD")?,
+        )
+    };
+    if let Some(host) = optional(get, "DATABASE_HOST") {
+        let host = host.trim();
+        let name = required(get, "DATABASE_NAME")
+            .context("DATABASE_HOST needs DATABASE_NAME, the database's name")?;
+        let port = optional(get, "DATABASE_PORT");
+        // A host name or address, a port of digits, a name: nothing that
+        // could reshape the URL.
+        let plain = |text: &str| {
+            !text.is_empty()
+                && text
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_'))
+        };
+        if !plain(host) {
+            bail!("DATABASE_HOST must be a host name or an IPv4 address");
         }
-        (Some(url), None) => Ok(url),
-        (None, None) => {
-            bail!("DATABASE_URL is not set (nor DATABASE_SERVER_URL and APP_DB_PASSWORD)")
+        if port
+            .as_deref()
+            .is_some_and(|port| port.parse::<u16>().map_or(true, |port| port == 0))
+        {
+            bail!("DATABASE_PORT must be a port number");
         }
-        (None, Some(server)) => {
-            let password = AppRolePassword::new(
-                required(get, "APP_DB_PASSWORD")
-                    .context("DATABASE_SERVER_URL needs the application role's password")?,
-            )?;
+        if !plain(name.trim()) {
+            bail!("DATABASE_NAME must be a database's name");
+        }
+        let port = port.map(|port| format!(":{port}")).unwrap_or_default();
+        return Ok(format!(
+            "postgres://{APP_ROLE}:{}@{host}{port}/{}",
+            percent_encode(password()?.expose()),
+            name.trim()
+        ));
+    }
+    match optional(get, "DATABASE_SERVER_URL") {
+        None => {
+            bail!("DATABASE_URL is not set (nor DATABASE_HOST, DATABASE_NAME and APP_DB_PASSWORD)")
+        }
+        Some(server) => {
+            let password = password()?;
             // Never quote the URL in an error: it holds the owner's password.
             let (scheme, rest) = server
                 .trim()
@@ -900,6 +961,57 @@ mod tests {
         let mut both = server.clone();
         both.insert("DATABASE_URL".to_owned(), "postgres://a:b@h/d".to_owned());
         assert!(database_url(&lookup(&both)).is_err(), "never both");
+
+        // From the address's parts, with no owner's credentials anywhere.
+        let parts = table(&[
+            ("DATABASE_HOST", "dpg-abc123-a"),
+            ("DATABASE_PORT", "5432"),
+            ("DATABASE_NAME", "yuppers"),
+            ("APP_DB_PASSWORD", "p@ss/word+with=odd:chars"),
+        ]);
+        assert_eq!(
+            database_url(&lookup(&parts)).unwrap(),
+            "postgres://exchange_app:p%40ss%2Fword%2Bwith%3Dodd%3Achars@dpg-abc123-a:5432/yuppers"
+        );
+        let mut no_port = parts.clone();
+        no_port.remove("DATABASE_PORT");
+        assert!(
+            database_url(&lookup(&no_port))
+                .unwrap()
+                .ends_with("@dpg-abc123-a/yuppers")
+        );
+        // Preferred to DATABASE_SERVER_URL while both are set, on the way
+        // from one to the other.
+        let mut moving = parts.clone();
+        moving.insert(
+            "DATABASE_SERVER_URL".to_owned(),
+            "postgresql://owner:s3cr@t@elsewhere/other".to_owned(),
+        );
+        assert_eq!(
+            database_url(&lookup(&moving)).unwrap(),
+            database_url(&lookup(&parts)).unwrap()
+        );
+        let mut with_url = parts.clone();
+        with_url.insert("DATABASE_URL".to_owned(), "postgres://a:b@h/d".to_owned());
+        assert!(database_url(&lookup(&with_url)).is_err(), "never both");
+        for (name, bad) in [
+            ("DATABASE_HOST", "h/d"),
+            ("DATABASE_HOST", "u:p@h"),
+            ("DATABASE_HOST", ""),
+            ("DATABASE_PORT", "0"),
+            ("DATABASE_PORT", "54321x"),
+            ("DATABASE_NAME", "d?sslmode=disable"),
+        ] {
+            let mut wrong = parts.clone();
+            wrong.insert(name.to_owned(), bad.to_owned());
+            assert!(database_url(&lookup(&wrong)).is_err(), "{name}={bad}");
+        }
+        let mut no_name = parts.clone();
+        no_name.remove("DATABASE_NAME");
+        assert!(database_url(&lookup(&no_name)).is_err());
+        let mut no_password = parts.clone();
+        no_password.remove("APP_DB_PASSWORD");
+        assert!(database_url(&lookup(&no_password)).is_err());
         assert!(database_url(&lookup(&table(&[]))).is_err(), "required");
         let mut no_password = server.clone();
         no_password.remove("APP_DB_PASSWORD");
@@ -1298,6 +1410,17 @@ mod tests {
     fn phone_numbers_are_taken_from_the_us_and_the_rest_of_nanp_unless_set() {
         let read = |pairs: &[(&str, &str)]| auth_rules(&lookup(&table(pairs)));
         assert_eq!(read(&[]).unwrap().phone_country_codes, ["1"]);
+        // Of +1, the US alone, unless Canada is added.
+        assert_eq!(read(&[]).unwrap().phone_regions, [nanp::Region::Us]);
+        assert_eq!(
+            read(&[("SMS_ALLOWED_REGIONS", "US, CA")])
+                .unwrap()
+                .phone_regions,
+            [nanp::Region::Us, nanp::Region::Canada]
+        );
+        for wrong in ["MX", "US,", "US;CA", "+1"] {
+            assert!(read(&[("SMS_ALLOWED_REGIONS", wrong)]).is_err(), "{wrong}");
+        }
         assert_eq!(
             read(&[("SMS_ALLOWED_COUNTRY_CODES", " +1, +52 ")])
                 .unwrap()

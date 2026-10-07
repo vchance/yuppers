@@ -15,6 +15,7 @@ mod common;
 use std::sync::{Arc, Mutex};
 
 use axum::http::{Method, StatusCode};
+use base64::Engine as _;
 use common::{App, Deal, PEER, User};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -734,9 +735,19 @@ async fn a_number_that_replied_stop_is_never_texted() {
 /// Posts a message from `from` to the webhook, signed by Twilio, and checks
 /// that it is taken with an empty TwiML document.
 async fn inbound(app: &App, from: &str, body: &str, opt_out_type: Option<&str>) {
+    inbound_as(app, &message_sid(), from, body, opt_out_type).await;
+}
+
+/// A MessageSid of the shape Twilio gives, never given before.
+fn message_sid() -> String {
+    format!("SM{}", Uuid::new_v4().simple())
+}
+
+/// [`inbound`], for a message Twilio gave `sid`.
+async fn inbound_as(app: &App, sid: &str, from: &str, body: &str, opt_out_type: Option<&str>) {
     let mut params = vec![
         ("AccountSid".to_owned(), "AC0123".to_owned()),
-        ("MessageSid".to_owned(), "SM0123".to_owned()),
+        ("MessageSid".to_owned(), sid.to_owned()),
         ("From".to_owned(), from.to_owned()),
         ("To".to_owned(), "+15550000000".to_owned()),
         ("Body".to_owned(), body.to_owned()),
@@ -834,6 +845,111 @@ async fn the_webhook_takes_only_requests_twilio_signed() {
         )
         .await;
     assert_eq!(reply.status, StatusCode::FORBIDDEN);
+}
+
+/// Whether `phone` is on the opt-out list.
+async fn opted_out(app: &App, phone: &str) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
+        .bind(phone)
+        .fetch_one(&app.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn the_webhook_reads_nothing_too_large_or_too_many_to_be_twilios() {
+    let Texting { _turn, app, .. } = start().await;
+    let phone = number();
+    let signed = |params: &[(String, String)]| twilio_signature(TOKEN, WEBHOOK, params);
+
+    // More than the webhook takes: refused unread, signed or not.
+    let mut large = vec![
+        ("From".to_owned(), phone.clone()),
+        ("Body".to_owned(), "STOP".to_owned()),
+    ];
+    large.push(("Padding".to_owned(), "x".repeat(40 * 1024)));
+    assert_eq!(
+        post_inbound(&app, &large, Some(&signed(&large))).await.0,
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+
+    // More parameters than Twilio ever sends: refused before they are read.
+    let mut many = vec![
+        ("From".to_owned(), phone.clone()),
+        ("Body".to_owned(), "STOP".to_owned()),
+    ];
+    many.extend((0..100).map(|n| (format!("P{n}"), String::new())));
+    assert_eq!(
+        post_inbound(&app, &many, Some(&signed(&many))).await.0,
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+
+    // A header that cannot be a signature, Twilio's being twenty bytes, is
+    // refused before the body is parsed.
+    let few = vec![
+        ("From".to_owned(), phone.clone()),
+        ("Body".to_owned(), "STOP".to_owned()),
+    ];
+    let engine = base64::engine::general_purpose::STANDARD;
+    for signature in [
+        engine.encode([0u8; 19]),
+        engine.encode([0u8; 21]),
+        engine.encode([0u8; 32]),
+        String::new(),
+    ] {
+        assert_eq!(
+            post_inbound(&app, &few, Some(&signature)).await.0,
+            StatusCode::FORBIDDEN,
+            "{signature}"
+        );
+    }
+    assert!(!opted_out(&app, &phone).await);
+    assert!(records(&app.db, &phone).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_text_posted_again_changes_nothing_so_an_old_start_cannot_undo_a_stop() {
+    let Texting { _turn, app, .. } = start().await;
+    let phone = number();
+    let (stop, start_again, stop_again) = (message_sid(), message_sid(), message_sid());
+
+    inbound_as(&app, &stop, &phone, "STOP", Some("STOP")).await;
+    inbound_as(&app, &start_again, &phone, "START", Some("START")).await;
+    inbound_as(&app, &stop_again, &phone, "STOP", Some("STOP")).await;
+    assert!(opted_out(&app, &phone).await);
+
+    // The START, captured and posted again with Twilio's own signature:
+    // taken, as Twilio's retries must be, and nothing changes.
+    inbound_as(&app, &start_again, &phone, "START", Some("START")).await;
+    assert!(opted_out(&app, &phone).await);
+    // Nor does the first STOP posted again add to the record.
+    inbound_as(&app, &stop, &phone, "STOP", Some("STOP")).await;
+    let actions: Vec<String> = records(&app.db, &phone)
+        .await
+        .into_iter()
+        .map(|record| record.0)
+        .collect();
+    assert_eq!(actions, ["STOP", "START", "STOP"]);
+
+    // The IDs are forgotten after their retention, and not before.
+    let seen = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sms_inbound_seen WHERE message_sid = ANY($1)",
+        )
+        .bind([&stop, &start_again, &stop_again])
+        .fetch_one(&app.db)
+        .await
+        .unwrap()
+    };
+    let later = |days: i64| OffsetDateTime::now_utc() + time::Duration::days(days);
+    sms_updates::purge_inbound_seen(&app.db, later(29))
+        .await
+        .unwrap();
+    assert_eq!(seen().await, 3);
+    sms_updates::purge_inbound_seen(&app.db, later(31))
+        .await
+        .unwrap();
+    assert_eq!(seen().await, 0);
 }
 
 #[tokio::test]
@@ -1059,4 +1175,82 @@ async fn consent_records_are_kept_for_their_retention_unless_still_in_force() {
         .await
         .unwrap();
     assert!(records(&app.db, &phone).await.is_empty());
+}
+
+#[tokio::test]
+async fn an_opt_in_is_kept_until_the_retention_has_passed_since_its_updates_ended() {
+    let Texting { _turn, app, .. } = start().await;
+    let deal = app.active().await;
+    let phone = give_phone(&app, &deal.ben).await;
+    turn_on(&app, &deal.ben, &deal).await;
+    set(&app, &deal.ben, &deal, json!({ "on": false }))
+        .await
+        .ok();
+    // Turned on five years ago, and off yesterday.
+    for (action, age) in [("OPT_IN", "5 years"), ("OPT_OUT", "1 day")] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE sms_consent SET created_at = now() - interval '{age}'
+             WHERE phone = $1 AND action = $2"
+        )))
+        .bind(&phone)
+        .bind(action)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+    let rules = Rules::default();
+    let later = |days: i64| OffsetDateTime::now_utc() + time::Duration::days(days);
+
+    // The opt-in is older than the retention, but its updates ended only
+    // yesterday: both stay.
+    sms_updates::purge_consent(&app.db, &rules, later(0))
+        .await
+        .unwrap();
+    assert_eq!(records(&app.db, &phone).await.len(), 2);
+    sms_updates::purge_consent(&app.db, &rules, later(365 * 4 - 2))
+        .await
+        .unwrap();
+    assert_eq!(records(&app.db, &phone).await.len(), 2);
+    // Four years after the end, both go.
+    sms_updates::purge_consent(&app.db, &rules, later(365 * 4))
+        .await
+        .unwrap();
+    assert!(records(&app.db, &phone).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_party_removed_before_being_confirmed_gets_no_more_updates() {
+    let Texting { _turn, app, .. } = start().await;
+    let deal = app.negotiating().await;
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    let phone = give_phone(&app, &deal.ben).await;
+    turn_on(&app, &deal.ben, &deal).await;
+
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "REJECT_COUNTERPARTY" }),
+    )
+    .await
+    .ok();
+
+    let updates: i64 = sqlx::query_scalar("SELECT count(*) FROM sms_update WHERE account_id = $1")
+        .bind(deal.ben.id)
+        .fetch_one(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(updates, 0);
+    let kept = records(&app.db, &phone).await;
+    assert_eq!(
+        kept.iter()
+            .map(|record| (record.0.as_str(), record.3.as_str()))
+            .collect::<Vec<_>>(),
+        [("OPT_IN", "WEB"), ("OPT_OUT", "NO_LONGER_A_PARTY")]
+    );
 }

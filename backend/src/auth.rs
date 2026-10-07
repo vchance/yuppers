@@ -29,20 +29,23 @@
 //! exact under concurrency. Windows are fixed hours and UTC days, so a burst
 //! straddling the turn of a window can reach twice a limit.
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
+use std::sync::{Arc, LazyLock, PoisonError, Weak};
 
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
 use time::{Duration, OffsetDateTime};
+use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 use crate::code_consent::{self, CodeRequest};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
-use crate::languages;
+use crate::{languages, nanp};
 
 /// The numbers behind code and session handling. Placeholders, every one:
 /// none is a recorded design decision yet (DESIGN.md §8, §18 item 4). Every
@@ -95,13 +98,17 @@ pub struct AuthRules {
     /// The country calling codes, digits only (`"1"`), whose phone numbers
     /// the service takes. A code for any other number is refused with
     /// `PHONE_COUNTRY_NOT_SERVED` before anything is counted or sent, and so
-    /// is attaching one to an account. `+1` is the North American Numbering
-    /// Plan: the US, Canada and some twenty Caribbean and Pacific countries
-    /// and territories, which share it; the SMS provider's geographic
-    /// permissions are what narrow it further (docs/operations.md). The
+    /// is attaching one to an account, and so is an update text. `+1` is the
+    /// North American Numbering Plan, which the US shares with Canada and
+    /// some twenty Caribbean and Pacific countries and territories, so a
+    /// `+1` number is taken only from [`AuthRules::phone_regions`]. The
     /// launch market is the US; a deployment may set it
     /// (`SMS_ALLOWED_COUNTRY_CODES`).
     pub phone_country_codes: Vec<String>,
+    /// The parts of the North American Numbering Plan whose `+1` numbers
+    /// are taken, by area code (`crate::nanp`): the US alone unless a
+    /// deployment says otherwise (`SMS_ALLOWED_REGIONS`). Never empty.
+    pub phone_regions: Vec<nanp::Region>,
     /// How long a session lasts. A placeholder.
     pub session_ttl: Duration,
 }
@@ -120,6 +127,7 @@ impl Default for AuthRules {
             sms_codes_per_hour: 50,
             sms_codes_per_prefix_per_hour: 10,
             phone_country_codes: vec!["1".to_owned()],
+            phone_regions: vec![nanp::Region::Us],
             session_ttl: Duration::days(30),
         }
     }
@@ -141,11 +149,17 @@ impl AuthRules {
     }
 
     /// Whether the service takes this identifier: any email address, and a
-    /// phone number of an allowed country.
+    /// phone number of an allowed country, and for `+1` of an allowed
+    /// region.
     pub fn takes(&self, identifier: &Identifier) -> bool {
         match identifier {
             Identifier::Email(_) => true,
-            Identifier::Phone(_) => self.phone_country(identifier).is_some(),
+            Identifier::Phone(phone) => match self.phone_country(identifier) {
+                None => false,
+                Some("1") => nanp::region(&phone[2..])
+                    .is_some_and(|region| self.phone_regions.contains(&region)),
+                Some(_) => true,
+            },
         }
     }
 
@@ -607,6 +621,35 @@ async fn lock_codes(
     Ok(())
 }
 
+/// This process's turn to put a guess for `identifier` and `purpose` to the
+/// code's provider ([`OfferedCode::consult_verifier`]), held until the
+/// guess is counted. Kept in memory rather than in the database, so
+/// that waiting for the provider holds no connection. Another copy of the
+/// API has turns of its own; what bounds guesses across copies is the
+/// place each takes in the day's count before asking.
+/// A turn from [`verifier_turn`]; the next guess waits until it is dropped.
+pub type VerifierTurn = OwnedMutexGuard<()>;
+
+async fn verifier_turn(purpose: Purpose, identifier: &Identifier) -> VerifierTurn {
+    type Turns = HashMap<String, Weak<tokio::sync::Mutex<()>>>;
+    static TURNS: LazyLock<std::sync::Mutex<Turns>> = LazyLock::new(Default::default);
+    let turn = {
+        let mut turns = TURNS.lock().unwrap_or_else(PoisonError::into_inner);
+        // Turns nobody holds or waits for are forgotten.
+        turns.retain(|_, turn| turn.strong_count() > 0);
+        let key = format!("{}:{}", purpose.as_str(), identifier.as_str());
+        match turns.get(&key).and_then(Weak::upgrade) {
+            Some(turn) => turn,
+            None => {
+                let turn = Arc::new(tokio::sync::Mutex::new(()));
+                turns.insert(key, Arc::downgrade(&turn));
+                turn
+            }
+        }
+    };
+    turn.lock_owned().await
+}
+
 /// Forgets counts whose window ended more than a day ago; none of them can
 /// matter any more. Returns how many were removed. Called by the worker.
 pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
@@ -615,6 +658,28 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
             .execute(db)
             .await?
             .rows_affected();
+    Ok(removed)
+}
+
+/// How long a code is kept once it has expired or been used: long enough to
+/// be counted against the hourly limit on codes per identifier, which is
+/// all an old row is read for, and no longer. Until then a row holds the
+/// email address or phone number it went to in full.
+pub const SPENT_CODE_RETENTION: Duration = Duration::days(1);
+
+/// Removes codes that expired or were used more than
+/// [`SPENT_CODE_RETENTION`] after they were asked for. Returns how many
+/// went. Called by the worker.
+pub async fn purge_one_time_codes(db: &PgPool) -> Result<u64, sqlx::Error> {
+    let removed = sqlx::query(
+        "DELETE FROM one_time_code
+         WHERE created_at < now() - $1 * interval '1 second'
+           AND (consumed_at IS NOT NULL OR expires_at < now())",
+    )
+    .bind(SPENT_CODE_RETENTION.whole_seconds() as f64)
+    .execute(db)
+    .await?
+    .rows_affected();
     Ok(removed)
 }
 
@@ -630,7 +695,8 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// request as it would a code, with no hash, so that every limit below
 /// counts it, and asks the provider to send one. Twilio Verify sends the
 /// same code again for a request within its code's ten minutes, so the
-/// newest few requests then share one code.
+/// newest few requests then share one code, and the request it resends
+/// works only until the first one expires, as Twilio's code does.
 ///
 /// Refused with `TOO_MANY_REQUESTS` when the requester's address has asked
 /// for too many sign-in codes this hour, when the identifier has been sent
@@ -639,7 +705,8 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// hourly cap of them ([`AuthRules::sms_codes_per_hour`]) or of them to
 /// numbers beginning alike ([`AuthRules::sms_codes_per_prefix_per_hour`]);
 /// with `PHONE_COUNTRY_NOT_SERVED`, before anything is counted, for a phone
-/// number of a country the service does not take; and with
+/// number of a country the service does not take; with `PHONE_OPTED_OUT`,
+/// once the requester is counted, for a number that replied STOP; and with
 /// `TOO_MANY_GUESSES` while the identifier has used up its wrong sign-in
 /// guesses for the day, or, for deletion, the account its wrong deletion
 /// guesses, since no code sent then could work.
@@ -647,8 +714,8 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// A code for a phone number needs the box beside it ticked: refused,
 /// before anything is counted, with `SMS_CONSENT_REQUIRED` when `request`
 /// names no consent or wording the service does not know (`INVALID_REQUEST`
-/// for a language it does not speak), after the country and STOP checks,
-/// which say more. The consent is recorded with the code it led to
+/// for a language it does not speak), after the country check, which says
+/// more. The consent is recorded with the code it led to
 /// (`crate::code_consent`).
 #[allow(clippy::too_many_arguments)]
 pub async fn request_code(
@@ -680,13 +747,6 @@ pub async fn request_code(
         return Err(ErrorCode::PhoneCountryNotServed.into());
     }
 
-    // A number that replied STOP gets no text, a code included, until it
-    // replies START (`crate::notifications::sms_updates`). Refused before
-    // anything is counted, with an answer that points to email instead.
-    if charged && is_opted_out(db, identifier).await? {
-        return Err(ErrorCode::PhoneOptedOut.into());
-    }
-
     // A code by text only with the box ticked beside the number.
     let consent = request.check(identifier)?;
 
@@ -708,6 +768,16 @@ pub async fn request_code(
     }
     // Counted whether or not the identifier's own limit then refuses it.
     requests.add(&mut tx, 1).await?;
+
+    // A number that replied STOP gets no text, a code included, until it
+    // replies START (`crate::notifications::sms_updates`), with an answer
+    // that points to email instead. Only once the request is counted, so
+    // that asking cannot be used to find out, without limit, which numbers
+    // replied STOP.
+    if charged && is_opted_out(&mut tx, identifier).await? {
+        tx.commit().await?;
+        return Err(ErrorCode::PhoneOptedOut.into());
+    }
 
     lock_codes(&mut tx, identifier, purpose).await?;
 
@@ -807,12 +877,20 @@ pub async fn request_code(
         .as_deref()
         .map(|code| code_hash(secret, purpose, identifier, code));
     // The clock, not the transaction's start: requests for one identifier
-    // are ordered by the lock above, and so are their codes.
+    // are ordered by the lock above, and so are their codes. Twilio Verify
+    // resends a verification still pending rather than start another, and
+    // keeps its first expiry, so a request it resends works only until the
+    // first one it resends expires: never longer here than there.
     sqlx::query(
         "INSERT INTO one_time_code
              (identifier, purpose, code_hash, checked_by, expires_at, created_at)
          VALUES ($1, $2, $3, $4,
-                 clock_timestamp() + $5 * interval '1 second', clock_timestamp())",
+                 LEAST(clock_timestamp() + $5 * interval '1 second',
+                       (SELECT min(expires_at) FROM one_time_code
+                        WHERE $4 = 'TWILIO_VERIFY' AND checked_by = 'TWILIO_VERIFY'
+                          AND identifier = $1 AND purpose = $2
+                          AND consumed_at IS NULL AND expires_at > clock_timestamp())),
+                 clock_timestamp())",
     )
     .bind(identifier.as_str())
     .bind(purpose.as_str())
@@ -891,13 +969,16 @@ pub async fn request_code(
 
 /// Whether `identifier` is a phone number that replied STOP to our texts
 /// and has not replied START since.
-pub async fn is_opted_out(db: &PgPool, identifier: &Identifier) -> Result<bool, sqlx::Error> {
+pub async fn is_opted_out(
+    conn: &mut PgConnection,
+    identifier: &Identifier,
+) -> Result<bool, sqlx::Error> {
     let Identifier::Phone(phone) = identifier else {
         return Ok(false);
     };
     sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM sms_opt_out WHERE phone = $1)")
         .bind(phone)
-        .fetch_one(db)
+        .fetch_one(conn)
         .await
 }
 
@@ -1003,7 +1084,7 @@ pub async fn verify_code(
         requester,
         verifier: sender.verifier(identifier),
     };
-    offered.consult_verifier(db).await?;
+    let _turn = offered.consult_verifier(db).await?;
     let mut tx = db.begin().await?;
     let checked = offered.check(&mut tx).await?;
     tx.commit().await?;
@@ -1131,24 +1212,36 @@ impl OfferedCode<'_> {
     ///
     /// Refused with `SERVICE_UNAVAILABLE`, nothing counted, when the
     /// provider cannot be asked: the code may still be right.
-    pub async fn consult_verifier(&self, db: &PgPool) -> Result<(), ApiError> {
+    ///
+    /// No database connection is held while the provider is asked, which
+    /// can take seconds: a burst of guesses would otherwise hold the whole
+    /// pool. Instead, before asking, a place is taken in the day's count of
+    /// wrong guesses and committed, so that no more guesses can be with the
+    /// provider at once than the day has left; it is given back once the
+    /// provider answers, and `check` then counts a wrong code as it counts
+    /// any. Within this process, guesses for one identifier and purpose are
+    /// put to the provider one after the other ([`verifier_turn`]); the turn
+    /// is returned, and the caller holds it until `check` has counted the
+    /// guess and committed, or the next guess would find the place given
+    /// back but the wrong guess not yet counted, and go to the provider too.
+    pub async fn consult_verifier(&self, db: &PgPool) -> Result<Option<VerifierTurn>, ApiError> {
         let (Some(verifier), Identifier::Phone(phone)) = (self.verifier, self.identifier) else {
-            return Ok(());
+            return Ok(None);
         };
         let purpose = self.requester.purpose();
         let offered = self.code.trim();
         // Twilio's codes are 4 to 10 digits; anything else is wrong without
         // asking.
         if !(4..=10).contains(&offered.len()) || !offered.bytes().all(|b| b.is_ascii_digit()) {
-            return Ok(());
+            return Ok(None);
         }
-        let mut tx = db.begin().await?;
-        // Held while the provider is asked, so that two guesses at once for
-        // one identifier and purpose are asked about one after the other.
-        lock_codes(&mut tx, self.identifier, purpose).await?;
+        let turn = verifier_turn(purpose, self.identifier).await;
         let (by_owner, owner_limit) = self.owner_count();
+
+        let mut tx = db.begin().await?;
+        lock_codes(&mut tx, self.identifier, purpose).await?;
         if by_owner.hold(&mut tx).await? >= owner_limit {
-            return Ok(());
+            return Ok(Some(turn));
         }
         let live = self.live(&mut tx).await?;
         let unapproved: Vec<Uuid> = live
@@ -1157,19 +1250,31 @@ impl OfferedCode<'_> {
             .map(|(id, _)| *id)
             .collect();
         if unapproved.is_empty() || self.matches(&live) {
-            return Ok(());
+            return Ok(Some(turn));
         }
-        match verifier.check(phone, purpose, offered).await {
+        let reserved = by_owner.take(&mut tx).await?;
+        tx.commit().await?;
+
+        let answer = verifier.check(phone, purpose, offered).await;
+
+        let mut conn = db.acquire().await?;
+        // Given back whatever the answer. Should that fail, the place stays
+        // taken until the day ends: one guess fewer, never one more.
+        if let Err(error) = by_owner.release(&mut conn, reserved).await {
+            tracing::error!(%error, "a place reserved for a guess could not be given back");
+        }
+        match answer {
             Ok(true) => {
+                // Written whatever became of the rows meanwhile: a hash on a
+                // code since used or expired matches nothing.
                 sqlx::query("UPDATE one_time_code SET code_hash = $2 WHERE id = ANY($1)")
                     .bind(&unapproved)
                     .bind(code_hash(self.secret, purpose, self.identifier, offered).as_slice())
-                    .execute(&mut *tx)
+                    .execute(&mut *conn)
                     .await?;
-                tx.commit().await?;
-                Ok(())
+                Ok(Some(turn))
             }
-            Ok(false) => Ok(()),
+            Ok(false) => Ok(Some(turn)),
             Err(error) => {
                 // The error names no number and quotes no provider's text.
                 tracing::error!(%error, "a one-time code could not be checked");
@@ -1269,10 +1374,26 @@ mod tests {
         let parse = |text: &str| Identifier::parse(text).unwrap();
         assert!(rules.takes(&parse("+12025550142")));
         assert!(rules.takes(&parse("ana@example.com")));
-        for other in ["+447700900123", "+525512345678", "+79991234567"] {
+        // Other countries, and of +1 Jamaica, the Dominican Republic,
+        // Canada and a toll-free number: the US alone by default.
+        for other in [
+            "+447700900123",
+            "+525512345678",
+            "+79991234567",
+            "+18765550100",
+            "+18095550100",
+            "+14165550100",
+            "+18005550100",
+        ] {
             assert!(!rules.takes(&parse(other)), "{other}");
             assert!(rules.check_taken(&parse(other)).is_err(), "{other}");
         }
+        let canada_too = AuthRules {
+            phone_regions: vec![nanp::Region::Us, nanp::Region::Canada],
+            ..AuthRules::default()
+        };
+        assert!(canada_too.takes(&parse("+14165550100")));
+        assert!(!canada_too.takes(&parse("+18765550100")));
         assert_eq!(rules.sms_prefix(&parse("+12025550142")), "+1202");
         assert_eq!(rules.sms_prefix(&parse("+1 (888) 555-0100")), "+1888");
 

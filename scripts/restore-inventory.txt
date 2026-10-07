@@ -100,6 +100,9 @@
 0020 grant relation sms_consent_network DELETE
 0020 grant relation sms_consent_network INSERT
 0020 grant relation sms_consent_network SELECT
+0023 grant relation sms_inbound_seen DELETE
+0023 grant relation sms_inbound_seen INSERT
+0023 grant relation sms_inbound_seen SELECT
 0020 grant relation sms_opt_out DELETE
 0020 grant relation sms_opt_out INSERT
 0020 grant relation sms_opt_out SELECT

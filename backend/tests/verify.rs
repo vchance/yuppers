@@ -133,6 +133,8 @@ struct Verify {
     messages: Mutex<Vec<(String, String)>>,
     /// An answer to every request instead of Verify's own, while set.
     refusing: Mutex<Option<(StatusCode, Value)>>,
+    /// How long a check takes to be answered, while set.
+    slow: Mutex<Option<Duration>>,
 }
 
 #[derive(Clone)]
@@ -182,6 +184,11 @@ impl StandIn {
     fn refuse(&self, answer: Option<(StatusCode, Value)>) {
         *self.0.refusing.lock().unwrap() = answer;
     }
+
+    /// Has every check take `delay` to be answered.
+    fn slow_down(&self, delay: Option<Duration>) {
+        *self.0.slow.lock().unwrap() = delay;
+    }
 }
 
 async fn answer(
@@ -199,6 +206,10 @@ async fn answer(
         form,
     };
     verify.received.lock().unwrap().push(request.clone());
+    let delay = *verify.slow.lock().unwrap();
+    if let Some(delay) = delay.filter(|_| path.ends_with("/VerificationCheck")) {
+        tokio::time::sleep(delay).await;
+    }
     if let Some((status, body)) = verify.refusing.lock().unwrap().clone() {
         return (status, body.to_string());
     }
@@ -773,6 +784,221 @@ async fn a_check_twilio_cannot_answer_is_neither_taken_nor_charged() {
     twilio.refuse(None);
     let reply = sign_in(&app, &phone, &code).await;
     assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+}
+
+/// Runs the futures at the same time and gives their outputs in order.
+async fn join_all<F: std::future::Future>(futures: impl Iterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<_> = futures.map(|future| Some(Box::pin(future))).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    std::future::poll_fn(|context| {
+        let mut pending = false;
+        for (slot, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if let Some(future) = slot {
+                match future.as_mut().poll(context) {
+                    std::task::Poll::Ready(value) => {
+                        *output = Some(value);
+                        *slot = None;
+                    }
+                    std::task::Poll::Pending => pending = true,
+                }
+            }
+        }
+        if pending {
+            std::task::Poll::Pending
+        } else {
+            std::task::Poll::Ready(())
+        }
+    })
+    .await;
+    outputs.into_iter().map(Option::unwrap).collect()
+}
+
+/// Waiting for Twilio holds no database connection: guesses at more numbers
+/// than the pool has connections leave the service free to answer
+/// meanwhile. Each guess has a place in its number's day while it is with
+/// Twilio, and counts once in the end.
+#[tokio::test]
+async fn guesses_waiting_for_twilio_hold_no_database_connection() {
+    let Test {
+        _turn, app, twilio, ..
+    } = start().await;
+    let ana = app.user("Ana").await;
+    // Twice the test pool's four connections.
+    let phones: Vec<String> = (0..8).map(|_| number()).collect();
+    for phone in &phones {
+        ask(&app, phone, "en").await;
+    }
+    let wrong: Vec<&str> = phones
+        .iter()
+        .map(|phone| {
+            if twilio.code(SIGN_IN, phone) == "000000" {
+                "111111"
+            } else {
+                "000000"
+            }
+        })
+        .collect();
+    twilio.slow_down(Some(Duration::from_millis(1500)));
+
+    let guessing = join_all(
+        phones
+            .iter()
+            .zip(&wrong)
+            .map(|(phone, wrong)| sign_in(&app, phone, wrong)),
+    );
+    let meanwhile = async {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let asked = std::time::Instant::now();
+        // Needs the database: the session is looked up.
+        let me = app.get(&ana, "/v1/me").await;
+        assert_eq!(me.status, StatusCode::OK, "{:?}", me.body);
+        let waited = asked.elapsed();
+        (waited, guesses(&app, "failed-guesses-by-identifier").await)
+    };
+    let (replies, (waited, while_asking)) = tokio::join!(guessing, meanwhile);
+    assert!(
+        waited < Duration::from_millis(1000),
+        "the service waited {waited:?} for a connection"
+    );
+    // Each guess with Twilio held a place in its number's day.
+    assert_eq!(while_asking, 8);
+    for reply in replies {
+        reply.refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+    }
+    // Once answered, each place was given back and the wrong guess counted.
+    assert_eq!(guesses(&app, "failed-guesses-by-identifier").await, 8);
+    twilio.slow_down(None);
+}
+
+/// Guesses at one number at the same moment go to Twilio no more often
+/// than the number's day has wrong guesses left.
+#[tokio::test]
+async fn guesses_at_once_go_to_twilio_no_more_than_the_day_allows() {
+    let Test {
+        _turn, app, twilio, ..
+    } = start_with(AuthRules {
+        failed_guesses_per_identifier_per_day: 2,
+        ..rules(50)
+    })
+    .await;
+    let phone = number();
+    ask(&app, &phone, "en").await;
+    let code = twilio.code(SIGN_IN, &phone);
+    let wrong = if code == "000000" { "111111" } else { "000000" };
+    twilio.slow_down(Some(Duration::from_millis(200)));
+
+    let replies = join_all((0..5).map(|_| sign_in(&app, &phone, wrong))).await;
+    let mut codes: Vec<String> = replies
+        .iter()
+        .map(|reply| reply.code().to_owned())
+        .collect();
+    codes.sort();
+    assert_eq!(
+        codes,
+        [
+            "INVALID_CODE",
+            "INVALID_CODE",
+            "TOO_MANY_GUESSES",
+            "TOO_MANY_GUESSES",
+            "TOO_MANY_GUESSES"
+        ]
+    );
+    assert_eq!(twilio.to(SIGN_IN, "VerificationCheck").len(), 2);
+    assert_eq!(guesses(&app, "failed-guesses-by-identifier").await, 2);
+    twilio.slow_down(None);
+}
+
+/// Twilio resends a pending verification and keeps its first expiry, so a
+/// request it resends works no longer here than there; once that one has
+/// expired, a new code has its full ten minutes.
+#[tokio::test]
+async fn a_code_resent_works_only_until_the_first_one_expires() {
+    let Test {
+        _turn, app, twilio, ..
+    } = start().await;
+    let phone = number();
+    ask(&app, &phone, "en").await;
+    // Four minutes on.
+    sqlx::query(
+        "UPDATE one_time_code SET created_at = created_at - interval '4 minutes',
+                                  expires_at = expires_at - interval '4 minutes'
+         WHERE identifier = $1",
+    )
+    .bind(&phone)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    ask(&app, &phone, "en").await;
+    let expiries = || async {
+        sqlx::query_scalar::<_, OffsetDateTime>(
+            "SELECT expires_at FROM one_time_code WHERE identifier = $1 ORDER BY created_at",
+        )
+        .bind(&phone)
+        .fetch_all(&app.owner)
+        .await
+        .unwrap()
+    };
+    let resent = expiries().await;
+    assert_eq!(resent.len(), 2);
+    assert_eq!(resent[1], resent[0], "the same code, until the same time");
+    let left = resent[1] - OffsetDateTime::now_utc();
+    assert!(
+        left < time::Duration::minutes(7) && left > time::Duration::minutes(5),
+        "{left}"
+    );
+
+    // Once they have expired, here and at Twilio, the next is a new code
+    // with ten minutes of its own.
+    sqlx::query("UPDATE one_time_code SET expires_at = now() WHERE identifier = $1")
+        .bind(&phone)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    twilio.expire(SIGN_IN, &phone);
+    ask(&app, &phone, "en").await;
+    let left = *expiries().await.last().unwrap() - OffsetDateTime::now_utc();
+    assert!(left > time::Duration::minutes(9), "{left}");
+}
+
+/// Asking whether a number replied STOP costs a request like any other, so
+/// nobody can ask about number after number without limit.
+#[tokio::test]
+async fn asking_for_a_code_for_a_number_that_replied_stop_is_counted() {
+    let Test {
+        _turn, app, twilio, ..
+    } = start_with(AuthRules {
+        code_requests_per_address_per_hour: 3,
+        ..rules(50)
+    })
+    .await;
+    let stopped: Vec<String> = (0..4).map(|_| number()).collect();
+    for phone in &stopped {
+        sqlx::query("INSERT INTO sms_opt_out (phone) VALUES ($1)")
+            .bind(phone)
+            .execute(&app.owner)
+            .await
+            .unwrap();
+    }
+    // Without the box ticked, that is what is said, whatever the number.
+    app.call(
+        None,
+        Method::POST,
+        "/v1/auth/codes",
+        Some(json!({ "identifier": stopped[0] })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::UNPROCESSABLE_ENTITY, "SMS_CONSENT_REQUIRED");
+    for phone in &stopped[..3] {
+        ask(&app, phone, "en")
+            .await
+            .refused(StatusCode::CONFLICT, "PHONE_OPTED_OUT");
+    }
+    // The address has asked its hour's worth.
+    ask(&app, &stopped[3], "en")
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    assert!(twilio.received().is_empty());
 }
 
 // ---- What still applies -------------------------------------------------------

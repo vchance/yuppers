@@ -18,7 +18,10 @@
 //!   app's entry page with the document written into it, so that it reads
 //!   without scripts;
 //! * a path that is no file is answered with `index.html`, so a route the app
-//!   handles in the browser can be opened or reloaded directly;
+//!   handles in the browser can be opened or reloaded directly, except under
+//!   `/assets/`, where it is not found: no route of the app is there, and a
+//!   page in place of a script, a style sheet or a source map is only
+//!   confusing;
 //! * the API's paths are never answered with a page.
 //!
 //! A path that starts with several slashes is read as if it had one, and a
@@ -167,11 +170,16 @@ impl WebApp {
             .append_index_html_on_directories(true)
             .redirect_to_trailing_slash(false)
             .fallback(ServeFile::new(self.directory.join("index.html")));
+        // The same files with no page in place of one missing.
+        let assets = ServeDir::new(&self.directory)
+            .append_index_html_on_directories(false)
+            .redirect_to_trailing_slash(false);
         // The web app's own files are compressed here, so the invitation page
         // is small on a phone whatever sits in front of the service. Only
         // these: API responses carry personal data next to what a request
         // sent, which is the shape compression side channels need.
         Router::new()
+            .route_service("/assets/{*file}", assets)
             .fallback_service(files)
             .layer(middleware::from_fn(cache_control))
             .layer(CompressionLayer::new().br(true).gzip(true))
@@ -226,8 +234,8 @@ async fn route(
 }
 
 /// Hashed assets for a year, everything else checked every time. A page is
-/// never cached, even when it was served for an asset's path because the
-/// asset is gone: a later build may have the asset.
+/// never cached, and nor is an asset that is not found: a later build may
+/// have it.
 async fn cache_control(request: Request, next: Next) -> Response {
     let hashed = request.uri().path().starts_with("/assets/");
     let mut response = next.run(request).await;

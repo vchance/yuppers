@@ -100,7 +100,7 @@ static LAST_WARNING: AtomicU64 = AtomicU64::new(0);
 /// one per request would bury everything else.
 const WARNING_INTERVAL_SECONDS: u64 = 60;
 
-fn now_seconds() -> u64 {
+pub(super) fn now_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |since| since.as_secs())
@@ -108,7 +108,7 @@ fn now_seconds() -> u64 {
 
 /// Whether to warn now, given when the last warning was. Claims the moment,
 /// so of requests arriving together only one warns.
-fn time_to_warn(last: &AtomicU64, now: u64) -> bool {
+pub(super) fn time_to_warn(last: &AtomicU64, now: u64) -> bool {
     let before = last.load(Ordering::Relaxed);
     if before != 0 && now.saturating_sub(before) < WARNING_INTERVAL_SECONDS {
         return false;

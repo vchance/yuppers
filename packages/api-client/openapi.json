@@ -2115,7 +2115,7 @@
         "tags": [
           "sms"
         ],
-        "summary": "Twilio's webhook for a text sent to our number. Refused with 403, and\nnothing read, unless `X-Twilio-Signature` is Twilio's signature, under\nthe account's auth token, of this URL as Twilio requested it (the web\norigin and this path) and the posted parameters. A stop keyword puts the\nnumber on the opt-out list and turns off every agreement's updates to\nit; a start keyword takes it off the list. Answered at once, with an\nempty TwiML document: Twilio's Advanced Opt-Out sends the replies.",
+        "summary": "Twilio's webhook for a text sent to our number. Refused with 403, and\nnothing read, unless `X-Twilio-Signature` is Twilio's signature, under\nthe account's auth token, of this URL as Twilio requested it (the web\norigin and this path) and the posted parameters; refused with 413 when\nthe body is larger than 32 KB (`INBOUND_BODY_LIMIT`) or carries more\nthan a hundred parameters. A stop keyword puts the number on the opt-out list\nand turns off every agreement's updates to it; a start keyword takes it\noff the list. A message already taken (by its `MessageSid`) changes\nnothing again, so a request posted twice, or replayed, is answered the\nsame but does nothing. Answered at once, with an empty TwiML document:\nTwilio's Advanced Opt-Out sends the replies.",
         "operationId": "inbound",
         "requestBody": {
           "description": "Twilio's parameters for a message received: From, Body, OptOutType and the rest",
@@ -2141,6 +2141,9 @@
           },
           "403": {
             "description": "Not signed by Twilio, or no auth token to check it with"
+          },
+          "413": {
+            "description": "Too large, or too many parameters, to be Twilio's"
           }
         }
       }

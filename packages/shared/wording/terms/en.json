@@ -120,7 +120,7 @@
         {
           "ul": [
             "Each person in a yup can read its whole record, and download or print a copy.",
-            "You can delete your account at any time from your account page. Yups that were sent stay with the other person, as the signed record of what was proposed and agreed, with your name as the agreement gives it.",
+            "You can delete your account at any time from your account page, with a one-time code sent to your email address or phone number (a number that replied STOP gets no code until it replies START). Yups that were sent stay with the other person, as the signed record of what was proposed and agreed, with your name as the agreement gives it.",
             "What we keep, and for how long, is in our {privacy}."
           ]
         }
@@ -148,7 +148,7 @@
             "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, until you reply START. You can still sign in with an email address.",
             "Support: write to {supportEmail}, or reply HELP to any agreement update.",
             "Carriers are not liable for delayed or undelivered messages.",
-            "Phone numbers outside +1 are not texted: we send texts only to numbers that start with the country code +1.",
+            "Phone numbers outside the United States are not texted: we send texts only to US numbers, which start with the country code +1 and the area code of one of the 50 states or Washington, D.C. Numbers in Canada, in the Caribbean and Pacific countries and the US territories that share +1, and toll-free numbers, are not texted.",
             "We do not sell your personal information. We do not share your personal information or your SMS opt-in data and consent with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes."
           ]
@@ -162,7 +162,7 @@
             "How you ask for one: by entering your number and ticking a box that shows this text: “Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked, no code is sent.",
             "To confirm deleting your account by text, or to add a number to your account before turning on agreement updates, the box shows the same text with “a one-time account-deletion code” or “a one-time verification code” in place of “a one-time sign-in code”.",
             "Message frequency: One message per code request.",
-            "What the text says: Twilio Verify writes it from its own template, with our name. In English it reads “Your Yuppers.app verification code is: 123456”, with your code in place of 123456; in Spanish, Twilio sends its own Spanish version of the same message. Each code works for {codeMinutes} minutes, and only once.",
+            "What the text says: Twilio Verify writes it from its own template, with our name. In English it reads “Your Yuppers.app verification code is: 123456”, with your code in place of 123456, and a code to confirm deleting your account comes from a Verify service of its own and reads “Your Yuppers.app account deletion verification code is: 123456”; in Spanish, Twilio sends its own Spanish version of the same message. Each code works for {codeMinutes} minutes from when it was first sent, and only once; asking again within that time resends the same code.",
             "Rates: message and data rates may apply to code texts too.",
             "STOP: a number that replied STOP to our agreement updates is sent no codes either, until it replies START. A code comes from one of Twilio’s numbers, so a STOP or HELP sent in reply to it reaches Twilio, not us: it does not turn off agreement updates, and Twilio may stop sending codes to your number. For help with a code, write to {supportEmail}. You can always sign in with an email address instead."
           ]

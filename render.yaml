@@ -17,9 +17,12 @@
 # migrating, `migrate` creates the restricted application role
 # `exchange_app` with the generated APP_DB_PASSWORD, once
 # (MIGRATE_CREATE_APP_ROLE, backend/src/app_role.rs). The api and the worker
-# connect as `exchange_app`: they take the database's address from
-# DATABASE_SERVER_URL and replace its credentials with exchange_app's
-# (backend/src/config.rs, `database_url`).
+# connect as `exchange_app`: they take the database's host, port and name
+# from DATABASE_HOST, DATABASE_PORT and DATABASE_NAME, which carry no
+# credentials, and sign in with APP_DB_PASSWORD (backend/src/config.rs,
+# `database_url`). The owner's connection string, MIGRATION_DATABASE_URL, is
+# still in each service's environment, because the pre-deploy `migrate` runs
+# with its service's environment and Render offers no other place for it.
 
 envVarGroups:
   # Plain settings, the same for the api and the worker.
@@ -70,6 +73,12 @@ envVarGroups:
         value: "off"
       - key: SMS_ALLOWED_COUNTRY_CODES
         value: "+1"
+      # Of +1, the US alone (the 50 states and DC, by area code): never
+      # Canada, the Caribbean, the US territories or toll-free numbers
+      # (backend/src/nanp.rs). `US,CA` would add Canada. Twilio's geographic
+      # permissions, Verify's included, are set to the US only to match.
+      - key: SMS_ALLOWED_REGIONS
+        value: US
       - key: PUSH_DELIVERY
         value: "off"
       # Wallet passes are off: none of their settings are given.
@@ -97,10 +106,12 @@ envVarGroups:
         sync: false
       - key: SMS_API_KEY_SECRET
         sync: false
-      # The two Twilio Verify services (VA...), both named "Yuppers.app":
-      # one for signing in and confirming a number, one for deleting an
-      # account, so that a code sent for one never works for the other.
-      # Unused while SMS_CODE_DELIVERY is off; entered by hand.
+      # The two Twilio Verify services (VA...): "Yuppers.app", for signing in
+      # and confirming a number, and "Yuppers.app account deletion", for
+      # deleting an account, so that a code sent for one never works for the
+      # other and a deletion code's text says what it is for ("Your
+      # Yuppers.app account deletion verification code is: ..."). Unused
+      # while SMS_CODE_DELIVERY is off; entered by hand.
       - key: TWILIO_VERIFY_SERVICE_SID
         sync: false
       - key: TWILIO_VERIFY_DELETION_SERVICE_SID
@@ -154,11 +165,20 @@ services:
           property: connectionString
       - key: MIGRATE_CREATE_APP_ROLE
         value: "true"
-      # Where the database is; its credentials are replaced by exchange_app's.
-      - key: DATABASE_SERVER_URL
+      # Where the database is, with no credentials: the api signs in as
+      # exchange_app with APP_DB_PASSWORD.
+      - key: DATABASE_HOST
         fromDatabase:
           name: yuppers-db
-          property: connectionString
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: yuppers-db
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: yuppers-db
+          property: database
 
   # The worker: notifications, timers, reminders. One instance.
   - type: worker
@@ -187,10 +207,18 @@ services:
           property: connectionString
       - key: MIGRATE_CREATE_APP_ROLE
         value: "true"
-      - key: DATABASE_SERVER_URL
+      - key: DATABASE_HOST
         fromDatabase:
           name: yuppers-db
-          property: connectionString
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: yuppers-db
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: yuppers-db
+          property: database
       # The api's. While SMS_DELIVERY is on, the worker sends agreement
       # updates by text and counts them under the same hourly caps as the
       # api's codes, whose counts are keyed with it.

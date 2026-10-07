@@ -131,5 +131,32 @@ async fn migrate_creates_a_restricted_role_once_and_never_changes_it() {
     }
     app_role::ensure(&owner, &role, &first).await.unwrap();
 
+    // So is one that is a member of any other role, a built-in one that
+    // reads every table above all.
+    for granted in ["pg_read_all_data", "pg_write_server_files"] {
+        grant_role(&owner, granted, &role, "GRANT", "TO").await;
+        let error = app_role::ensure(&owner, &role, &first).await.unwrap_err();
+        assert!(error.to_string().contains(granted), "{granted}: {error:#}");
+        grant_role(&owner, granted, &role, "REVOKE", "FROM").await;
+    }
+    app_role::ensure(&owner, &role, &first).await.unwrap();
+
     drop_role(&owner, &role).await;
+}
+
+/// `GRANT granted TO role`, or `REVOKE granted FROM role`.
+async fn grant_role(owner: &PgPool, granted: &str, role: &str, verb: &str, to: &str) {
+    let statement: String =
+        sqlx::query_scalar("SELECT format('%s %I %s %I', $1::text, $2::text, $3::text, $4::text)")
+            .bind(verb)
+            .bind(granted)
+            .bind(to)
+            .bind(role)
+            .fetch_one(owner)
+            .await
+            .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(statement))
+        .execute(owner)
+        .await
+        .unwrap();
 }

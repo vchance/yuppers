@@ -16,6 +16,7 @@ import {
   SAMPLE_PHONE_TO_ADD,
   SCREENSHOTS,
   UPDATE_FORMS,
+  VERIFY_DELETION_SAMPLE,
   VERIFY_SAMPLE,
   asSmsOptInPage,
   codesAnchor,
@@ -85,14 +86,19 @@ describe('the page on how people opt in to texts', () => {
     ])
   })
 
-  test('the message Twilio Verify sends is its default template, with the services’ name', () => {
+  test('the message Twilio Verify sends is its default template, with the services’ names', () => {
     expect(VERIFY_SAMPLE).toBe('Your Yuppers.app verification code is: 123456')
+    // A deletion code says what it is for.
+    expect(VERIFY_DELETION_SAMPLE).toBe(
+      'Your Yuppers.app account deletion verification code is: 123456',
+    )
     // The backend says the same of what it has Verify send.
     const verify = readFileSync(join(repoRoot, 'backend/src/notifications/verify.rs'), 'utf8')
     expect(verify).toContain('https://www.twilio.com/docs/verify/api/verification')
     // The deployment guide names the services so.
     const guide = readFileSync(join(repoRoot, 'docs/deploy-render.md'), 'utf8')
     expect(guide).toContain(VERIFY_SAMPLE)
+    expect(guide).toContain(VERIFY_DELETION_SAMPLE)
   })
 
   test.each(['en', 'es'])(
@@ -268,10 +274,10 @@ describe('the page on how people opt in to texts', () => {
         const after = (step: Screen) => quotedAt(page, step, surface)
         // Each "code sent" screen: what it says, then the message Twilio
         // Verify sends, said to be Verify's, with what it is.
-        const verifySaid = (step: Screen) => {
+        const verifySaid = (step: Screen, sample = VERIFY_SAMPLE, before = wording.verifyText) => {
           const section = page.getElementById(stepAnchor(step, surface))!.parentElement!
-          expect(after(step).at(-1)).toBe(VERIFY_SAMPLE)
-          expect(section.textContent).toContain(wording.verifyText)
+          expect(after(step).at(-1)).toBe(sample)
+          expect(section.textContent).toContain(before)
           expect(section.textContent).toContain(wording.verifyNote)
           expect(section.querySelector('.sms figcaption')?.textContent).toBe(wording.messageFromVerify)
         }
@@ -290,7 +296,7 @@ describe('the page on how people opt in to texts', () => {
         expect(deleting).toContain(fill(product.deletion.codeIntro, { identifier: SAMPLE_PHONE }))
         const deleted = after('deleteAccountCodeSent')
         expect(deleted).toContain(fill(product.deletion.codeSent, { identifier: SAMPLE_PHONE }))
-        verifySaid('deleteAccountCodeSent')
+        verifySaid('deleteAccountCodeSent', VERIFY_DELETION_SAMPLE, wording.verifyDeletionText)
 
         // Agreement updates: the confirmation on screen, then its text.
         expect(after('confirmation')).toEqual([

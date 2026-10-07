@@ -166,8 +166,9 @@
       "caption": "Se envía de inmediato al número, el mismo mensaje que cuando se activan las actualizaciones en el sitio web:"
     }
   },
-  "verifyText": "El mensaje que envía Twilio Verify con el código, el mismo para los tres formularios, en inglés:",
-  "verifyNote": "Twilio escribe este mensaje con su propia plantilla, con el nombre Yuppers.app. Un código pedido en español llega en la versión en español de Twilio del mismo mensaje. El código sirve durante diez minutos.",
+  "verifyText": "El mensaje que envía Twilio Verify con el código, el mismo para entrar y para confirmar un número de teléfono, en inglés:",
+  "verifyDeletionText": "El mensaje que envía Twilio Verify con un código para eliminar una cuenta, desde un servicio de Verify propio para que diga para qué es el código, en inglés:",
+  "verifyNote": "Twilio escribe este mensaje con su propia plantilla, con el nombre del servicio de Verify que lo envía. Un código pedido en español llega en la versión en español de Twilio del mismo mensaje. El código sirve durante diez minutos desde que se envió por primera vez; si se pide de nuevo en ese tiempo, se reenvía el mismo código.",
   "messageFromVerify": "Mensaje de Twilio Verify, para Yuppers.app",
   "updateText": "Una actualización de un acuerdo, tal como llega:",
   "moreHeading": "Los términos y la política de privacidad",

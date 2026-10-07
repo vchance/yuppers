@@ -25,8 +25,8 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
  * (CODE_FORMS: signing in by text, confirming a phone number, deleting an
  * account by text) follow in a section of their own, `#one-time-codes`,
  * again on the website and in the app, with their pictures and consent
- * wording, and the message Verify sends (VERIFY_SAMPLE) in place of a text
- * of ours.
+ * wording, and the message Verify sends (VERIFY_SAMPLE, and for deleting
+ * an account VERIFY_DELETION_SAMPLE) in place of a text of ours.
  *
  * Every form has an anchor of its own (`formAnchor`), the same as before
  * the codes moved, so a reviewer can be given a link to one. Beside each
@@ -60,11 +60,14 @@ export const SAMPLE_PHONE_TO_ADD = '+12015550124'
 export const SAMPLE_CODE = '123456'
 
 /**
- * The name the Twilio Verify services are given (docs/deploy-render.md,
+ * The names the two Twilio Verify services are given (docs/deploy-render.md,
  * "One-time codes by Twilio Verify"), which Verify's template puts in its
- * message.
+ * message: one for signing in and confirming a number, and one for
+ * deleting an account, so that a deletion code never reads like a sign-in
+ * code.
  */
 export const VERIFY_SERVICE_NAME = 'Yuppers.app'
+export const VERIFY_DELETION_SERVICE_NAME = 'Yuppers.app account deletion'
 
 /**
  * The message Twilio Verify sends with a code, in English: its default SMS
@@ -75,6 +78,9 @@ export const VERIFY_SERVICE_NAME = 'Yuppers.app'
  * public documentation does not print.
  */
 export const VERIFY_SAMPLE = `Your ${VERIFY_SERVICE_NAME} verification code is: ${SAMPLE_CODE}`
+
+/** The same, from the service for deleting an account. */
+export const VERIFY_DELETION_SAMPLE = `Your ${VERIFY_DELETION_SERVICE_NAME} verification code is: ${SAMPLE_CODE}`
 
 /** An exchange's address as an update links to it, with an ID made up for the page. */
 export const SAMPLE_LINK = 'https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e'
@@ -249,8 +255,13 @@ export interface SmsOptInWording {
   steps: Record<Screen | TextStep, Step>
   /** The same steps in the mobile app. */
   mobileSteps: Record<Screen | TextStep, Step>
-  /** Before the message Twilio Verify sends with a code, after each "code sent" screen. */
+  /**
+   * Before the message Twilio Verify sends with a code, after the "code
+   * sent" screens of signing in and confirming a number.
+   */
   verifyText: string
+  /** The same, after the "code sent" screen of deleting an account. */
+  verifyDeletionText: string
   /** After it: that it is Twilio's template, and how other languages get it. */
   verifyNote: string
   /** Whom that message is from. */
@@ -389,8 +400,11 @@ export function renderSmsOptInMarkup(
   const text = (before: string, message: string, from = page.messageFrom) =>
     `<p>${escapeHtml(before)}</p>${bubble(message, from)}`
   // After each "code sent" screen: the message Twilio Verify sends, not a
-  // text of ours.
-  const verifyText = text(page.verifyText, VERIFY_SAMPLE, page.messageFromVerify) + `<p>${escapeHtml(page.verifyNote)}</p>`
+  // text of ours, from the service for what the code is for.
+  const verifyNote = `<p>${escapeHtml(page.verifyNote)}</p>`
+  const verifyText = text(page.verifyText, VERIFY_SAMPLE, page.messageFromVerify) + verifyNote
+  const verifyDeletionText =
+    text(page.verifyDeletionText, VERIFY_DELETION_SAMPLE, page.messageFromVerify) + verifyNote
 
   // What each screen says, under a heading of `level`, and after a code is
   // sent, the text it comes in. The app's screens say what the website's
@@ -485,7 +499,7 @@ export function renderSmsOptInMarkup(
             d.continue,
             s.resend,
             product.common.cancel,
-          ]) + verifyText
+          ]) + verifyDeletionText
         )
     }
   }

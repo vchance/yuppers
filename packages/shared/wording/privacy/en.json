@@ -77,7 +77,7 @@
           "h": "Codes by text, if you ask for one"
         },
         {
-          "p": "When you ask for a one-time code by text, to sign in, to confirm deleting your account or to add a number to your account, we keep a record that you ticked the box beside your number (the code itself is made and checked by Twilio Verify): what the code was for, the version of the wording beside the box and its language, whether you used the website or the app, and when. If the number is already your account’s, we keep it and your account with the record. If it isn’t yet, we keep only a keyed hash of it: a fingerprint, made with a secret key, that lets us find the record from the number if we are asked about a text, but that can’t be turned back into the number. For {networkDays} days we also keep the IP address and user agent of your request, as we do for a signature. We use the record only to show that you asked for the text we sent."
+          "p": "When you ask for a one-time code by text, to sign in, to confirm deleting your account or to add a number to your account, we keep a record that you ticked the box beside your number (the code itself is made and checked by Twilio Verify): what the code was for, the version of the wording beside the box and its language, whether you used the website or the app, and when. If the number is already your account’s, we keep it and your account with the record. If it isn’t yet, the record keeps only a keyed hash of it: a fingerprint, made with a secret key, that lets us find the record from the number if we are asked about a text, but that can’t be turned back into the number. (The number itself is held with the code, for a day at most, as “One-time codes” below says.) For {networkDays} days we also keep the IP address and user agent of your request, as we do for a signature. We use the record only to show that you asked for the text we sent."
         },
         {
           "h": "Notifications in the app, if you turn them on"
@@ -97,8 +97,8 @@
         {
           "ul": [
             "Request logs. For each request our service answers, we log the method and the path (never the query string), the status, how long it took, and a request ID. We use them to run the service and to find and fix problems. Our logs never contain what was sent or answered, codes, tokens, email addresses, phone numbers or IP addresses.",
-            "Sign-in limits. To stop anyone from guessing codes or asking for too many, we count the codes asked for from each IP address and the wrong codes entered for each email address or phone number. These counts are stored under a keyed hash, never the address or the number itself.",
-            "One-time codes. For a code by email, we store a keyed hash of the code, never the code itself, with the email address it went to and when. For a code by text, Twilio Verify makes and checks the code, and we store a record that one was asked for: the phone number, what the code was for, when it was asked for, until when it works, and how many wrong codes were entered for it. Once Twilio Verify accepts a code you enter, we add a keyed hash of that code to the record, never the code itself, so that the same code still works if you have to try again before it expires. We use these records to check the code you enter, and to limit how many codes are sent and guessed."
+            "Sign-in limits. To stop anyone from guessing codes or asking for too many, we count the codes asked for from each IP address and the wrong codes entered for each email address or phone number; the codes to confirm deleting an account asked for, and the wrong ones entered, for each account; and the texts we send, for the whole service and for each group of numbers that begin alike (by area code). These counts are stored under a keyed hash, never the IP address, the email address, the number or the account itself.",
+            "One-time codes. For a code by email, we store a keyed hash of the code, never the code itself, with the email address it went to and when. For a code by text, Twilio Verify makes and checks the code, and we store a record that one was asked for: the phone number, what the code was for, when it was asked for, until when it works, and how many wrong codes were entered for it. Once Twilio Verify accepts a code you enter, we add a keyed hash of that code to the record, never the code itself, so that the same code still works if you have to try again before it expires. We use these records to check the code you enter, and to limit how many codes are sent and guessed. Each record, with the email address or phone number in it, is deleted a day after the code was asked for, once the code has expired or been used."
           ]
         }
       ]
@@ -175,7 +175,7 @@
             "One-time codes by text: a code to sign in (which also creates your account the first time), to add a number to your account, or to confirm that you want to delete your account. We ask Twilio Verify for one only when you ask for a code, and only for the number you entered or, to confirm a deletion, the number on your account. Entering your number, ticking the box beside it that says what will be sent, and asking for a code is your request for that text; until the box is ticked, nothing is sent. Twilio Verify makes the code, texts it to you and checks the code you enter. Message frequency: one message for each code you ask for.",
             "Message and data rates may apply.",
             "**Reply HELP for help.** **Reply STOP to stop receiving texts from us.** A STOP sent in reply to an agreement update stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, so you’ll need to sign in with an email address instead. A code comes from one of Twilio’s numbers, so a STOP in reply to a code goes to Twilio, not to us. Turning off text updates for one agreement stops the updates for that agreement only.",
-            "Phone numbers outside +1 are not texted: we send texts only to numbers that start with the country code +1.",
+            "Phone numbers outside the United States are not texted: we send texts only to US numbers, which start with the country code +1 and the area code of one of the 50 states or Washington, D.C. Numbers in Canada, in the Caribbean and Pacific countries and the US territories that share +1, and toll-free numbers, are not texted.",
             "We do not sell your personal information. We do not share your personal information or your SMS opt-in data and consent with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information and opt-in consent are not shared with third parties or affiliates for marketing or promotional purposes.",
@@ -196,13 +196,13 @@
       "blocks": [
         {
           "ul": [
-            "Your email address, phone number, name and language: while you have an account. Deleting your account removes them at once.",
+            "Your email address, phone number, name and language: while you have an account. Deleting your account removes them from it at once. Your phone number then stays only where “What stays, and why” below says: in the record of text updates you turned on and of codes you asked for by text, as proof of what you agreed to, and, if it replied STOP, on our list of numbers we must not text.",
             "Yups that were sent, with everything in them and their history: we keep them as the shared record of what was proposed and agreed. We don’t delete them when one or both people delete their accounts, and we have not set a time after which they are deleted.",
             "Drafts you haven’t sent: until you send them, discard them or delete your account.",
             "The IP address and user agent recorded with a signature: {networkDays} days.",
-            "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
+            "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years after they end, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
             "The record of each code you asked for by text: {smsConsentYears} years, as proof that you asked for it. The IP address and user agent recorded with it: {networkDays} days.",
-            "One-time codes: each code works for {codeMinutes} minutes, and only once. We don’t yet delete the records of codes (where it went, when, and the hash where we keep one) on a schedule; deleting your account deletes the ones for your email address and phone number.",
+            "One-time codes: each code works for {codeMinutes} minutes, and only once. A code by text works for {codeMinutes} minutes from when it was first sent, and asking again within that time resends the same code. The record of a code (where it went, when, and the hash where we keep one) is deleted a day after the code was asked for, once it has expired or been used; deleting your account deletes the ones for your email address and phone number at once.",
             "Sign-ins: each lasts {sessionDays} days, unless you sign out first.",
             "Sign-in limit counts: two days.",
             "Push tokens: until you turn notifications off, sign out on that device or delete your account, or the push service tells us the token no longer works.",
@@ -219,7 +219,7 @@
       "title": "Deleting your account",
       "blocks": [
         {
-          "p": "You can delete your account yourself, at any time, from your account page on the website or in the app. To confirm it’s you, we send a one-time code to your email address or phone number that only works for deleting your account. Deleting can’t be undone."
+          "p": "You can delete your account yourself, at any time, from your account page on the website or in the app. To confirm it’s you, we send a one-time code to your email address or phone number that only works for deleting your account. A number that replied STOP gets no texts from us, codes included, so if your account’s only way in is such a number, reply START to one of our texts first, or write to {privacyEmail}. Deleting can’t be undone."
         },
         {
           "h": "What is removed"

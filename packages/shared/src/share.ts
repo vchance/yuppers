@@ -7,9 +7,14 @@
  *
  * The token stays in the link's fragment. The email, text message and
  * WhatsApp addresses built here carry the whole link percent-encoded, `#`
- * included, inside their own query: they are opened by the device (a mail
- * app, the messages app, WhatsApp), never sent to this service. Whichever
- * channel is chosen sees the link, as any channel the person picks would.
+ * included, inside their own query, and are never sent to this service. The
+ * `mailto:` and `sms:` ones are opened on the device, by a mail app or the
+ * messages app. The WhatsApp one is an `https://wa.me/` address: where the
+ * WhatsApp app is installed the device hands it to the app, and where it is
+ * not (a computer, a phone without it) the browser loads it from WhatsApp's
+ * web server, which then receives the whole link, token included, in that
+ * query. Whichever channel is chosen sees the link, as any channel the
+ * person picks would.
  */
 
 import { phoneOffered, type SignInChannels } from './sign-in'

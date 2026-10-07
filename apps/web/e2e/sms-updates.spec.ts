@@ -3,9 +3,14 @@ import { closeSync, openSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import {
+  CODES_ANCHOR,
+  CODE_FORMS,
   FORMS,
   PART_ANCHORS,
   SCREENSHOTS,
+  UPDATE_FORMS,
+  VERIFY_SAMPLE,
+  codesAnchor,
   formAnchor,
   stepAnchor,
   type Form,
@@ -14,7 +19,7 @@ import {
 import { apiEnvironment, apiLog, port, repoRoot, webRoot, workerBinary } from './support/env'
 import { expect, test } from './support/fixtures'
 import { agree, move, type ItemSpec } from './support/flows'
-import { codeIn, number, textsTo, waitFor } from './support/texts'
+import { codesTo, number, textsTo, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -24,7 +29,8 @@ import { en, fill } from './support/wording'
  * delivered, the worker texts them; and the page the carriers' reviewers
  * are given, as the service serves it.
  *
- * The API here writes texts to its log (`SMS_DELIVERY=log`); the worker is
+ * The API here writes texts to its log (`SMS_DELIVERY=log`), and codes for
+ * phone numbers (`SMS_CODE_DELIVERY=log`); the worker is
  * started for the one pass that sends them, and writes them to a log of its
  * own.
  */
@@ -55,16 +61,13 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   const codeBox = control.getByRole('checkbox', { name: en.smsCode.verifyNumber, exact: true })
   await expect(codeBox).not.toBeChecked()
   await codeBox.check()
-  const before = textsTo(phone, apiLog).length
+  const before = codesTo(phone, apiLog).length
   await sendCode.click()
   await expect(control.getByText(fill(w.codeSent, { phone: `+1 •••-•••-${phone.slice(-4)}` }))).toBeVisible()
-  const codeText = await waitFor(() => textsTo(phone, apiLog)[before], 'the code by text')
-  const code = codeIn(codeText)
-  // The text says what the code is for: confirming the number, not signing in.
-  expect(codeText).toBe(
-    `Yuppers.app: ${code} is your code to confirm this phone number. Do not share it with anyone.`,
-  )
-  expect(codeText).toBe(fill(en.sms.verifyNumber, { code }))
+  // Twilio Verify would text it; here the log has it. No text of the
+  // service's own carries it.
+  const code = await waitFor(() => codesTo(phone, apiLog)[before], 'the code for the number')
+  expect(textsTo(phone, apiLog)).toEqual([])
   await control.getByLabel(w.codeLabel).fill(code)
   await control.getByRole('button', { name: w.addPhone, exact: true }).click()
 
@@ -129,11 +132,12 @@ test('the page on how people opt in shows each form on the website and in the ap
     websiteHeading: string
     mobileHeading: string
     mobileRelease: string
+    codesHeading: string
     forms: Record<Form, { heading: string }>
     steps: Record<string, { title: string }>
     mobileSteps: Record<string, { title: string; caption: string }>
   }
-  const forms = Object.keys(FORMS) as Form[]
+  const steps = (forms: readonly Form[]) => forms.reduce((count, form) => count + FORMS[form].length, 0)
   const screens = Object.keys(SCREENSHOTS).length
 
   // Reached from the sections on texts of the terms and the privacy policy.
@@ -154,22 +158,34 @@ test('the page on how people opt in shows each form on the website and in the ap
       "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     )
     await expect(page.locator('html')).toHaveAttribute('lang', language)
-    // The four forms and HELP and STOP in each part, each under its own
-    // anchor, and every step of each.
+    // Agreement updates and HELP and STOP in each part, each under its own
+    // anchor, and every step of each; then the forms that text a one-time
+    // code through Twilio Verify, apart, for each part.
+    const codes = page.locator(`section.part:has(> h2#${CODES_ANCHOR})`)
     for (const surface of ['web', 'mobile'] as const) {
       const section = page.locator(`section.part:has(> h2#${PART_ANCHORS[surface]})`)
-      await expect(section.locator('section.form > h3')).toHaveCount(forms.length)
-      for (const form of forms) {
+      await expect(section.locator('section.form > h3')).toHaveCount(UPDATE_FORMS.length)
+      for (const form of UPDATE_FORMS) {
         await expect(section.locator(`h3#${formAnchor(form, surface)}`)).toHaveCount(1)
       }
-      await expect(section.locator('section.step > h4')).toHaveCount(
-        forms.reduce((count, form) => count + FORMS[form].length, 0),
-      )
+      await expect(section.locator('section.step > h4')).toHaveCount(steps(UPDATE_FORMS))
+      const among = codes.locator(`section.surface:has(> h3#${codesAnchor(surface)})`)
+      await expect(among.locator('section.form > h4')).toHaveCount(CODE_FORMS.length)
+      for (const form of CODE_FORMS) {
+        await expect(among.locator(`h4#${formAnchor(form, surface)}`)).toHaveCount(1)
+      }
+      await expect(among.locator('section.step > h5')).toHaveCount(steps(CODE_FORMS))
+      // After each code is sent, the message Twilio Verify sends.
+      await expect(among.getByText(VERIFY_SAMPLE, { exact: true })).toHaveCount(CODE_FORMS.length)
     }
     // Every picture is there, from this origin, served, and drawn.
     const images = page.locator('section.step img')
     await expect(images).toHaveCount(2 * screens)
-    await expect(page.locator('section.part:has(> h2#mobile-app) img[src^="/sms-opt-in/mobile/"]')).toHaveCount(screens)
+    // The app's pictures: its updates in its part, its code forms among the codes.
+    await expect(page.locator('section.step img[src^="/sms-opt-in/mobile/"]')).toHaveCount(screens)
+    await expect(page.locator('section.part:has(> h2#mobile-app) img')).toHaveCount(
+      UPDATE_FORMS.reduce((count, form) => count + (FORMS[form] as readonly string[]).filter((step) => step in SCREENSHOTS).length, 0),
+    )
     for (const image of await images.all()) {
       await image.scrollIntoViewIfNeeded()
       const src = (await image.getAttribute('src'))!
@@ -185,8 +201,9 @@ test('the page on how people opt in shows each form on the website and in the ap
   await page.goto('/sms-opt-in')
   await expect(page.getByRole('heading', { name: wording.title, level: 1 })).toBeVisible()
   await expect(page.getByRole('heading', { name: wording.websiteHeading, level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: wording.codesHeading, level: 2 })).toBeVisible()
   for (const [step, { title }] of Object.entries(wording.steps)) {
-    await expect(page.locator(`h4#${stepAnchor(step as StepName, 'web')}`)).toHaveText(title)
+    await expect(page.locator(`#${stepAnchor(step as StepName, 'web')}`)).toHaveText(title)
   }
   await expect(page.getByText(en.smsUpdates.consent, { exact: true }).first()).toBeVisible()
   for (const label of [en.smsCode.signIn, en.smsCode.verifyNumber, en.smsCode.deleteAccount]) {
@@ -196,7 +213,9 @@ test('the page on how people opt in shows each form on the website and in the ap
 
   // The contents list leads to each part and each form, at its own address.
   const contents = page.getByRole('navigation', { name: wording.contentsLabel })
-  await expect(contents.getByRole('link')).toHaveCount(2 + 2 * forms.length)
+  await expect(contents.getByRole('link')).toHaveCount(
+    2 + 2 * UPDATE_FORMS.length + 1 + 2 + 2 * CODE_FORMS.length,
+  )
   await expect(contents.getByRole('link', { name: wording.websiteHeading })).toHaveAttribute('href', '#website')
   await contents.getByRole('link', { name: wording.mobileHeading }).click()
   await expect(page).toHaveURL(/\/sms-opt-in#mobile-app$/)
@@ -204,7 +223,7 @@ test('the page on how people opt in shows each form on the website and in the ap
   await expect(mobile).toBeInViewport()
   await expect(page.getByText(wording.mobileRelease, { exact: true })).toBeVisible()
   for (const [step, { title, caption }] of Object.entries(wording.mobileSteps)) {
-    const heading = page.locator(`h4#${stepAnchor(step as StepName, 'mobile')}`)
+    const heading = page.locator(`#${stepAnchor(step as StepName, 'mobile')}`)
     await expect(heading).toHaveText(title)
     await expect(heading.locator('xpath=following-sibling::p[1]')).toHaveText(caption)
   }
@@ -213,10 +232,15 @@ test('the page on how people opt in shows each form on the website and in the ap
     .nth(1)
     .click()
   await expect(page).toHaveURL(/\/sms-opt-in#mobile-app-confirm-number$/)
-  await expect(page.locator('h3#mobile-app-confirm-number')).toBeInViewport()
-  // A link straight to a part, or to one form, opens there.
+  await expect(page.locator('h4#mobile-app-confirm-number')).toBeInViewport()
+  // A link straight to a part, or to one form, opens there: the addresses
+  // the campaign gives, and the ones the code forms had before they moved.
   await page.goto('/es/sms-opt-in#mobile-app')
   await expect(page.locator('h2#mobile-app')).toBeInViewport()
+  for (const anchor of ['website-agreement-updates', 'mobile-app-agreement-updates']) {
+    await page.goto(`/sms-opt-in#${anchor}`)
+    await expect(page.locator(`h3#${anchor}`)).toBeInViewport()
+  }
   await page.goto('/es/sms-opt-in#website-delete-account')
-  await expect(page.locator('h3#website-delete-account')).toBeInViewport()
+  await expect(page.locator('h4#website-delete-account')).toBeInViewport()
 })

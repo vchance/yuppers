@@ -14,7 +14,7 @@ import { apiBinary, apiEnvironment, mobileRoot, repoRoot } from '../support/env'
  * The app's own screens, exported for the web by `export.mjs` and run in the
  * browser harness (README, "Running the screens in a browser"), in Chromium
  * the size of an iPhone. It runs against a stack of its own: the API on
- * 8335, with text messages written to its log (`SMS_DELIVERY=log`) and phone
+ * 8335, with text messages written to its log (`SMS_DELIVERY=log`, `SMS_CODE_DELIVERY=log`) and phone
  * sign-in on, the harness proxy on 8336 and the export's server on 5335.
  * The database is the one in `.env`, with the migrations applied. Nothing is
  * sent anywhere.
@@ -53,10 +53,11 @@ export default defineConfig({
         ...apiEnvironment(),
         BIND_ADDR: `${host}:${apiPort}`,
         WEB_ORIGIN: webURL,
-        // Codes for phone numbers as the text message they would be, in the
-        // log, and agreement updates offered: what the screens show when
+        // Codes for phone numbers in the log, where Twilio Verify would text
+        // them, and agreement updates offered: what the screens show when
         // texting is on.
         SMS_DELIVERY: 'log',
+        SMS_CODE_DELIVERY: 'log',
         SMS_MAX_PER_PREFIX_PER_HOUR: '1000',
       },
       reuseExistingServer: false,

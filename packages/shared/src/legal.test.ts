@@ -119,13 +119,16 @@ describe('what the SMS registration asks for', () => {
   const mobile =
     'Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes.'
 
-  test('the privacy policy says it in the body and in the section on texts, for both programs', () => {
+  test('the privacy policy says it in the body and in the section on texts, for the program and for codes', () => {
     const wording = documents.privacy.en
     expect(wording.sections['what-we-collect'].title).toBe('What we collect and how we use it')
     expect(sectionText('privacy', 'en', wording, 'what-we-collect')).toContain(sell)
     const sms = sectionText('privacy', 'en', wording, 'text-messages')
+    // Codes by text are no program of ours any more: Twilio Verify sends them.
+    expect(sms).not.toContain('Yuppers.app sign-in codes')
     for (const required of [
-      'Yuppers.app sign-in codes',
+      'One-time codes by text',
+      'Twilio Verify makes the code, texts it to you and checks the code you enter.',
       'Message frequency: one message for each code you ask for.',
       'Yuppers.app agreement updates',
       'Message frequency varies; there is no fixed maximum: one text per status change',
@@ -143,14 +146,24 @@ describe('what the SMS registration asks for', () => {
     expect(sectionText('privacy', 'en', wording, 'what-we-collect')).toContain(
       'the consent wording you were shown. We use it only to send you those updates and to show that you agreed to receive them.',
     )
+    // What Twilio receives for a code, and what is stored of one now.
+    expect(sectionText('privacy', 'en', wording, 'who-sees-what')).toContain(
+      'through its verification service, Twilio Verify, for each one-time code by text, your number, the code it makes and sends you, the code you enter, and the language to write it in.',
+    )
+    expect(sectionText('privacy', 'en', wording, 'what-we-collect')).toContain(
+      'For a code by text, Twilio Verify makes and checks the code, and we store a record that one was asked for',
+    )
   })
 
-  test('the terms list both programs, each with its name, description and frequency, and the rules once', () => {
+  test('the terms describe the one program with its name, description and frequency, the rules once, and codes apart', () => {
     const sms = sectionText('terms', 'en', documents.terms.en, 'text-messages')
+    expect(sms).not.toContain('Yuppers.app sign-in codes')
     for (const required of [
-      'Program name: Yuppers.app sign-in codes.',
-      'Yuppers.app (https://yuppers.app) texts a one-time sign-in code to the phone number you enter on the sign-in screen, only when you ask for one.',
+      'One-time codes by text',
+      'are sent and checked by our provider Twilio’s verification service, Twilio Verify, from Twilio’s own numbers. They are not part of the Yuppers.app agreement updates program.',
+      '“Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”',
       'Message frequency: One message per code request.',
+      '“Your Yuppers.app verification code is: 123456”',
       'Program name: Yuppers.app agreement updates.',
       'If you turn on text updates for an agreement, Yuppers.app texts you when its status changes: for example, when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it.',
       '“Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”',

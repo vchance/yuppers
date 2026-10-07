@@ -114,7 +114,7 @@
         { "h": "How we tell you" },
         { "p": "When the other person does something in a yup, or an item is due soon or overdue, we send you an email. Emails never include the terms; sign in to see them." },
         { "p": "If the app on your phone offers notifications, you can turn them on from your account page. They say only that a yup has an update, never the terms, names or amounts, and tapping one opens the yup. You still get the emails." },
-        { "p": "Where we send text messages, they carry sign-in codes and, if you turn them on for an agreement with “Text updates” on its page, one text each time its status changes. A text update says only that something changed, with a link to the yup. Reply STOP to any of our texts to stop them all, sign-in codes included." },
+        { "p": "Where we send text messages, they carry sign-in codes, which our provider Twilio sends and checks with its verification service, Twilio Verify, and, if you turn them on for an agreement with “Text updates” on its page, one text each time its status changes. A text update says only that something changed, with a link to the yup. Reply STOP to a text update to stop all our texts, sign-in codes included." },
         { "p": "If your account has only a phone number, we can’t email you, so the app’s notifications and the text updates you turn on are the only ways we tell you about your yups. Without them, check your yups in the app or on the web." }
       ]
     },

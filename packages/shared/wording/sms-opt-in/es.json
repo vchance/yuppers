@@ -1,43 +1,47 @@
 {
   "title": "Cómo se suscribe la gente a los mensajes de texto de Yuppers.app",
   "description": "Cada paso que da una persona para recibir mensajes de texto de Yuppers.app, con el texto exacto de cada pantalla y de cada mensaje.",
-  "intro": "Yuppers.app (https://yuppers.app) envía mensajes de texto en dos programas, códigos de Yuppers.app para entrar (Yuppers.app sign-in codes) y actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates), y para nada más: nada de marketing. Esta página muestra cada paso que da una persona para recibirlos, con una imagen de cada pantalla y el texto exacto que muestra.",
-  "note": "En yuppers.app y en la app móvil de Yuppers, entrar con un número de teléfono, el código por mensaje para eliminar una cuenta y la sección “Actualizaciones por mensaje” de un acuerdo solo aparecen mientras el envío de mensajes está activado en el servicio. Las pantallas de abajo se muestran como aparecen cuando el envío de mensajes está activado.",
+  "intro": "Yuppers.app (https://yuppers.app) tiene un solo programa de mensajes de texto, actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates), y no envía marketing. Esta página muestra cada paso que da una persona para recibir esas actualizaciones, con una imagen de cada pantalla y el texto exacto que muestra. Los códigos de un solo uso por mensaje, para entrar, para confirmar un número de teléfono o para confirmar la eliminación de una cuenta, los envía y comprueba el servicio de verificación de nuestro proveedor Twilio, Twilio Verify; no forman parte del programa de actualizaciones de acuerdos, y sus formularios se muestran en una sección propia después.",
+  "note": "En yuppers.app y en la app móvil de Yuppers, la sección “Actualizaciones por mensaje” de un acuerdo, entrar con un número de teléfono y el código por mensaje para eliminar una cuenta solo aparecen mientras el envío de mensajes está activado en el servicio. Las pantallas de abajo se muestran como aparecen cuando el envío de mensajes está activado.",
   "contentsLabel": "En esta página",
   "websiteHeading": "En el sitio web de Yuppers",
   "websiteIntro": "Estas pantallas se tomaron del sitio web de Yuppers, https://yuppers.app, en una pantalla del tamaño de un teléfono.",
   "mobileHeading": "En la app móvil de Yuppers",
-  "mobileIntro": "La app de Yuppers para iPhone y Android tiene los mismos cuatro formularios, con las mismas casillas y el mismo texto: entrar con un número de teléfono, confirmar un número de teléfono, eliminar una cuenta por mensaje y la sección “Actualizaciones por mensaje” de un acuerdo. Cada imagen es la pantalla entera, bajo la barra de navegación de la propia app.",
+  "mobileIntro": "La app de Yuppers para iPhone y Android tiene la misma sección “Actualizaciones por mensaje” en un acuerdo, con la misma casilla y el mismo texto. Cada imagen es la pantalla entera, bajo la barra de navegación de la propia app.",
   "mobileRelease": "La app de Yuppers todavía no está publicada en el App Store ni en Google Play, así que estas imágenes se tomaron de las propias pantallas de la app, construidas a partir de su código y mostradas al tamaño de la pantalla de un iPhone, y no de una descarga de la tienda.",
-  "mobileSame": "Los textos de consentimiento, los mensajes que llevan los códigos, el mensaje que confirma la suscripción y las respuestas a HELP y STOP son los mismos en el sitio web y en la app.",
+  "mobileSame": "El texto de consentimiento, el mensaje que confirma la suscripción y las respuestas a HELP y STOP son los mismos en el sitio web y en la app.",
   "wordingHeading": "Texto exacto",
   "messageFrom": "Mensaje de Yuppers.app",
   "messageTo": "Respuesta de la persona",
-  "programsHeading": "Los dos programas",
+  "programsHeading": "El programa de mensajes de texto",
   "programs": [
-    "Códigos de Yuppers.app para entrar: un mensaje por cada código que pide una persona, para entrar, para confirmar la eliminación de su cuenta o para agregar un número a su cuenta, y solo después de que marque una casilla junto al número.",
-    "Actualizaciones de acuerdos de Yuppers.app: un mensaje por cada cambio de estado de un acuerdo para el que la persona activó las actualizaciones. La frecuencia de los mensajes varía; no hay un máximo fijo."
+    "Actualizaciones de acuerdos de Yuppers.app: un mensaje por cada cambio de estado de un acuerdo para el que la persona activó las actualizaciones, y un mensaje que confirma que las activó. La frecuencia de los mensajes varía; no hay un máximo fijo."
   ],
+  "codesNote": "Los códigos de un solo uso por mensaje no forman parte de este programa. Los envía y comprueba Twilio Verify, desde los remitentes propios de Twilio, y se muestran abajo, en “Códigos de un solo uso”.",
+  "codesHeading": "Códigos de un solo uso (enviados por Twilio Verify, no forman parte del programa de actualizaciones de acuerdos)",
+  "codesIntro": "Tres formularios envían un código de un solo uso por mensaje: entrar con un número de teléfono, confirmar un número de teléfono que se agrega a una cuenta y confirmar que se va a eliminar una cuenta. Cada código lo envía y comprueba el servicio de verificación de nuestro proveedor Twilio, Twilio Verify, un mensaje por solicitud, y solo después de que la persona marque la casilla junto al número. Estos mensajes no forman parte del programa de actualizaciones de acuerdos de Yuppers.app.",
+  "codesWebsiteHeading": "Códigos de un solo uso en el sitio web",
+  "codesMobileHeading": "Códigos de un solo uso en la app",
   "forms": {
+    "agreementUpdates": {
+      "heading": "Actualizaciones de acuerdos",
+      "intro": "Las actualizaciones por mensaje se activan acuerdo por acuerdo, con una casilla en ese acuerdo, y un mensaje lo confirma. Antes, la cuenta necesita un número de teléfono; cómo se agrega se muestra en “Confirmar un número de teléfono”, en la sección de los códigos de un solo uso."
+    },
+    "replies": {
+      "heading": "HELP y STOP",
+      "intro": "Responder HELP o STOP a cualquier mensaje del número de las actualizaciones de acuerdos recibe de inmediato estas respuestas, que están en inglés. STOP termina todos los mensajes de Yuppers.app a ese número, tanto las actualizaciones de acuerdos como los códigos de un solo uso, hasta que responda START; la persona todavía puede entrar con un correo electrónico. Cada actualización de un acuerdo se ve como el último mensaje de abajo."
+    },
     "signIn": {
       "heading": "Entrar por mensaje de texto",
       "intro": "El formulario para entrar, la primera pantalla para quien no ha entrado. Solo se envía un código a un número que la persona escribe ahí, y solo después de que marque la casilla junto a él."
     },
     "confirmNumber": {
       "heading": "Confirmar un número de teléfono",
-      "intro": "Las actualizaciones por mensaje necesitan un número de celular de EE. UU. en la cuenta. Si no tiene ninguno, “Actualizaciones por mensaje” de un acuerdo primero lo pide y comprueba que es de la persona con un código de un solo uso, que se envía solo después de que marque la casilla junto al número."
+      "intro": "Las actualizaciones por mensaje necesitan un número de celular de EE. UU. en la cuenta. Si no tiene ninguno, “Actualizaciones por mensaje” de un acuerdo primero lo pide y comprueba que es de la persona con un código de un solo uso, que Twilio Verify envía solo después de que marque la casilla junto al número."
     },
     "deleteAccount": {
       "heading": "Eliminar una cuenta por mensaje de texto",
       "intro": "Eliminar una cuenta se confirma con un código de un solo uso enviado al correo electrónico o al número de teléfono de la cuenta. Cuando va al número de teléfono, solo se envía después de que la persona marque la casilla junto a él. Las imágenes muestran una cuenta cuya única forma de entrar es su número de teléfono."
-    },
-    "agreementUpdates": {
-      "heading": "Actualizaciones de acuerdos",
-      "intro": "Las actualizaciones por mensaje se activan acuerdo por acuerdo, con una casilla en ese acuerdo, y un mensaje lo confirma."
-    },
-    "replies": {
-      "heading": "HELP y STOP",
-      "intro": "Responder HELP o STOP a cualquiera de nuestros mensajes recibe de inmediato estas respuestas, que están en inglés. STOP termina todos los mensajes de Yuppers.app a ese número, incluidos los códigos, hasta que responda START; la persona todavía puede entrar con un correo electrónico. Cada actualización de un acuerdo se ve como el último mensaje de abajo."
     }
   },
   "steps": {
@@ -162,16 +166,16 @@
       "caption": "Se envía de inmediato al número, el mismo mensaje que cuando se activan las actualizaciones en el sitio web:"
     }
   },
-  "codeText": "El mensaje con el código para entrar:",
-  "verifyCodeText": "El mensaje con el código que confirma un número que se agrega:",
-  "deleteCodeText": "El mensaje con el código que confirma la eliminación de una cuenta:",
+  "verifyText": "El mensaje que envía Twilio Verify con el código, el mismo para los tres formularios, en inglés:",
+  "verifyNote": "Twilio escribe este mensaje con su propia plantilla, con el nombre Yuppers.app. Un código pedido en español llega en la versión en español de Twilio del mismo mensaje. El código sirve durante diez minutos.",
+  "messageFromVerify": "Mensaje de Twilio Verify, para Yuppers.app",
   "updateText": "Una actualización de un acuerdo, tal como llega:",
   "moreHeading": "Los términos y la política de privacidad",
-  "more": "Los dos programas se describen en la sección sobre mensajes de texto de los {terms} y de la {privacy}.",
+  "more": "El programa de actualizaciones de acuerdos y los códigos de un solo uso por mensaje se describen en la sección sobre mensajes de texto de los {terms} y de la {privacy}.",
   "termsLink": "Términos y condiciones",
   "privacyLink": "Política de privacidad",
   "replies": {
-    "help": "Yuppers.app: Text updates about your agreements and sign-in codes. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
+    "help": "Yuppers.app: Text updates about agreements you turned them on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
     "stop": "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
   }
 }

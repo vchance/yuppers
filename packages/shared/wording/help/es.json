@@ -114,7 +114,7 @@
         { "h": "Cómo te avisamos" },
         { "p": "Cuando la otra persona hace algo en un yup, o un elemento vence pronto o está atrasado, te enviamos un correo. Los correos nunca incluyen los términos; inicia sesión para verlos." },
         { "p": "Si la app de tu teléfono ofrece notificaciones, puedes activarlas en la página de tu cuenta. Solo dicen que un yup tiene novedades, nunca los términos, los nombres ni los importes, y al tocar una se abre el yup. Los correos te siguen llegando." },
-        { "p": "Donde enviamos mensajes de texto, llevan códigos de inicio de sesión y, si las activas para un acuerdo con “Actualizaciones por mensaje” en su página, un mensaje cada vez que cambia su estado. Una actualización por mensaje solo dice que algo cambió, con un enlace al yup. Responde STOP a cualquiera de nuestros mensajes para detenerlos todos, incluidos los códigos de inicio de sesión." },
+        { "p": "Donde enviamos mensajes de texto, llevan códigos de inicio de sesión, que nuestro proveedor Twilio envía y comprueba con su servicio de verificación, Twilio Verify, y, si las activas para un acuerdo con “Actualizaciones por mensaje” en su página, un mensaje cada vez que cambia su estado. Una actualización por mensaje solo dice que algo cambió, con un enlace al yup. Responde STOP a una actualización por mensaje para detener todos nuestros mensajes, incluidos los códigos de inicio de sesión." },
         { "p": "Si tu cuenta tiene solo un número de teléfono, no podemos enviarte correos, así que las notificaciones de la app y las actualizaciones por mensaje que actives son las únicas formas de avisarte sobre tus yups. Sin ellas, revisa tus yups en la app o en la web." }
       ]
     },

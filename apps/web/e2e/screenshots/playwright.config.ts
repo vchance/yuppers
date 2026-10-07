@@ -12,7 +12,7 @@ import { apiBinary, repoRoot, signInLimits, webRoot } from '../support/env'
  * `public/sms-opt-in/` (README, "Privacy policy and terms").
  *
  * It runs against a stack of its own: the API on 8331, with text messages
- * written to its log (`SMS_DELIVERY=log`) and phone sign-in on, and the web
+ * written to its log (`SMS_DELIVERY=log`, `SMS_CODE_DELIVERY=log`) and phone sign-in on, and the web
  * app's development server on 5331 in front of it. The database is the one
  * in `.env`, with the migrations applied. Nothing is sent anywhere.
  */
@@ -44,10 +44,11 @@ export default defineConfig({
         WEB_ORIGIN: webOrigin,
         CODE_DELIVERY: 'log',
         NOTIFICATION_DELIVERY: 'log',
-        // Codes for phone numbers as the text message they would be, in the
-        // log, and agreement updates offered: what the screens show when
+        // Codes for phone numbers in the log, where Twilio Verify would text
+        // them, and agreement updates offered: what the screens show when
         // texting is on.
         SMS_DELIVERY: 'log',
+        SMS_CODE_DELIVERY: 'log',
         SMS_MAX_PER_PREFIX_PER_HOUR: '1000',
         RUST_LOG: 'info',
         NO_COLOR: '1',

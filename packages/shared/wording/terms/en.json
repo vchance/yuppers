@@ -130,19 +130,7 @@
       "title": "Text messages",
       "blocks": [
         {
-          "p": "When we offer them, Yuppers.app sends text messages in two programs. These terms apply to both."
-        },
-        {
-          "h": "Yuppers.app sign-in codes"
-        },
-        {
-          "ul": [
-            "Program name: Yuppers.app sign-in codes.",
-            "Description: Yuppers.app (https://yuppers.app) texts a one-time sign-in code to the phone number you enter on the sign-in screen, only when you ask for one. If you choose your phone number to confirm deleting your account, we also text you a one-time code for that.",
-            "How you opt in: by entering your number and ticking a box that shows this text: “Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked, no code is sent.",
-            "To confirm deleting your account by text, or to add a number to your account before turning on agreement updates, the box shows the same text with “a one-time account-deletion code” or “a one-time verification code” in place of “a one-time sign-in code”.",
-            "Message frequency: One message per code request."
-          ]
+          "p": "When we offer them, Yuppers.app sends text messages in one program, Yuppers.app agreement updates. These terms apply to it. One-time codes by text are not part of that program: our provider Twilio’s verification service, Twilio Verify, sends and checks them, as described under “One-time codes by text” below."
         },
         {
           "h": "Yuppers.app agreement updates"
@@ -150,26 +138,33 @@
         {
           "ul": [
             "Program name: Yuppers.app agreement updates.",
-            "Description: If you turn on text updates for an agreement, Yuppers.app texts you when its status changes: for example, when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it.",
-            "How you opt in: by ticking a box on that agreement, which shows this text: “Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”",
-            "Before the box, if your account has no phone number, you add one, a US number that we check with a one-time code sent to it by text once you tick the box beside it (above).",
+            "Description: If you turn on text updates for an agreement, Yuppers.app texts you when its status changes: for example, when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it. When you turn them on, we text you once to confirm.",
+            "How you opt in: by ticking a box on that agreement, which shows this text: “Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked and saved, no update is sent.",
+            "Before the box, if your account has no phone number, you add one, a US number that we check with a one-time code (see “One-time codes by text” below).",
             "Message frequency: Message frequency varies; there is no fixed maximum. One text per status change of an agreement you turned updates on for.",
             "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
-            "Turning text updates off for an agreement stops them for that agreement only."
-          ]
-        },
-        {
-          "h": "For both programs"
-        },
-        {
-          "ul": [
+            "Turning text updates off for an agreement stops them for that agreement only.",
             "Message and data rates may apply.",
-            "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app, sign-in codes included. You can still sign in with an email address.",
-            "Support: write to {supportEmail}, or reply HELP to any of our texts.",
+            "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, until you reply START. You can still sign in with an email address.",
+            "Support: write to {supportEmail}, or reply HELP to any agreement update.",
             "Carriers are not liable for delayed or undelivered messages.",
             "Phone numbers outside +1 are not texted: we send texts only to numbers that start with the country code +1.",
             "We do not sell your personal information. We do not share your personal information or your SMS opt-in data and consent with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes."
+          ]
+        },
+        {
+          "h": "One-time codes by text"
+        },
+        {
+          "ul": [
+            "Codes you ask for on the sign-in form, on the form that confirms a phone number added to your account, and on the form that confirms deleting your account are sent and checked by our provider Twilio’s verification service, Twilio Verify, from Twilio’s own numbers. They are not part of the Yuppers.app agreement updates program.",
+            "How you ask for one: by entering your number and ticking a box that shows this text: “Text me a one-time sign-in code from yuppers.app at this number. One message per request. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked, no code is sent.",
+            "To confirm deleting your account by text, or to add a number to your account before turning on agreement updates, the box shows the same text with “a one-time account-deletion code” or “a one-time verification code” in place of “a one-time sign-in code”.",
+            "Message frequency: One message per code request.",
+            "What the text says: Twilio Verify writes it from its own template, with our name. In English it reads “Your Yuppers.app verification code is: 123456”, with your code in place of 123456; in Spanish, Twilio sends its own Spanish version of the same message. Each code works for {codeMinutes} minutes, and only once.",
+            "Rates: message and data rates may apply to code texts too.",
+            "STOP: a number that replied STOP to our agreement updates is sent no codes either, until it replies START. A code comes from one of Twilio’s numbers, so a STOP or HELP sent in reply to it reaches Twilio, not us: it does not turn off agreement updates, and Twilio may stop sending codes to your number. For help with a code, write to {supportEmail}. You can always sign in with an email address instead."
           ]
         },
         {

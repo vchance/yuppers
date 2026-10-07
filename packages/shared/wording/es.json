@@ -173,9 +173,6 @@
     "body": "Tu yup tiene novedades."
   },
   "sms": {
-    "signIn": "Yuppers.app: {code} es tu código para entrar. No se lo des a nadie.",
-    "deleteAccount": "Yuppers.app: {code}: código para eliminar tu cuenta. No lo compartas.",
-    "verifyNumber": "Yuppers.app: {code}: código para confirmar tu número. No lo compartas.",
     "update": "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: {link}. Responde STOP para cancelar.",
     "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar."
   },

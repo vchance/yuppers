@@ -170,22 +170,11 @@ export interface Wording {
     body: string
   }
   /**
-   * The text message that carries a one-time code to a phone number, one for
-   * each reason a code is texted. Each begins with the program's sender,
-   * "Yuppers.app:", uses `{code}`, says what the code is for, warns not to
-   * share it, and must fit one SMS segment: 160 characters if every
-   * character is in the GSM alphabet, 70 if any is not (an accent such as
-   * `ó`, or a curly apostrophe). The backend's tests check each language.
+   * The service's own text messages, all of them "Yuppers.app agreement
+   * updates". One-time codes by text are not among them: Twilio Verify
+   * texts those in its own template (`backend/src/notifications/verify.rs`).
    */
   sms: {
-    signIn: string
-    deleteAccount: string
-    /**
-     * The code checking a number being added to an account, for agreement
-     * updates (`VERIFY_NUMBER`). It is a sign-in code, and an email code
-     * for the same says so, but the text names what it does here.
-     */
-    verifyNumber: string
     /**
      * An agreement update by text, sent by the service: `{link}` to the
      * exchange and nothing else, within the GSM alphabet

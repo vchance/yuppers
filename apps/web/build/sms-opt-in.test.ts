@@ -7,13 +7,18 @@ import { describe, expect, test } from 'vitest'
 
 import { renderEntryPage } from './entry-pages.ts'
 import {
+  CODES_ANCHOR,
+  CODE_FORMS,
   FORMS,
   PART_ANCHORS,
   SAMPLE_LINK,
   SAMPLE_PHONE,
   SAMPLE_PHONE_TO_ADD,
   SCREENSHOTS,
+  UPDATE_FORMS,
+  VERIFY_SAMPLE,
   asSmsOptInPage,
+  codesAnchor,
   formAnchor,
   readSmsOptInPages,
   screenshotPath,
@@ -25,10 +30,11 @@ import {
 } from './sms-opt-in.ts'
 
 /*
- * The page on how people opt in to texts, as the build writes it: every
- * form on the website and in the app, each step with its picture, and the
- * exact wording of each screen and message, read without scripts, with
- * nothing inline.
+ * The page on how people opt in to texts, as the build writes it: the
+ * agreement-updates program first, on the website and in the app, and then
+ * the forms that text one-time codes through Twilio Verify, apart; each
+ * step with its picture, and the exact wording of each screen and message,
+ * read without scripts, with nothing inline.
  */
 
 const wordingDirectory = join(import.meta.dirname, '../../../packages/shared/wording')
@@ -51,26 +57,13 @@ const masked = (phone: string) => `+1 •••-•••-${phone.slice(-4)}`
 const SURFACES: Surface[] = ['web', 'mobile']
 const FORM_NAMES = Object.keys(FORMS) as Form[]
 
-/**
- * The code texts as the backend sends them, word for word: the cases of its
- * own test, `the_code_messages_read_as_written_and_are_sent_as_expected` in
- * `backend/src/notifications/sms.rs`, by language and reason.
- */
-const CODE_TEXTS = (() => {
-  const source = readFileSync(join(repoRoot, 'backend/src/notifications/sms.rs'), 'utf8')
-  const found: Record<string, Record<string, string>> = {}
-  for (const [, language, reason, text] of source.matchAll(
-    /\(\s*"(\w+)",\s*CodePurpose::(\w+),\s*"([^"]+)",/g,
-  )) {
-    found[language] = { ...found[language], [reason]: text }
-  }
-  return found
-})()
+/** Whether a form texts a one-time code, and so is in the codes' section. */
+const isCodeForm = (form: Form) => (CODE_FORMS as readonly Form[]).includes(form)
 
-/** A form's section, under its heading's anchor. */
+/** A form's section, under its heading's anchor: an h3 in a part, an h4 among the codes. */
 function formSection(page: Document, form: Form, surface: Surface): Element {
   const heading = page.getElementById(formAnchor(form, surface))
-  expect(heading?.tagName, formAnchor(form, surface)).toBe('H3')
+  expect(heading?.tagName, formAnchor(form, surface)).toBe(isCodeForm(form) ? 'H4' : 'H3')
   return heading!.parentElement!
 }
 
@@ -92,18 +85,18 @@ describe('the page on how people opt in to texts', () => {
     ])
   })
 
-  test('the backend’s code texts are read, all three reasons in both languages', () => {
-    for (const language of ['en', 'es']) {
-      expect(Object.keys(CODE_TEXTS[language] ?? {}).sort(), language).toEqual([
-        'DeleteAccount',
-        'SignIn',
-        'VerifyNumber',
-      ])
-    }
+  test('the message Twilio Verify sends is its default template, with the services’ name', () => {
+    expect(VERIFY_SAMPLE).toBe('Your Yuppers.app verification code is: 123456')
+    // The backend says the same of what it has Verify send.
+    const verify = readFileSync(join(repoRoot, 'backend/src/notifications/verify.rs'), 'utf8')
+    expect(verify).toContain('https://www.twilio.com/docs/verify/api/verification')
+    // The deployment guide names the services so.
+    const guide = readFileSync(join(repoRoot, 'docs/deploy-render.md'), 'utf8')
+    expect(guide).toContain(VERIFY_SAMPLE)
   })
 
   test.each(['en', 'es'])(
-    'in %s lists all four forms and HELP and STOP on the website and in the app, each under its anchor',
+    'in %s puts agreement updates first, on the website and in the app, and the code forms after, each under its anchor',
     (language) => {
       const page = parse(language)
       const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
@@ -113,27 +106,50 @@ describe('the page on how people opt in to texts', () => {
       expect(root.querySelector('h1')?.textContent).toBe(wording.title)
       expect(root.textContent).toContain(wording.note)
 
+      // The parts in order: the website's updates, the app's, then the codes.
+      const article = page.querySelector('article')!
+      expect([...article.querySelectorAll(':scope > section.part > h2')].map((h) => h.id)).toEqual([
+        PART_ANCHORS.web,
+        PART_ANCHORS.mobile,
+        CODES_ANCHOR,
+      ])
+      const codes = page.getElementById(CODES_ANCHOR)!
+      expect(codes.textContent).toBe(wording.codesHeading)
+      expect(wording.codesHeading).toMatch(/Twilio Verify/)
+      expect(codes.parentElement!.querySelector('h2 + p')?.textContent).toBe(wording.codesIntro)
+
       for (const surface of SURFACES) {
         const part = page.getElementById(PART_ANCHORS[surface])!
         expect(part.tagName).toBe('H2')
         expect(part.textContent).toBe(surface === 'web' ? wording.websiteHeading : wording.mobileHeading)
         const section = part.parentElement!
         expect(section.matches('section.part')).toBe(true)
-        // The forms, in order, each with its steps under their own anchors.
+        // The updates' forms, in order, and nothing that texts a code.
         expect([...section.querySelectorAll(':scope > section.form > h3')].map((h) => h.id)).toEqual(
-          FORM_NAMES.map((form) => formAnchor(form, surface)),
+          UPDATE_FORMS.map((form) => formAnchor(form, surface)),
         )
+        // The code forms, in the codes' section, under this surface.
+        const among = page.getElementById(codesAnchor(surface))!
+        expect(among.tagName).toBe('H3')
+        expect(among.textContent).toBe(
+          surface === 'web' ? wording.codesWebsiteHeading : wording.codesMobileHeading,
+        )
+        expect(
+          [...among.parentElement!.querySelectorAll(':scope > section.form > h4')].map((h) => h.id),
+        ).toEqual(CODE_FORMS.map((form) => formAnchor(form, surface)))
+
         for (const form of FORM_NAMES) {
           const each = formSection(page, form, surface)
-          expect(each.querySelector('h3')?.textContent).toBe(wording.forms[form].heading)
-          expect(each.querySelector('h3 + p')?.textContent).toBe(wording.forms[form].intro)
+          const [formLevel, stepLevel] = isCodeForm(form) ? ['h4', 'h5'] : ['h3', 'h4']
+          expect(each.querySelector(formLevel)?.textContent).toBe(wording.forms[form].heading)
+          expect(each.querySelector(`${formLevel} + p`)?.textContent).toBe(wording.forms[form].intro)
           const steps = (surface === 'web' ? wording.steps : wording.mobileSteps) as SmsOptInWording['steps']
-          expect([...each.querySelectorAll('section.step > h4')].map((h) => [h.id, h.textContent])).toEqual(
-            FORMS[form].map((step) => [stepAnchor(step, surface), steps[step].title]),
-          )
+          expect(
+            [...each.querySelectorAll(`section.step > ${stepLevel}`)].map((h) => [h.id, h.textContent]),
+          ).toEqual(FORMS[form].map((step) => [stepAnchor(step, surface), steps[step].title]))
           for (const step of FORMS[form]) {
             const section = page.getElementById(stepAnchor(step, surface))!.parentElement!
-            expect(section.querySelector('h4 + p')?.textContent).toBe(steps[step].caption)
+            expect(section.querySelector(`${stepLevel} + p`)?.textContent).toBe(steps[step].caption)
             if (step === 'confirmationText') continue
             const image = section.querySelector('img')!
             expect(image.getAttribute('src')).toBe(screenshotPath(step, language, 'en', surface))
@@ -184,6 +200,9 @@ describe('the page on how people opt in to texts', () => {
       'mobile-delete-account-ticked',
       'mobile-delete-account-code-sent',
       'mobile-confirmation-text',
+      'one-time-codes',
+      'website-one-time-codes',
+      'mobile-app-one-time-codes',
     ]
     for (const anchor of anchors) expect(page.getElementById(anchor), anchor).not.toBeNull()
     // No anchor is used twice.
@@ -238,39 +257,40 @@ describe('the page on how people opt in to texts', () => {
   )
 
   test.each(['en', 'es'])(
-    'in %s quotes each code text, the confirmation and the replies word for word as the service sends them',
+    'in %s quotes Verify’s message for each code, the confirmation and the replies word for word as they are sent',
     (language) => {
       const page = parse(language)
       const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
       const product = read(`${language}.json`)
-      const codes = CODE_TEXTS[language]
+      // No text of the service's own carries a code any more.
+      expect(Object.keys(product.sms).sort()).toEqual(['optInConfirmation', 'update'])
       for (const surface of SURFACES) {
         const after = (step: Screen) => quotedAt(page, step, surface)
-        // Each "code sent" screen: what it says, then the text that carries
-        // the code, the backend's own, from the service's wording.
+        // Each "code sent" screen: what it says, then the message Twilio
+        // Verify sends, said to be Verify's, with what it is.
+        const verifySaid = (step: Screen) => {
+          const section = page.getElementById(stepAnchor(step, surface))!.parentElement!
+          expect(after(step).at(-1)).toBe(VERIFY_SAMPLE)
+          expect(section.textContent).toContain(wording.verifyText)
+          expect(section.textContent).toContain(wording.verifyNote)
+          expect(section.querySelector('.sms figcaption')?.textContent).toBe(wording.messageFromVerify)
+        }
         const signedIn = after('codeSent')
         expect(signedIn).toContain(fill(product.signIn.codeSent, { identifier: SAMPLE_PHONE }))
-        expect(signedIn.at(-1)).toBe(codes.SignIn)
-        expect(signedIn.at(-1)).toBe(fill(product.sms.signIn, { code: '123456' }))
+        verifySaid('codeSent')
 
         const confirmed = after('confirmNumberCodeSent')
         expect(confirmed).toContain(
           fill(product.smsUpdates.codeSent, { phone: masked(SAMPLE_PHONE_TO_ADD) }),
         )
         expect(confirmed).toContain(product.smsUpdates.codeLabel)
-        expect(confirmed.at(-1)).toBe(codes.VerifyNumber)
-        expect(confirmed.at(-1)).toBe(fill(product.sms.verifyNumber, { code: '123456' }))
-        const confirmStep = page.getElementById(stepAnchor('confirmNumberCodeSent', surface))!
-        expect(confirmStep.parentElement!.textContent).toContain(wording.verifyCodeText)
+        verifySaid('confirmNumberCodeSent')
 
         const deleting = after('deleteAccount')
         expect(deleting).toContain(fill(product.deletion.codeIntro, { identifier: SAMPLE_PHONE }))
         const deleted = after('deleteAccountCodeSent')
         expect(deleted).toContain(fill(product.deletion.codeSent, { identifier: SAMPLE_PHONE }))
-        expect(deleted.at(-1)).toBe(codes.DeleteAccount)
-        expect(deleted.at(-1)).toBe(fill(product.sms.deleteAccount, { code: '123456' }))
-        const deleteStep = page.getElementById(stepAnchor('deleteAccountCodeSent', surface))!
-        expect(deleteStep.parentElement!.textContent).toContain(wording.deleteCodeText)
+        verifySaid('deleteAccountCodeSent')
 
         // Agreement updates: the confirmation on screen, then its text.
         expect(after('confirmation')).toEqual([
@@ -303,24 +323,32 @@ describe('the page on how people opt in to texts', () => {
     },
   )
 
-  test.each(['en', 'es'])('in %s opens with a contents list of every form in both parts', (language) => {
+  test.each(['en', 'es'])('in %s opens with a contents list of every form in every part', (language) => {
     const page = parse(language)
     const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
     const contents = page.querySelector(`nav[aria-label="${wording.contentsLabel}"]`)!
     const links = [...contents.querySelectorAll('a')]
-    expect(links.map((link) => [link.getAttribute('href'), link.textContent])).toEqual(
-      SURFACES.flatMap((surface) => [
+    expect(links.map((link) => [link.getAttribute('href'), link.textContent])).toEqual([
+      ...SURFACES.flatMap((surface) => [
         [`#${PART_ANCHORS[surface]}`, surface === 'web' ? wording.websiteHeading : wording.mobileHeading],
-        ...FORM_NAMES.map((form) => [`#${formAnchor(form, surface)}`, wording.forms[form].heading]),
+        ...UPDATE_FORMS.map((form) => [`#${formAnchor(form, surface)}`, wording.forms[form].heading]),
       ]),
-    )
+      [`#${CODES_ANCHOR}`, wording.codesHeading],
+      ...SURFACES.flatMap((surface) => [
+        [
+          `#${codesAnchor(surface)}`,
+          surface === 'web' ? wording.codesWebsiteHeading : wording.codesMobileHeading,
+        ],
+        ...CODE_FORMS.map((form) => [`#${formAnchor(form, surface)}`, wording.forms[form].heading]),
+      ]),
+    ])
     // Before either part, and each link leads to a heading.
     const article = page.querySelector('article')!
     const first = article.querySelector('section.part')!
     expect(contents.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     for (const link of links) {
       const target = page.getElementById(link.getAttribute('href')!.slice(1))!
-      expect(['H2', 'H3']).toContain(target.tagName)
+      expect(['H2', 'H3', 'H4']).toContain(target.tagName)
     }
   })
 
@@ -337,15 +365,19 @@ describe('the page on how people opt in to texts', () => {
 
   test.each(['en', 'es'])('in %s shows a picture of each screen, from this origin', (language) => {
     const images = [...parse(language).querySelectorAll('section.step img')]
-    expect(images.map((image) => image.getAttribute('src'))).toEqual(
+    // In the page's order: each part's updates, then each part's codes.
+    const pictures = (forms: readonly Form[]) =>
       SURFACES.flatMap((surface) =>
-        FORM_NAMES.flatMap((form) =>
+        forms.flatMap((form) =>
           (FORMS[form] as readonly string[])
             .filter((step): step is Screen => step in SCREENSHOTS)
             .map((screen) => screenshotPath(screen, language, 'en', surface)),
         ),
-      ),
-    )
+      )
+    expect(images.map((image) => image.getAttribute('src'))).toEqual([
+      ...pictures(UPDATE_FORMS),
+      ...pictures(CODE_FORMS),
+    ])
     expect(images).toHaveLength(2 * Object.keys(SCREENSHOTS).length)
     for (const image of images) {
       const src = image.getAttribute('src')!
@@ -421,20 +453,25 @@ describe('the page on how people opt in to texts', () => {
     expect(guide).toContain(replies.help)
     expect(guide).toContain(replies.stop)
     expect(read('sms-opt-in/es.json').replies).toEqual(replies)
-    // The links to give for each form, on the website and in the app, are
-    // this page's anchors.
-    expect(guide).toContain('https://yuppers.app/sms-opt-in#mobile-app')
+    // The links to give for the program's opt-in, on the website and in
+    // the app, are this page's anchors.
+    expect(guide).toContain('https://yuppers.app/sms-opt-in#website-agreement-updates')
+    expect(guide).toContain('https://yuppers.app/sms-opt-in#mobile-app-agreement-updates')
     for (const surface of SURFACES) {
-      for (const form of FORM_NAMES) {
+      for (const form of UPDATE_FORMS) {
         expect(guide).toContain(`https://yuppers.app/sms-opt-in#${formAnchor(form, surface)}`)
       }
     }
-    // The samples of the code texts are the service's, in both languages.
-    for (const language of ['en', 'es']) {
-      const { sms } = read(`${language}.json`)
-      for (const text of [sms.signIn, sms.deleteAccount, sms.verifyNumber]) {
-        expect(guide).toContain(`"${fill(text, { code: '123456' })}"`)
-      }
+    // The samples are the program's own texts, word for word: the update
+    // and the confirmation in English, and the update in Spanish.
+    const en = read('en.json').sms
+    const es = read('es.json').sms
+    for (const text of [
+      fill(en.update, { link: SAMPLE_LINK }),
+      en.optInConfirmation,
+      fill(es.update, { link: SAMPLE_LINK }),
+    ]) {
+      expect(guide).toContain(text)
     }
   })
 })

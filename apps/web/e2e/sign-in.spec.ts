@@ -1,7 +1,7 @@
 import { apiLog } from './support/env'
 import { expect, test } from './support/fixtures'
 import { signIn } from './support/flows'
-import { codeIn, number, textsTo, waitFor } from './support/texts'
+import { codesTo, number, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -72,14 +72,12 @@ test('a phone number gets its code by text only once the box beside it is ticked
 
   await box.check()
   await expect(send).toBeEnabled()
-  const before = textsTo(phone, apiLog).length
+  const before = codesTo(phone, apiLog).length
   await send.click()
   await expect(page.getByText(fill(en.signIn.codeSent, { identifier: phone }))).toBeVisible()
   expect(asked).toEqual([{ identifier: phone, sms_consent: { version: expect.any(String), language: 'en' } }])
-  const text = await waitFor(() => textsTo(phone, apiLog)[before], 'the code by text')
-  const code = codeIn(text)
-  expect(text).toBe(`Yuppers.app: ${code} is your sign-in code. Do not share it with anyone.`)
-  expect(text).toBe(fill(en.sms.signIn, { code }))
+  // Twilio Verify would text it; here the log has it.
+  const code = await waitFor(() => codesTo(phone, apiLog)[before], 'the code for the number')
   await page.getByLabel(en.signIn.codeLabel).fill(code)
   await page.getByRole('button', { name: en.signIn.submit, exact: true }).click()
   await expect(page.getByRole('heading', { name: en.profile.firstTitle })).toBeVisible()

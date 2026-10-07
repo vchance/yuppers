@@ -21,9 +21,17 @@ interface Required {
   mobile: string
   rates: string
   carriers: string
-  /** In both documents' sections on texts: each program by name, with its frequency. */
+  /**
+   * In both documents' sections on texts: the program by name, with its
+   * frequency, and the one-time codes apart, said to be Twilio Verify's,
+   * with theirs.
+   */
   programs: string[]
   frequencies: Record<Document, string[]>
+  /** Said of codes by text: that Twilio Verify sends them, and their heading in the terms. */
+  codes: { verify: string; heading: string }
+  /** The name codes went by as a program of ours, which no document may use any more. */
+  retired: string
   /** The opt-in wording of agreement updates, quoted on the terms. */
   consent: string
 }
@@ -38,7 +46,7 @@ const REQUIRED: Record<string, Required> = {
       'Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes.',
     rates: 'Message and data rates may apply.',
     carriers: 'Carriers are not liable for delayed or undelivered messages.',
-    programs: ['Yuppers.app sign-in codes', 'Yuppers.app agreement updates'],
+    programs: ['Yuppers.app agreement updates'],
     frequencies: {
       terms: [
         'Message frequency: One message per code request.',
@@ -51,6 +59,8 @@ const REQUIRED: Record<string, Required> = {
     },
     consent:
       '“Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.”',
+    codes: { verify: 'Twilio Verify', heading: 'One-time codes by text' },
+    retired: 'Yuppers.app sign-in codes',
   },
   es: {
     site: 'Yuppers.app (https://yuppers.app)',
@@ -62,7 +72,7 @@ const REQUIRED: Record<string, Required> = {
     // The carriers' phrase, in English too, beside the Spanish.
     rates: 'Message and data rates may apply.',
     carriers: 'Los operadores no son responsables de los mensajes retrasados o no entregados.',
-    programs: ['Yuppers.app sign-in codes', 'Yuppers.app agreement updates'],
+    programs: ['Yuppers.app agreement updates'],
     frequencies: {
       terms: [
         'Frecuencia de los mensajes: un mensaje por cada código que pides.',
@@ -75,6 +85,8 @@ const REQUIRED: Record<string, Required> = {
     },
     consent:
       '“Recibir actualizaciones por mensaje de texto de yuppers.app sobre este acuerdo, un mensaje por cada cambio de estado. La frecuencia de los mensajes varía; no hay un máximo fijo. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para obtener ayuda o STOP para cancelar. Términos: https://yuppers.app/terms. Política de privacidad: https://yuppers.app/privacy.”',
+    codes: { verify: 'Twilio Verify', heading: 'Códigos de un solo uso por mensaje de texto' },
+    retired: 'Yuppers.app sign-in codes',
   },
 }
 
@@ -101,6 +113,11 @@ export function smsRequirements(page: ParentNode, document: Document, language: 
   need(texts, required.carriers, '#text-messages')
   need(texts, required.notSold, '#text-messages')
   need(texts, required.mobile, '#text-messages')
+  // One-time codes, apart from the program, and Twilio Verify's.
+  need(texts, required.codes.verify, '#text-messages, the one-time codes')
+  if (texts?.textContent?.includes(required.retired)) {
+    problems.push(`#text-messages: still names “${required.retired}” as a program`)
+  }
   // HELP and STOP, each inside a <strong>.
   const strong = [...(texts?.querySelectorAll('strong') ?? [])].map((element) => element.textContent ?? '')
   for (const keyword of ['HELP', 'STOP']) {
@@ -120,6 +137,11 @@ export function smsRequirements(page: ParentNode, document: Document, language: 
     need(collect, required.notSold, '#what-we-collect')
   } else {
     need(texts, required.consent, '#text-messages, the opt-in wording')
+    // The codes under a heading of their own.
+    const headings = [...(texts?.querySelectorAll('h3') ?? [])].map((h) => h.textContent ?? '')
+    if (!headings.includes(required.codes.heading)) {
+      problems.push(`#text-messages: no heading “${required.codes.heading}”`)
+    }
     // A real link to the privacy policy's section on texts.
     const link = [...(texts?.querySelectorAll('a') ?? [])].find((a) =>
       /^\/([a-z]{2}\/)?privacy#text-messages$/.test(a.getAttribute('href') ?? ''),

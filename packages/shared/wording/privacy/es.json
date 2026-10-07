@@ -38,7 +38,7 @@
         },
         {
           "ul": [
-            "Tu correo electrónico, tu número de teléfono o los dos. Les enviamos códigos de un solo uso para entrar, te escribimos por correo cuando pasa algo en uno de tus yups y, si activas las actualizaciones por mensaje de texto para un acuerdo, te enviamos un mensaje de texto cuando cambia su estado.",
+            "Tu correo electrónico, tu número de teléfono o los dos. Les enviamos códigos de un solo uso para entrar (por mensaje de texto, con el servicio de verificación de nuestro proveedor Twilio, Twilio Verify), te escribimos por correo cuando pasa algo en uno de tus yups y, si activas las actualizaciones por mensaje de texto para un acuerdo, te enviamos un mensaje de texto cuando cambia su estado.",
             "Tu nombre, tal como quieres que lo vean las personas con quienes haces yups.",
             "Tu idioma (inglés o español), para que el producto, nuestros correos y nuestros códigos te lleguen en él.",
             "Que confirmaste tener 18 años o más, y cuándo. No te pedimos tu fecha de nacimiento.",
@@ -77,7 +77,7 @@
           "h": "Códigos por mensaje de texto, si pides uno"
         },
         {
-          "p": "Cuando pides un código de un solo uso por mensaje de texto, para entrar, para confirmar la eliminación de tu cuenta o para agregar un número a tu cuenta, guardamos un registro de que marcaste la casilla junto a tu número: para qué era el código, la versión del texto junto a la casilla y su idioma, si usaste el sitio web o la app, y cuándo. Si el número ya es el de tu cuenta, guardamos el número y tu cuenta con el registro. Si todavía no lo es, guardamos solo un hash con clave del número: una huella, hecha con una clave secreta, que nos permite encontrar el registro a partir del número si nos preguntan por un mensaje, pero que no se puede convertir de nuevo en el número. Durante {networkDays} días guardamos también la dirección IP y el agente de usuario de tu solicitud, como hacemos con una firma. Usamos el registro solo para mostrar que pediste el mensaje que te enviamos."
+          "p": "Cuando pides un código de un solo uso por mensaje de texto, para entrar, para confirmar la eliminación de tu cuenta o para agregar un número a tu cuenta, guardamos un registro de que marcaste la casilla junto a tu número (el código mismo lo crea y comprueba Twilio Verify): para qué era el código, la versión del texto junto a la casilla y su idioma, si usaste el sitio web o la app, y cuándo. Si el número ya es el de tu cuenta, guardamos el número y tu cuenta con el registro. Si todavía no lo es, guardamos solo un hash con clave del número: una huella, hecha con una clave secreta, que nos permite encontrar el registro a partir del número si nos preguntan por un mensaje, pero que no se puede convertir de nuevo en el número. Durante {networkDays} días guardamos también la dirección IP y el agente de usuario de tu solicitud, como hacemos con una firma. Usamos el registro solo para mostrar que pediste el mensaje que te enviamos."
         },
         {
           "h": "Notificaciones en la app, si las activas"
@@ -98,7 +98,7 @@
           "ul": [
             "Registros de solicitudes. De cada solicitud que responde nuestro servicio, registramos el método y la ruta (nunca los parámetros de consulta), el estado, cuánto tardó y un identificador de la solicitud. Los usamos para operar el servicio y para encontrar y corregir problemas. Nuestros registros nunca contienen lo que se envió o se respondió, códigos, tokens, correos electrónicos, números de teléfono ni direcciones IP.",
             "Límites para entrar. Para impedir que alguien adivine códigos o pida demasiados, contamos los códigos que se piden desde cada dirección IP y los códigos incorrectos que se escriben para cada correo electrónico o número de teléfono. Estas cuentas se guardan bajo un hash con clave, nunca la dirección ni el número.",
-            "Códigos de un solo uso. Guardamos un hash con clave de cada código que enviamos, nunca el código, junto con el correo electrónico o el número de teléfono al que se envió y cuándo. Los usamos para comprobar el código que escribes y para limitar cuántos códigos se envían."
+            "Códigos de un solo uso. Para un código por correo, guardamos un hash con clave del código, nunca el código, junto con el correo electrónico al que se envió y cuándo. Para un código por mensaje de texto, Twilio Verify crea y comprueba el código, y guardamos un registro de que se pidió: el número de teléfono, para qué era el código, cuándo se pidió, hasta cuándo sirve y cuántos códigos incorrectos se escribieron para él. Cuando Twilio Verify acepta un código que escribes, agregamos al registro un hash con clave de ese código, nunca el código, para que el mismo código siga sirviendo si tienes que intentarlo de nuevo antes de que caduque. Usamos estos registros para comprobar el código que escribes y para limitar cuántos códigos se envían y se intentan."
           ]
         }
       ]
@@ -153,7 +153,7 @@
             "Render aloja nuestro servicio, nuestra base de datos, los registros de nuestros servidores y las copias de seguridad de la base de datos, en los Estados Unidos.",
             "Cloudflare gestiona el DNS de nuestro dominio y lleva cada solicitud a yuppers.app por su red antes de que llegue a Render, así que maneja tu dirección IP y la solicitud. Puede pedirle a tu navegador que le informe de errores de conexión. También reenvía el correo que se envía a nuestras direcciones, como {privacyEmail}.",
             "Postmark envía nuestros correos, así que recibe tu correo electrónico y el mensaje: un código de un solo uso, o un aviso de que pasó algo en uno de tus yups (que nunca incluye los términos).",
-            "Twilio, cuando enviamos mensajes de texto, recibe tu número de teléfono y el mensaje: un código de un solo uso o, si las activaste, una actualización de un acuerdo.",
+            "Twilio, cuando enviamos mensajes de texto, recibe tu número de teléfono y el mensaje: una actualización de un acuerdo, si las activaste; y, con su servicio de verificación, Twilio Verify, para cada código de un solo uso por mensaje, tu número, el código que crea y te envía, el código que escribes y el idioma en que escribirlo.",
             "Expo, Apple y Google, si activas las notificaciones en la app: Expo recibe el token de notificaciones de tu dispositivo y la notificación, y se los pasa al servicio de notificaciones de Apple o de Google, que la entrega. Una notificación solo dice “Tu yup tiene novedades.”, con el identificador interno del yup para que la app pueda abrirlo.",
             "Apple y Google, si agregas un pase de Wallet: Apple entrega las actualizaciones del pase a tus dispositivos, y Google guarda el pase (su estado, su código de referencia y el número de elementos) para mostrarlo en Google Wallet."
           ]
@@ -167,24 +167,24 @@
       "title": "Mensajes de texto (SMS)",
       "blocks": [
         {
-          "p": "Cuando los ofrecemos, Yuppers.app envía mensajes de texto en dos programas, y para nada más: nada de marketing."
+          "p": "Cuando los ofrecemos, Yuppers.app envía mensajes de texto en un solo programa, actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates), y para nada más: nada de marketing. Los códigos de un solo uso por mensaje no forman parte de ese programa: nuestro proveedor Twilio los envía y comprueba con su servicio de verificación, Twilio Verify."
         },
         {
           "ul": [
-            "Códigos de Yuppers.app para entrar (Yuppers.app sign-in codes): un código de un solo uso para entrar (con lo que también se crea tu cuenta la primera vez), o para confirmar que quieres eliminar tu cuenta. Lo enviamos solo cuando pides un código, y solo al número que escribiste o, para confirmar una eliminación, al número de tu cuenta. Escribir tu número, marcar la casilla junto a él que dice lo que te enviaremos y pedir un código es tu solicitud de ese mensaje; hasta que marcas la casilla, no enviamos nada. Frecuencia de los mensajes: un mensaje por cada código que pides.",
-            "Actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates): si activas las actualizaciones por mensaje de texto para un acuerdo, marcando una casilla en ese acuerdo, te enviamos un mensaje cuando cambia su estado, por ejemplo cuando la otra persona firma, marca algo como entregado, lo confirma, lo disputa o pide cerrarlo. La frecuencia de los mensajes varía; no hay un máximo fijo: un mensaje por cada cambio de estado de un acuerdo para el que activaste las actualizaciones. Una actualización solo dice que algo cambió, con un enlace para entrar y verlo. Nunca incluye los términos, las cantidades ni los nombres de lo que se entrega, igual que nuestros correos y las notificaciones de la app.",
+            "Actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates): si activas las actualizaciones por mensaje de texto para un acuerdo, marcando una casilla en ese acuerdo, te enviamos un mensaje cuando cambia su estado, por ejemplo cuando la otra persona firma, marca algo como entregado, lo confirma, lo disputa o pide cerrarlo, y uno cuando las activas, para confirmarlo. La frecuencia de los mensajes varía; no hay un máximo fijo: un mensaje por cada cambio de estado de un acuerdo para el que activaste las actualizaciones. Una actualización solo dice que algo cambió, con un enlace para entrar y verlo. Nunca incluye los términos, las cantidades ni los nombres de lo que se entrega, igual que nuestros correos y las notificaciones de la app.",
+            "Códigos de un solo uso por mensaje de texto: un código para entrar (con lo que también se crea tu cuenta la primera vez), para agregar un número a tu cuenta o para confirmar que quieres eliminar tu cuenta. Le pedimos uno a Twilio Verify solo cuando pides un código, y solo para el número que escribiste o, para confirmar una eliminación, para el número de tu cuenta. Escribir tu número, marcar la casilla junto a él que dice lo que se enviará y pedir un código es tu solicitud de ese mensaje; hasta que marcas la casilla, no se envía nada. Twilio Verify crea el código, te lo envía y comprueba el código que escribes. Frecuencia de los mensajes: un mensaje por cada código que pides.",
             "Pueden aplicarse tarifas por mensajes y datos. (Message and data rates may apply.)",
-            "**Responde HELP para obtener ayuda.** **Responde STOP para dejar de recibir nuestros mensajes.** STOP detiene todos los mensajes de Yuppers.app, incluidos los códigos para entrar, así que tendrás que entrar con un correo electrónico. Desactivar las actualizaciones de un acuerdo las detiene solo para ese acuerdo.",
+            "**Responde HELP para obtener ayuda.** **Responde STOP para dejar de recibir nuestros mensajes.** Un STOP en respuesta a una actualización de un acuerdo detiene todos los mensajes de Yuppers.app a tu número, tanto las actualizaciones de acuerdos como los códigos de un solo uso, así que tendrás que entrar con un correo electrónico. Un código llega desde un número de Twilio, así que un STOP en respuesta a un código le llega a Twilio, no a nosotros. Desactivar las actualizaciones de un acuerdo las detiene solo para ese acuerdo.",
             "No enviamos mensajes a números fuera de +1: solo enviamos mensajes a números que empiezan con el código de país +1.",
             "No vendemos tu información personal. No compartimos tu información personal ni tus datos y consentimiento de suscripción a SMS con terceros ni con afiliados con fines de marketing o promoción.",
             "La información móvil no se compartirá con terceros ni con afiliados con fines de marketing o promoción.",
             "La información móvil y el consentimiento de suscripción no se comparten con terceros ni con afiliados con fines de marketing o promoción.",
-            "Para entregar los mensajes, le damos tu número de teléfono y el mensaje a nuestro proveedor de SMS, Twilio, y a nadie más.",
+            "Para entregar los mensajes, le damos tu número de teléfono a nuestro proveedor de SMS, Twilio, y a nadie más: con cada actualización de un acuerdo, su texto; y con cada código de un solo uso, a Twilio Verify, el idioma en que escribirlo. Twilio Verify crea el código que envía, y recibe el código que escribes para poder comprobarlo.",
             "Los operadores no son responsables de los mensajes retrasados o no entregados."
           ]
         },
         {
-          "p": "Para obtener ayuda con los mensajes de texto, escribe a {supportEmail} o responde HELP a cualquiera de nuestros mensajes. Para preguntas sobre privacidad, escribe a {privacyEmail}. Los términos de los dos programas están en nuestros {terms}."
+          "p": "Para obtener ayuda con los mensajes de texto, escribe a {supportEmail} o responde HELP a cualquier actualización de un acuerdo. Para preguntas sobre privacidad, escribe a {privacyEmail}. Los términos del programa, y de los códigos de un solo uso por mensaje, están en nuestros {terms}."
         },
         {
           "p": "Cada paso de la suscripción, con el texto exacto de cada pantalla y de cada mensaje, se muestra en la página sobre {smsOptIn}."
@@ -202,7 +202,7 @@
             "La dirección IP y el agente de usuario registrados con una firma: {networkDays} días.",
             "El registro de las actualizaciones por mensaje que activaste para un acuerdo, y de su fin: mientras estén activadas y, después, durante {smsConsentYears} años, como prueba de que pediste los mensajes que te enviamos. La dirección IP y el agente de usuario registrados con él: {networkDays} días. Un número de teléfono que respondió STOP: mientras siga dado de baja, para no volver a enviarle mensajes.",
             "El registro de cada código que pediste por mensaje de texto: {smsConsentYears} años, como prueba de que lo pediste. La dirección IP y el agente de usuario registrados con él: {networkDays} días.",
-            "Los códigos de un solo uso: cada código sirve durante {codeMinutes} minutos, y una sola vez. Todavía no borramos de forma periódica los registros de los códigos (el hash, adónde se envió y cuándo); al eliminar tu cuenta se borran los de tu correo electrónico y tu número de teléfono.",
+            "Los códigos de un solo uso: cada código sirve durante {codeMinutes} minutos, y una sola vez. Todavía no borramos de forma periódica los registros de los códigos (adónde se envió, cuándo y el hash, donde guardamos uno); al eliminar tu cuenta se borran los de tu correo electrónico y tu número de teléfono.",
             "Las sesiones: cada una dura {sessionDays} días, salvo que la cierres antes.",
             "Las cuentas de los límites para entrar: dos días.",
             "Los tokens de notificaciones: hasta que desactives las notificaciones, cierres la sesión en ese dispositivo o elimines tu cuenta, o hasta que el servicio de notificaciones nos diga que el token ya no funciona.",
@@ -298,7 +298,7 @@
         {
           "ul": [
             "Las conexiones con Yuppers están cifradas (HTTPS), y los navegadores reciben la instrucción de no usar otra cosa.",
-            "Guardamos los códigos de un solo uso, los tokens de sesión, los códigos de los enlaces de invitación y los tokens de Wallet solo como hashes, nunca tal cual.",
+            "Guardamos los códigos de un solo uso, los tokens de sesión, los códigos de los enlaces de invitación y los tokens de Wallet solo como hashes, nunca tal cual. Los códigos por mensaje de texto los crea y comprueba Twilio Verify, y de uno guardamos como mucho un hash, una vez que Twilio Verify lo aceptó.",
             "El servicio usa una cuenta restringida de la base de datos que puede agregar al historial de un acuerdo pero no cambiarlo ni borrarlo, y la propia base de datos rechaza cambios en ese historial.",
             "Solo las personas que designamos para revisar denuncias pueden ver los yups denunciados, solo mientras la denuncia está abierta y después de haber entrado en las últimas 12 horas, y queda registrada cada denuncia que abren.",
             "Nuestros registros dejan fuera la información personal, como correos electrónicos, números de teléfono, códigos y tokens."

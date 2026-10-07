@@ -1,43 +1,47 @@
 {
   "title": "How people opt in to texts from Yuppers.app",
   "description": "Each step a person takes to receive text messages from Yuppers.app, with the exact wording of every screen and message.",
-  "intro": "Yuppers.app (https://yuppers.app) sends text messages in two programs, Yuppers.app sign-in codes and Yuppers.app agreement updates, and for nothing else: no marketing. This page shows each step a person takes to receive them, with a picture of each screen and the exact wording it shows.",
-  "note": "On yuppers.app and in the Yuppers mobile app, signing in with a phone number, a code by text to delete an account, and the “Text updates” control on an agreement appear only while texting is turned on for the service. The screens below show them as they appear when texting is enabled.",
+  "intro": "Yuppers.app (https://yuppers.app) has one text-message program, Yuppers.app agreement updates, and sends no marketing. This page shows each step a person takes to receive those updates, with a picture of each screen and the exact wording it shows. One-time codes sent by text, to sign in, to confirm a phone number or to confirm deleting an account, are sent and checked by our provider Twilio’s verification service, Twilio Verify; they are not part of the agreement-updates program, and their forms are shown in a section of their own after it.",
+  "note": "On yuppers.app and in the Yuppers mobile app, the “Text updates” control on an agreement, signing in with a phone number and a code by text to delete an account appear only while texting is turned on for the service. The screens below show them as they appear when texting is enabled.",
   "contentsLabel": "On this page",
   "websiteHeading": "On the Yuppers website",
   "websiteIntro": "These screens were captured from the Yuppers website, https://yuppers.app, on a phone-sized screen.",
   "mobileHeading": "In the Yuppers mobile app",
-  "mobileIntro": "The Yuppers app for iPhone and Android has the same four forms, with the same boxes and the same wording: signing in with a phone number, confirming a phone number, deleting an account by text, and the “Text updates” control on an agreement. Each picture is the whole screen, under the app’s own navigation bar.",
+  "mobileIntro": "The Yuppers app for iPhone and Android has the same “Text updates” control on an agreement, with the same box and the same wording. Each picture is the whole screen, under the app’s own navigation bar.",
   "mobileRelease": "The Yuppers app is not yet published in the App Store or Google Play, so these pictures were taken from the app’s own screens, built from its code and shown at the size of an iPhone screen, rather than from a store download.",
-  "mobileSame": "The consent texts, the texts that carry the codes, the opt-in confirmation text and the HELP and STOP replies are the same on the website and in the app.",
+  "mobileSame": "The consent wording, the opt-in confirmation text and the HELP and STOP replies are the same on the website and in the app.",
   "wordingHeading": "Exact wording",
   "messageFrom": "Text from Yuppers.app",
   "messageTo": "Reply from the person",
-  "programsHeading": "The two programs",
+  "programsHeading": "The text-message program",
   "programs": [
-    "Yuppers.app sign-in codes: one text for each code a person asks for, to sign in, to confirm deleting their account, or to add a number to their account, and only once they have ticked a box beside the number.",
-    "Yuppers.app agreement updates: one text per status change of an agreement the person turned updates on for. Message frequency varies; there is no fixed maximum."
+    "Yuppers.app agreement updates: one text per status change of an agreement the person turned updates on for, and one text confirming that they turned them on. Message frequency varies; there is no fixed maximum."
   ],
+  "codesNote": "One-time codes by text are not part of this program. They are sent and checked by Twilio Verify, from Twilio’s own senders, and are shown below under “One-time codes”.",
+  "codesHeading": "One-time codes (sent by Twilio Verify, not part of the agreement-updates program)",
+  "codesIntro": "Three forms text a one-time code: signing in with a phone number, confirming a phone number added to an account, and confirming that an account is to be deleted. Each code is sent and checked by our provider Twilio’s verification service, Twilio Verify, one message per request, and only once the person ticks the box beside the number. These texts are not part of the Yuppers.app agreement updates program.",
+  "codesWebsiteHeading": "One-time codes on the website",
+  "codesMobileHeading": "One-time codes in the app",
   "forms": {
+    "agreementUpdates": {
+      "heading": "Agreement updates",
+      "intro": "Text updates are turned on one agreement at a time, with a box on that agreement, and a text confirms it. The account needs a phone number first; adding one is shown under “Confirming a phone number” in the one-time codes’ section."
+    },
+    "replies": {
+      "heading": "HELP and STOP",
+      "intro": "Replying HELP or STOP to any text from the agreement-updates number is answered at once with these texts. STOP ends every text from Yuppers.app to that number, agreement updates and one-time codes alike, until it replies START; the person can still sign in with an email address. Each agreement update looks like the last text below."
+    },
     "signIn": {
       "heading": "Signing in by text",
       "intro": "The sign-in form, the first screen for anyone not signed in. A code is texted only to a number the person types there, and only once they tick the box beside it."
     },
     "confirmNumber": {
       "heading": "Confirming a phone number",
-      "intro": "Text updates need a US mobile number on the account. If it has none, “Text updates” on an agreement first asks for one and checks that it is the person’s with a one-time code, texted only once they tick the box beside the number."
+      "intro": "Text updates need a US mobile number on the account. If it has none, “Text updates” on an agreement first asks for one and checks that it is the person’s with a one-time code, sent by Twilio Verify only once they tick the box beside the number."
     },
     "deleteAccount": {
       "heading": "Deleting an account by text",
       "intro": "Deleting an account is confirmed with a one-time code sent to the account’s email address or phone number. When it is to go to the phone number, it is texted only once the person ticks the box beside it. The pictures show an account whose only way in is its phone number."
-    },
-    "agreementUpdates": {
-      "heading": "Agreement updates",
-      "intro": "Text updates are turned on one agreement at a time, with a box on that agreement, and a text confirms it."
-    },
-    "replies": {
-      "heading": "HELP and STOP",
-      "intro": "Replying HELP or STOP to any of our texts is answered at once with these texts. STOP ends every text from Yuppers.app to that number, codes included, until it replies START; the person can still sign in with an email address. Each agreement update looks like the last text below."
     }
   },
   "steps": {
@@ -162,16 +166,16 @@
       "caption": "Sent at once to the number, the same text as when updates are turned on on the website:"
     }
   },
-  "codeText": "The sign-in code text:",
-  "verifyCodeText": "The text with the code that confirms a number being added:",
-  "deleteCodeText": "The text with the code that confirms deleting an account:",
+  "verifyText": "The text Twilio Verify sends with the code, the same for all three forms, in English:",
+  "verifyNote": "Twilio writes this message from its own template, with the name Yuppers.app. A code asked for in Spanish comes in Twilio’s own Spanish version of the same message. The code works for ten minutes.",
+  "messageFromVerify": "Text from Twilio Verify, for Yuppers.app",
   "updateText": "An agreement update, as received:",
   "moreHeading": "The terms and the privacy policy",
-  "more": "Both programs are described in the section on text messages of the {terms} and of the {privacy}.",
+  "more": "The agreement-updates program, and the one-time codes by text, are described in the section on text messages of the {terms} and of the {privacy}.",
   "termsLink": "Terms and Conditions",
   "privacyLink": "Privacy policy",
   "replies": {
-    "help": "Yuppers.app: Text updates about your agreements and sign-in codes. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
+    "help": "Yuppers.app: Text updates about agreements you turned them on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out.",
     "stop": "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
   }
 }

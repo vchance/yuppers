@@ -9,21 +9,32 @@ import { staticPagePath } from '../../../packages/shared/src/legal-text.ts'
  * "Text messages"), at `/sms-opt-in` and `/{language}/sms-opt-in`, open to
  * anyone and readable without scripts.
  *
- * It shows each step a person takes to receive texts, in two parts with a
- * contents list above them: on the website (`#website`), with a picture of
- * each screen taken from the web app by `npm run screenshots:sms`
- * (`e2e/screenshots/`) and kept in `public/sms-opt-in/`; and in the mobile
- * app (`#mobile-app`), with the app's own screens taken by `npm run
- * screenshots:sms:mobile` (`apps/mobile/e2e/screenshots/`) and kept in
- * `public/sms-opt-in/mobile/`. Each part goes form by form (FORMS), each
- * form under an anchor of its own (`formAnchor`), so a reviewer can be given
- * a link to one: signing in by text, confirming a phone number, deleting an
- * account by text, agreement updates, and HELP and STOP. Beside each
+ * Yuppers.app has one text-message program, "Yuppers.app agreement
+ * updates", and the page is first of all about it: each step a person takes
+ * to receive the updates, in two parts with a contents list above them: on
+ * the website (`#website`), with a picture of each screen taken from the
+ * web app by `npm run screenshots:sms` (`e2e/screenshots/`) and kept in
+ * `public/sms-opt-in/`; and in the mobile app (`#mobile-app`), with the
+ * app's own screens taken by `npm run screenshots:sms:mobile`
+ * (`apps/mobile/e2e/screenshots/`) and kept in `public/sms-opt-in/mobile/`.
+ * Each part has the updates' form and HELP and STOP (UPDATE_FORMS).
+ *
+ * One-time codes by text are not part of that program: Twilio Verify sends
+ * and checks them, from Twilio's own senders, in Twilio's own template
+ * (`backend/src/notifications/verify.rs`). The three forms that text one
+ * (CODE_FORMS: signing in by text, confirming a phone number, deleting an
+ * account by text) follow in a section of their own, `#one-time-codes`,
+ * again on the website and in the app, with their pictures and consent
+ * wording, and the message Verify sends (VERIFY_SAMPLE) in place of a text
+ * of ours.
+ *
+ * Every form has an anchor of its own (`formAnchor`), the same as before
+ * the codes moved, so a reviewer can be given a link to one. Beside each
  * picture is the exact wording that screen shows, read here from the same
  * wording files the apps read, so the two cannot drift apart. The texts
- * themselves are shown as text: each code's, the confirmation and an update
- * from the service's own wording (`sms` in the wording files), and the HELP
- * and STOP replies that Twilio is configured to send
+ * themselves are shown as text: the confirmation and an update from the
+ * service's own wording (`sms` in the wording files), and the HELP and STOP
+ * replies that Twilio is configured to send for the updates' number
  * (`wording/sms-opt-in/`, and docs/deploy-render.md).
  *
  * Unlike the privacy policy's and the terms' pages, it is not the app's page
@@ -47,6 +58,23 @@ export const SAMPLE_PHONE_TO_ADD = '+12015550124'
 
 /** The one-time code the texts show. */
 export const SAMPLE_CODE = '123456'
+
+/**
+ * The name the Twilio Verify services are given (docs/deploy-render.md,
+ * "One-time codes by Twilio Verify"), which Verify's template puts in its
+ * message.
+ */
+export const VERIFY_SERVICE_NAME = 'Yuppers.app'
+
+/**
+ * The message Twilio Verify sends with a code, in English: its default SMS
+ * template, "Your {{friendly_name}} verification code is: {{code}}", as
+ * Twilio's API reference shows it (the Service resource's `AppHash` and
+ * `DoNotShareWarningEnabled` examples, "Your AppName verification code is:
+ * 1234"). In another language Twilio sends its own translation, which its
+ * public documentation does not print.
+ */
+export const VERIFY_SAMPLE = `Your ${VERIFY_SERVICE_NAME} verification code is: ${SAMPLE_CODE}`
 
 /** An exchange's address as an update links to it, with an ID made up for the page. */
 export const SAMPLE_LINK = 'https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e'
@@ -83,14 +111,23 @@ export type StepName = Screen | TextStep
 
 /** The forms, in the page's order, each with its steps; HELP and STOP has none. */
 export const FORMS = {
+  agreementUpdates: ['textUpdates', 'confirmation', 'confirmationText'],
+  replies: [],
   signIn: ['signIn', 'boxTicked', 'codeSent'],
   confirmNumber: ['confirmNumber', 'confirmNumberTicked', 'confirmNumberCodeSent'],
   deleteAccount: ['deleteAccount', 'deleteAccountTicked', 'deleteAccountCodeSent'],
-  agreementUpdates: ['textUpdates', 'confirmation', 'confirmationText'],
-  replies: [],
 } as const satisfies Record<string, readonly (Screen | TextStep)[]>
 
 export type Form = keyof typeof FORMS
+
+/** The agreement-updates program's forms: each part's own, first on the page. */
+export const UPDATE_FORMS = ['agreementUpdates', 'replies'] as const satisfies readonly Form[]
+
+/** The forms that text a one-time code through Twilio Verify, in the section after. */
+export const CODE_FORMS = ['signIn', 'confirmNumber', 'deleteAccount'] as const satisfies readonly Form[]
+
+/** The anchor of the one-time codes' section, and of each part of it. */
+export const CODES_ANCHOR = 'one-time-codes'
 
 /** Each form's anchor, after its part's: `#website-sign-in`, `#mobile-app-sign-in`. */
 const FORM_SLUGS: Record<Form, string> = {
@@ -127,9 +164,17 @@ export type Surface = 'web' | 'mobile'
 /** The anchor of each part: the website's and the app's. */
 export const PART_ANCHORS: Record<Surface, string> = { web: 'website', mobile: 'mobile-app' }
 
+/** The parts, in the page's order. */
+export const SURFACES: readonly Surface[] = ['web', 'mobile']
+
 /** A form's anchor in a part, such as `website-confirm-number`. */
 export function formAnchor(form: Form, surface: Surface): string {
   return `${PART_ANCHORS[surface]}-${FORM_SLUGS[form]}`
+}
+
+/** The anchor of a part of the one-time codes' section: `website-one-time-codes`. */
+export function codesAnchor(surface: Surface): string {
+  return `${PART_ANCHORS[surface]}-${CODES_ANCHOR}`
 }
 
 /** A step's anchor in a part, such as `confirm-number` or `mobile-confirm-number`. */
@@ -190,17 +235,26 @@ export interface SmsOptInWording {
   wordingHeading: string
   messageFrom: string
   messageTo: string
+  /** The program, agreement updates, and nothing else. */
   programsHeading: string
   programs: string[]
+  /** That one-time codes are not part of it, and where they are shown. */
+  codesNote: string
+  /** The one-time codes' section: its heading, what it is, and its two parts. */
+  codesHeading: string
+  codesIntro: string
+  codesWebsiteHeading: string
+  codesMobileHeading: string
   forms: Record<Form, FormWording>
   steps: Record<Screen | TextStep, Step>
   /** The same steps in the mobile app. */
   mobileSteps: Record<Screen | TextStep, Step>
-  codeText: string
-  /** Before the text carrying the code that checks a number being added. */
-  verifyCodeText: string
-  /** Before the text carrying the code that confirms deleting an account. */
-  deleteCodeText: string
+  /** Before the message Twilio Verify sends with a code, after each "code sent" screen. */
+  verifyText: string
+  /** After it: that it is Twilio's template, and how other languages get it. */
+  verifyNote: string
+  /** Whom that message is from. */
+  messageFromVerify: string
   updateText: string
   moreHeading: string
   more: string
@@ -256,9 +310,6 @@ interface ProductWording {
   }
   smsCode: { signIn: string; deleteAccount: string; verifyNumber: string; tickToSend: string }
   sms: {
-    signIn: string
-    deleteAccount: string
-    verifyNumber: string
     update: string
     optInConfirmation: string
   }
@@ -307,10 +358,10 @@ function linked(text: string): string {
   return out + escapeHtml(text.slice(at))
 }
 
-/** A list of what a screen says, word for word. */
-function quoted(heading: string, lines: string[]): string {
+/** A list of what a screen says, word for word, under a heading of `level`. */
+function quoted(heading: string, lines: string[], level: number): string {
   const items = lines.map((line) => `<li><q>${linked(line)}</q></li>`).join('')
-  return `<div class="wording"><h5>${escapeHtml(heading)}</h5><ul>${items}</ul></div>`
+  return `<div class="wording"><h${level}>${escapeHtml(heading)}</h${level}><ul>${items}</ul></div>`
 }
 
 /** A text message, as a phone shows it: from the service, or a reply. */
@@ -335,15 +386,30 @@ export function renderSmsOptInMarkup(
   const u = product.smsUpdates
   const d = product.deletion
   const c = product.smsCode
-  const said = (lines: string[]) => quoted(page.wordingHeading, lines)
-  const text = (before: string, message: string) =>
-    `<p>${escapeHtml(before)}</p>${bubble(message, page.messageFrom)}`
+  const text = (before: string, message: string, from = page.messageFrom) =>
+    `<p>${escapeHtml(before)}</p>${bubble(message, from)}`
+  // After each "code sent" screen: the message Twilio Verify sends, not a
+  // text of ours.
+  const verifyText = text(page.verifyText, VERIFY_SAMPLE, page.messageFromVerify) + `<p>${escapeHtml(page.verifyNote)}</p>`
 
-  // What each screen says, and after a code is sent, the text it comes in.
-  // The app's screens say what the website's do, but for their own links:
-  // "How we text you" opens this page.
-  const wording = (step: Screen | TextStep, surface: Surface): string => {
+  // What each screen says, under a heading of `level`, and after a code is
+  // sent, the text it comes in. The app's screens say what the website's
+  // do, but for their own links: "How we text you" opens this page.
+  const wording = (step: Screen | TextStep, surface: Surface, level: number): string => {
+    const said = (lines: string[]) => quoted(page.wordingHeading, lines, level)
     switch (step) {
+      case 'textUpdates':
+        return said([
+          u.heading,
+          u.intro,
+          u.consent,
+          u.save,
+          ...(surface === 'mobile' ? [u.howItWorks] : []),
+        ])
+      case 'confirmation':
+        return said([fill(u.on, { phone: masked(SAMPLE_PHONE) })])
+      case 'confirmationText':
+        return bubble(product.sms.optInConfirmation, page.messageFrom)
       // The form with a number entered: the box beside it, unticked, and
       // "Send code" waiting for it; then the box ticked.
       case 'signIn':
@@ -370,7 +436,7 @@ export function renderSmsOptInMarkup(
             s.resendSoon,
             s.submit,
             s.changeIdentifier,
-          ]) + text(page.codeText, fill(product.sms.signIn, { code: SAMPLE_CODE }))
+          ]) + verifyText
         )
       // "Text updates" on an account with no number yet: the number, the box
       // beside it, and the code that checks it.
@@ -396,7 +462,7 @@ export function renderSmsOptInMarkup(
             s.codeHint,
             u.addPhone,
             u.changePhone,
-          ]) + text(page.verifyCodeText, fill(product.sms.verifyNumber, { code: SAMPLE_CODE }))
+          ]) + verifyText
         )
       // Deleting an account whose code goes to its phone number.
       case 'deleteAccount':
@@ -419,32 +485,23 @@ export function renderSmsOptInMarkup(
             d.continue,
             s.resend,
             product.common.cancel,
-          ]) + text(page.deleteCodeText, fill(product.sms.deleteAccount, { code: SAMPLE_CODE }))
+          ]) + verifyText
         )
-      case 'textUpdates':
-        return said([
-          u.heading,
-          u.intro,
-          u.consent,
-          u.save,
-          ...(surface === 'mobile' ? [u.howItWorks] : []),
-        ])
-      case 'confirmation':
-        return said([fill(u.on, { phone: masked(SAMPLE_PHONE) })])
-      case 'confirmationText':
-        return bubble(product.sms.optInConfirmation, page.messageFrom)
     }
   }
 
-  /** A step, under its form's heading: what it is, its picture, and what it says. */
-  const step = (name: Screen | TextStep, surface: Surface) => {
+  /**
+   * A step, under its form's heading: what it is, its picture, and what it
+   * says. Its heading is of `level`, the wording's the next.
+   */
+  const step = (name: Screen | TextStep, surface: Surface, level: number) => {
     const { title, caption, alt } = (surface === 'mobile' ? page.mobileSteps : page.steps)[name]
     const id = stepAnchor(name, surface)
     const picture =
       name === 'confirmationText'
         ? ''
         : `<div class="shot shot-${surface}"><img src="${screenshotPath(name, language, defaultLanguage, surface)}" alt="${escapeHtml(alt ?? '')}" width="${SCREENSHOT_WIDTH}" loading="lazy" decoding="async"></div>`
-    return `<section class="step"><h4 id="${id}">${escapeHtml(title)}</h4><p>${escapeHtml(caption)}</p>${picture}${wording(name, surface)}</section>`
+    return `<section class="step"><h${level} id="${id}">${escapeHtml(title)}</h${level}><p>${escapeHtml(caption)}</p>${picture}${wording(name, surface, level + 1)}</section>`
   }
 
   const replies = [
@@ -456,29 +513,29 @@ export function renderSmsOptInMarkup(
   const update = text(page.updateText, fill(product.sms.update, { link: SAMPLE_LINK }))
 
   /**
-   * One form in a part, under a heading of its own that the contents list
-   * links to. On the website, HELP and STOP keeps the anchor it had as a
-   * step, `#help-and-stop`, on its section. Forms and steps are plain
-   * sections found by their headings, not landmarks: their names repeat
-   * from one part to the other, and a landmark's must not.
+   * One form in a part, under a heading of `level` of its own that the
+   * contents list links to. On the website, HELP and STOP keeps the anchor
+   * it had as a step, `#help-and-stop`, on its section. Forms and steps are
+   * plain sections found by their headings, not landmarks: their names
+   * repeat from one part to the other, and a landmark's must not.
    */
-  const form = (name: Form, surface: Surface) => {
+  const form = (name: Form, surface: Surface, level: number) => {
     const id = formAnchor(name, surface)
     const { heading, intro } = page.forms[name]
     const kept = name === 'replies' && surface === 'web' ? ' id="help-and-stop"' : ''
     const body =
       name === 'replies'
         ? replies + update
-        : FORMS[name].map((each) => step(each, surface)).join('')
-    return `<section class="form"${kept}><h3 id="${id}">${escapeHtml(heading)}</h3><p>${escapeHtml(intro)}</p>${body}</section>`
+        : FORMS[name].map((each) => step(each, surface, level + 1)).join('')
+    return `<section class="form"${kept}><h${level} id="${id}">${escapeHtml(heading)}</h${level}><p>${escapeHtml(intro)}</p>${body}</section>`
   }
-  const forms = (surface: Surface) =>
-    (Object.keys(FORMS) as Form[]).map((name) => form(name, surface)).join('')
+  const forms = (names: readonly Form[], surface: Surface, level: number) =>
+    names.map((name) => form(name, surface, level)).join('')
 
-  /** One of the page's two parts, the website or the app, under a heading the contents list links to. */
+  /** One of the page's two parts, the website or the app: the agreement updates there. */
   const part = (surface: Surface, heading: string, body: string) => {
     const id = PART_ANCHORS[surface]
-    return `<section class="part" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(heading)}</h2>${body}${forms(surface)}</section>`
+    return `<section class="part" aria-labelledby="${id}"><h2 id="${id}">${escapeHtml(heading)}</h2>${body}${forms(UPDATE_FORMS, surface, 3)}</section>`
   }
 
   const website = part('web', page.websiteHeading, `<p>${linked(page.websiteIntro)}</p>`)
@@ -491,22 +548,31 @@ export function renderSmsOptInMarkup(
       `<p>${escapeHtml(page.mobileSame)}</p>`,
     ].join(''),
   )
-  const contents = `<nav aria-label="${escapeHtml(page.contentsLabel)}" class="contents"><ul>${(
-    [
-      ['web', page.websiteHeading],
-      ['mobile', page.mobileHeading],
-    ] as const
-  )
-    .map(([surface, heading]) => {
-      const each = (Object.keys(FORMS) as Form[])
-        .map(
-          (name) =>
-            `<li><a href="#${formAnchor(name, surface)}">${escapeHtml(page.forms[name].heading)}</a></li>`,
-        )
-        .join('')
-      return `<li><a href="#${PART_ANCHORS[surface]}">${escapeHtml(heading)}</a><ul>${each}</ul></li>`
-    })
-    .join('')}</ul></nav>`
+
+  /** The one-time codes, sent by Twilio Verify: the website's forms, then the app's. */
+  const codesHeading = (surface: Surface) =>
+    surface === 'web' ? page.codesWebsiteHeading : page.codesMobileHeading
+  const codes = `<section class="part codes" aria-labelledby="${CODES_ANCHOR}"><h2 id="${CODES_ANCHOR}">${escapeHtml(page.codesHeading)}</h2><p>${escapeHtml(page.codesIntro)}</p>${SURFACES.map(
+    (surface) =>
+      `<section class="surface"><h3 id="${codesAnchor(surface)}">${escapeHtml(codesHeading(surface))}</h3>${forms(CODE_FORMS, surface, 4)}</section>`,
+  ).join('')}</section>`
+
+  const list = (names: readonly Form[], surface: Surface) =>
+    names
+      .map(
+        (name) => `<li><a href="#${formAnchor(name, surface)}">${escapeHtml(page.forms[name].heading)}</a></li>`,
+      )
+      .join('')
+  const contents = `<nav aria-label="${escapeHtml(page.contentsLabel)}" class="contents"><ul>${[
+    ...SURFACES.map(
+      (surface) =>
+        `<li><a href="#${PART_ANCHORS[surface]}">${escapeHtml(surface === 'web' ? page.websiteHeading : page.mobileHeading)}</a><ul>${list(UPDATE_FORMS, surface)}</ul></li>`,
+    ),
+    `<li><a href="#${CODES_ANCHOR}">${escapeHtml(page.codesHeading)}</a><ul>${SURFACES.map(
+      (surface) =>
+        `<li><a href="#${codesAnchor(surface)}">${escapeHtml(codesHeading(surface))}</a><ul>${list(CODE_FORMS, surface)}</ul></li>`,
+    ).join('')}</ul></li>`,
+  ].join('')}</ul></nav>`
 
   const otherLanguages = languages
     .map((other) => {
@@ -534,9 +600,10 @@ export function renderSmsOptInMarkup(
     `<p class="notice">${escapeHtml(page.note)}</p>`,
     `<nav aria-label="${escapeHtml(page.title)}" class="legal-languages"><ul class="plain">${otherLanguages}</ul></nav>`,
     contents,
-    `<section aria-labelledby="programs"><h2 id="programs">${escapeHtml(page.programsHeading)}</h2><ul>${page.programs.map((program) => `<li>${escapeHtml(program)}</li>`).join('')}</ul></section>`,
+    `<section aria-labelledby="programs"><h2 id="programs">${escapeHtml(page.programsHeading)}</h2><ul>${page.programs.map((program) => `<li>${escapeHtml(program)}</li>`).join('')}</ul><p>${escapeHtml(page.codesNote)}</p></section>`,
     website,
     mobile,
+    codes,
     `<section aria-labelledby="more"><h2 id="more">${escapeHtml(page.moreHeading)}</h2><p>${more}</p></section>`,
     '</article>',
     '<!--/email_off-->',

@@ -24,7 +24,8 @@
   margin-block: 2.5rem;
 }
 
-.sms-opt-in .form > h3 {
+.sms-opt-in .form > h3,
+.sms-opt-in .codes .form > h4 {
   font-size: 1.25rem;
 }
 
@@ -46,11 +47,13 @@
   border-radius: 0.75rem;
 }
 
-.sms-opt-in .step > h4 {
+.sms-opt-in .step > h4,
+.sms-opt-in .codes .step > h5 {
   font-size: 1.05rem;
 }
 
-.sms-opt-in .wording h5 {
+.sms-opt-in .wording h5,
+.sms-opt-in .wording h6 {
   font-size: 1rem;
   margin-block: 1rem 0.5rem;
 }
@@ -87,4 +90,13 @@
 .sms-opt-in .sms p {
   margin: 0.25rem 0 0;
   overflow-wrap: anywhere;
+}
+
+/* The one-time codes, sent by Twilio Verify: the website's forms, then the app's. */
+.sms-opt-in .codes .surface {
+  margin-block: 2.5rem;
+}
+
+.sms-opt-in .codes .surface > h3 {
+  font-size: 1.4rem;
 }

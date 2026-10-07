@@ -38,7 +38,7 @@
         },
         {
           "ul": [
-            "Your email address, your phone number, or both. We send one-time sign-in codes to them, we email you when something happens in one of your yups, and, if you turn on text updates for an agreement, we text your phone number when its status changes.",
+            "Your email address, your phone number, or both. We send one-time sign-in codes to them (by text, through our provider Twilio’s verification service, Twilio Verify), we email you when something happens in one of your yups, and, if you turn on text updates for an agreement, we text your phone number when its status changes.",
             "Your name, as you want the people you make yups with to see it.",
             "Your language (English or Spanish), so that the product, our emails and our codes reach you in it.",
             "That you confirmed you are 18 or over, and when. We don’t ask for your date of birth.",
@@ -77,7 +77,7 @@
           "h": "Codes by text, if you ask for one"
         },
         {
-          "p": "When you ask for a one-time code by text, to sign in, to confirm deleting your account or to add a number to your account, we keep a record that you ticked the box beside your number: what the code was for, the version of the wording beside the box and its language, whether you used the website or the app, and when. If the number is already your account’s, we keep it and your account with the record. If it isn’t yet, we keep only a keyed hash of it: a fingerprint, made with a secret key, that lets us find the record from the number if we are asked about a text, but that can’t be turned back into the number. For {networkDays} days we also keep the IP address and user agent of your request, as we do for a signature. We use the record only to show that you asked for the text we sent."
+          "p": "When you ask for a one-time code by text, to sign in, to confirm deleting your account or to add a number to your account, we keep a record that you ticked the box beside your number (the code itself is made and checked by Twilio Verify): what the code was for, the version of the wording beside the box and its language, whether you used the website or the app, and when. If the number is already your account’s, we keep it and your account with the record. If it isn’t yet, we keep only a keyed hash of it: a fingerprint, made with a secret key, that lets us find the record from the number if we are asked about a text, but that can’t be turned back into the number. For {networkDays} days we also keep the IP address and user agent of your request, as we do for a signature. We use the record only to show that you asked for the text we sent."
         },
         {
           "h": "Notifications in the app, if you turn them on"
@@ -98,7 +98,7 @@
           "ul": [
             "Request logs. For each request our service answers, we log the method and the path (never the query string), the status, how long it took, and a request ID. We use them to run the service and to find and fix problems. Our logs never contain what was sent or answered, codes, tokens, email addresses, phone numbers or IP addresses.",
             "Sign-in limits. To stop anyone from guessing codes or asking for too many, we count the codes asked for from each IP address and the wrong codes entered for each email address or phone number. These counts are stored under a keyed hash, never the address or the number itself.",
-            "One-time codes. We store a keyed hash of each code we send, never the code itself, with the email address or phone number it went to and when. We use these to check the code you enter, and to limit how many codes are sent."
+            "One-time codes. For a code by email, we store a keyed hash of the code, never the code itself, with the email address it went to and when. For a code by text, Twilio Verify makes and checks the code, and we store a record that one was asked for: the phone number, what the code was for, when it was asked for, until when it works, and how many wrong codes were entered for it. Once Twilio Verify accepts a code you enter, we add a keyed hash of that code to the record, never the code itself, so that the same code still works if you have to try again before it expires. We use these records to check the code you enter, and to limit how many codes are sent and guessed."
           ]
         }
       ]
@@ -153,7 +153,7 @@
             "Render hosts our service, our database, our server logs and the database’s backups, in the United States.",
             "Cloudflare runs our domain’s DNS and carries every request to yuppers.app over its network before it reaches Render, so it handles your IP address and the request. It may ask your browser to report connection errors to it. It also forwards email sent to our addresses, such as {privacyEmail}.",
             "Postmark sends our emails, so it receives your email address and the email: a one-time code, or a notice that something happened in one of your yups (which never includes the terms).",
-            "Twilio, when we send text messages, receives your phone number and the message: a one-time code or, if you turned them on, an agreement update.",
+            "Twilio, when we send text messages, receives your phone number and the message: an agreement update, if you turned them on; and, through its verification service, Twilio Verify, for each one-time code by text, your number, the code it makes and sends you, the code you enter, and the language to write it in.",
             "Expo, Apple and Google, if you turn on notifications in the app: Expo receives your device’s push token and the notification and passes them to Apple’s or Google’s push service, which delivers it. A notification only says “Your yup has an update.”, with the yup’s internal ID so that the app can open it.",
             "Apple and Google, if you add a Wallet pass: Apple delivers the pass’s updates to your devices, and Google keeps the pass (its status, reference code and number of items) to show it in Google Wallet."
           ]
@@ -167,24 +167,24 @@
       "title": "Text messages (SMS)",
       "blocks": [
         {
-          "p": "When we offer them, Yuppers.app sends text messages in two programs, and for nothing else: no marketing."
+          "p": "When we offer them, Yuppers.app sends text messages in one program, Yuppers.app agreement updates, and for nothing else: no marketing. One-time codes by text are not part of that program: our provider Twilio sends and checks them with its verification service, Twilio Verify."
         },
         {
           "ul": [
-            "Yuppers.app sign-in codes: a one-time code to sign in (which also creates your account the first time), or to confirm that you want to delete your account. We send one only when you ask for a code, and only to the number you entered or, to confirm a deletion, the number on your account. Entering your number, ticking the box beside it that says what we will send, and asking for a code is your request for that text; until the box is ticked, we send nothing. Message frequency: one message for each code you ask for.",
-            "Yuppers.app agreement updates: if you turn on text updates for an agreement, by ticking a box on that agreement, we text you when its status changes, for example when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it. Message frequency varies; there is no fixed maximum: one text per status change of an agreement you turned updates on for. An update says only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
+            "Yuppers.app agreement updates: if you turn on text updates for an agreement, by ticking a box on that agreement, we text you when its status changes, for example when the other person signs, marks something delivered, confirms it, disputes it, or asks to close it, and once when you turn them on, to confirm. Message frequency varies; there is no fixed maximum: one text per status change of an agreement you turned updates on for. An update says only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
+            "One-time codes by text: a code to sign in (which also creates your account the first time), to add a number to your account, or to confirm that you want to delete your account. We ask Twilio Verify for one only when you ask for a code, and only for the number you entered or, to confirm a deletion, the number on your account. Entering your number, ticking the box beside it that says what will be sent, and asking for a code is your request for that text; until the box is ticked, nothing is sent. Twilio Verify makes the code, texts it to you and checks the code you enter. Message frequency: one message for each code you ask for.",
             "Message and data rates may apply.",
-            "**Reply HELP for help.** **Reply STOP to stop receiving texts from us.** STOP stops all texts from Yuppers.app, sign-in codes included, so you’ll need to sign in with an email address instead. Turning off text updates for one agreement stops the updates for that agreement only.",
+            "**Reply HELP for help.** **Reply STOP to stop receiving texts from us.** A STOP sent in reply to an agreement update stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, so you’ll need to sign in with an email address instead. A code comes from one of Twilio’s numbers, so a STOP in reply to a code goes to Twilio, not to us. Turning off text updates for one agreement stops the updates for that agreement only.",
             "Phone numbers outside +1 are not texted: we send texts only to numbers that start with the country code +1.",
             "We do not sell your personal information. We do not share your personal information or your SMS opt-in data and consent with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes.",
             "Mobile information and opt-in consent are not shared with third parties or affiliates for marketing or promotional purposes.",
-            "To deliver the texts, we give your phone number and the message to our SMS provider, Twilio, and to no one else.",
+            "To deliver the texts, we give your phone number to our SMS provider, Twilio, and to no one else: with each agreement update, its text; and for each one-time code, to Twilio Verify, the language to write it in. Twilio Verify makes the code it sends, and receives the code you enter so that it can check it.",
             "Carriers are not liable for delayed or undelivered messages."
           ]
         },
         {
-          "p": "For help with text messages, write to {supportEmail} or reply HELP to any of our texts. For privacy questions, write to {privacyEmail}. The terms of both programs are in our {terms}."
+          "p": "For help with text messages, write to {supportEmail} or reply HELP to any agreement update. For privacy questions, write to {privacyEmail}. The terms of the program, and of one-time codes by text, are in our {terms}."
         },
         {
           "p": "Every step of opting in, with the exact wording of each screen and each message, is shown on the page on {smsOptIn}."
@@ -202,7 +202,7 @@
             "The IP address and user agent recorded with a signature: {networkDays} days.",
             "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
             "The record of each code you asked for by text: {smsConsentYears} years, as proof that you asked for it. The IP address and user agent recorded with it: {networkDays} days.",
-            "One-time codes: each code works for {codeMinutes} minutes, and only once. We don’t yet delete the records of codes (the hash, where it went and when) on a schedule; deleting your account deletes the ones for your email address and phone number.",
+            "One-time codes: each code works for {codeMinutes} minutes, and only once. We don’t yet delete the records of codes (where it went, when, and the hash where we keep one) on a schedule; deleting your account deletes the ones for your email address and phone number.",
             "Sign-ins: each lasts {sessionDays} days, unless you sign out first.",
             "Sign-in limit counts: two days.",
             "Push tokens: until you turn notifications off, sign out on that device or delete your account, or the push service tells us the token no longer works.",
@@ -298,7 +298,7 @@
         {
           "ul": [
             "Connections to Yuppers are encrypted (HTTPS), and browsers are told to use nothing else.",
-            "We store one-time codes, sign-in tokens, the codes in invitation links and Wallet tokens only as hashes, never as they are.",
+            "We store one-time codes, sign-in tokens, the codes in invitation links and Wallet tokens only as hashes, never as they are. Codes by text are made and checked by Twilio Verify, and we keep at most a hash of one, once Twilio Verify has accepted it.",
             "The service uses a restricted database account that can add to an agreement’s history but can’t change or delete it, and the database itself refuses changes to that history.",
             "Only reviewers we name can see reported yups, only while the report is open and after signing in within the last 12 hours, and every report they open is recorded.",
             "Our logs leave out personal information such as email addresses, phone numbers, codes and tokens."

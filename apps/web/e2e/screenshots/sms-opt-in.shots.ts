@@ -60,7 +60,11 @@ import { apiPort, screenshotsLog, webOrigin } from './playwright.config'
 
 const API = `http://127.0.0.1:${apiPort}`
 
-/** The text message a code went out in, read back from the log, for a phone number. */
+/**
+ * The code for a phone number, read back from the log: with
+ * SMS_CODE_DELIVERY=log the service writes it where Twilio Verify would
+ * text it, the number masked.
+ */
 function phoneCodeFrom(phone: string, purpose: 'sign-in' | 'delete', send: () => Promise<unknown>) {
   const masked = `+1••••••••${phone.slice(-2)}`
   const before = phoneCodes(masked, purpose).length
@@ -72,17 +76,18 @@ function phoneCodeFrom(phone: string, purpose: 'sign-in' | 'delete', send: () =>
       if (codes.length > before) return codes[codes.length - 1]
       await new Promise((settle) => setTimeout(settle, 100))
     }
-    throw new Error(`no text message with a code for ${masked} in ${screenshotsLog}`)
+    throw new Error(`no code for ${masked} in ${screenshotsLog}`)
   })()
 }
 
 function phoneCodes(masked: string, purpose: 'sign-in' | 'delete'): string[] {
   const log = readFileSync(screenshotsLog, 'utf8')
-  const lines = log.split('\n').filter((line) => line.includes('text message (development delivery)'))
-  return lines
-    .filter((line) => line.includes(masked))
-    .filter((line) => (purpose === 'delete') === /delete|eliminar/.test(line))
-    .map((line) => /text="?Yuppers\.app: (\d{6})/.exec(line)?.[1])
+  const wanted = new RegExp(`purpose="?${purpose === 'delete' ? 'delete-account' : 'sign-in'}"?`)
+  return log
+    .split('\n')
+    .filter((line) => line.includes('one-time code (development delivery)') && line.includes(masked))
+    .filter((line) => wanted.test(line))
+    .map((line) => /code="?(\d{6})/.exec(line)?.[1])
     .filter((code): code is string => code !== undefined)
 }
 

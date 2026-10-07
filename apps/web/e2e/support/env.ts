@@ -48,13 +48,16 @@ export const signInLimits = {
 }
 
 /**
- * Text messages, written to the log rather than sent (`SMS_DELIVERY=log`),
- * so that agreement updates are offered and their texts can be read back;
- * with the hourly caps out of the way, since every run's texts count. CI
- * starts its API with the same values.
+ * Text messages, written to the log rather than sent: agreement updates
+ * (`SMS_DELIVERY=log`), so that they are offered and their texts can be
+ * read back, and one-time codes for phone numbers (`SMS_CODE_DELIVERY=log`,
+ * where Twilio Verify would make and send them), counted as texts and read
+ * back by number (`codes.ts`); with the hourly caps out of the way, since
+ * every run's texts count. CI starts its API with the same values.
  */
 export const textMessages = {
   SMS_DELIVERY: 'log',
+  SMS_CODE_DELIVERY: 'log',
   SMS_MAX_PER_HOUR: '1000000',
   SMS_MAX_PER_PREFIX_PER_HOUR: '1000000',
 }

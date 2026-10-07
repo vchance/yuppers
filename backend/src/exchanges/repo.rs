@@ -18,7 +18,7 @@ use crate::domain::notification::notifications;
 use crate::domain::revision::{
     Contribution, ContributionId, Due, Kind, Quantity, Revision, RevisionId, Settlement, Slot,
 };
-use crate::notifications::outbox;
+use crate::notifications::{outbox, sms_updates};
 use crate::wallet;
 
 /// A stored revision: what it says, plus what the database knows about it.
@@ -597,8 +597,9 @@ fn event_row(
 /// their signature and the holding stay as they were, under their account.
 ///
 /// What does go is what was theirs alone and binds nobody: a working copy,
-/// and messages still waiting to be sent to them about an exchange that is
-/// no longer theirs.
+/// messages still waiting to be sent to them about an exchange that is no
+/// longer theirs, and text updates they turned on for it, whose ending is
+/// recorded as any other's.
 async fn vacate(
     conn: &mut PgConnection,
     exchange: Uuid,
@@ -635,6 +636,8 @@ async fn vacate(
     .bind(outbox::NO_LONGER_A_PARTY)
     .execute(&mut *conn)
     .await?;
+
+    sms_updates::turn_off(conn, removed, exchange, sms_updates::Source::NoLongerAParty).await?;
     Ok(())
 }
 

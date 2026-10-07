@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::routing::{delete, get, post, put};
 use axum::{Extension, Json, Router};
 use serde::Serialize;
@@ -44,7 +44,11 @@ pub fn router() -> Router<AppState> {
             "/exchanges/{id}/sms-updates",
             get(sms::sms_updates).put(sms::set_sms_updates),
         )
-        .route("/sms/inbound", post(sms::inbound))
+        // Twilio's few kilobytes, not the 2 MB every other route may take.
+        .route(
+            "/sms/inbound",
+            post(sms::inbound).layer(DefaultBodyLimit::max(sms::INBOUND_BODY_LIMIT)),
+        )
         .route("/invitations/preview", post(exchanges::preview_invitation))
         .route("/invitations/claim", post(exchanges::claim_invitation))
         .merge(safety::routes())

@@ -160,6 +160,9 @@ pub enum Source {
     SmsReply,
     AccountDeleted,
     PhoneChanged,
+    /// The person was removed from the agreement, or left it, before the
+    /// other party confirmed them.
+    NoLongerAParty,
 }
 
 impl Source {
@@ -172,6 +175,7 @@ impl Source {
             Source::SmsReply => "SMS_REPLY",
             Source::AccountDeleted => "ACCOUNT_DELETED",
             Source::PhoneChanged => "PHONE_CHANGED",
+            Source::NoLongerAParty => "NO_LONGER_A_PARTY",
         }
     }
 
@@ -394,17 +398,42 @@ impl Keyword {
     }
 }
 
+/// How long a text received is remembered by its MessageSid, so that the
+/// same request posted again does nothing ([`first_receipt`]). Twilio
+/// retries a webhook for minutes, not days; this bounds how late a captured
+/// request could still be replayed.
+pub const INBOUND_SEEN_RETENTION: Duration = Duration::days(30);
+
+/// Notes Twilio's MessageSid of a text received, in the transaction that
+/// acts on it, and says whether this is the first time it came. A repeat
+/// must change nothing: it may be a replay of a request someone captured,
+/// and a START replayed after a later STOP would lift the opt-out.
+pub async fn first_receipt(
+    conn: &mut PgConnection,
+    message_sid: &str,
+) -> Result<bool, sqlx::Error> {
+    let added = sqlx::query(
+        "INSERT INTO sms_inbound_seen (message_sid) VALUES ($1)
+         ON CONFLICT (message_sid) DO NOTHING",
+    )
+    .bind(message_sid)
+    .execute(conn)
+    .await?
+    .rows_affected();
+    Ok(added > 0)
+}
+
 /// Records a stop keyword from `phone`: the number goes on the opt-out list,
 /// every agreement's updates to it are turned off, and nothing still queued
 /// for it is sent. Returns how many agreements' updates were turned off.
-pub async fn stop(db: &PgPool, phone: &str, keyword: &str) -> Result<u64, sqlx::Error> {
-    let mut tx = db.begin().await?;
+/// Run in a transaction, so that it is all or nothing.
+pub async fn stop(conn: &mut PgConnection, phone: &str, keyword: &str) -> Result<u64, sqlx::Error> {
     sqlx::query(
         "INSERT INTO sms_opt_out (phone) VALUES ($1)
          ON CONFLICT (phone) DO UPDATE SET opted_out_at = now()",
     )
     .bind(phone)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
     sqlx::query(
         "INSERT INTO sms_consent (action, phone, source, keyword)
@@ -412,7 +441,7 @@ pub async fn stop(db: &PgPool, phone: &str, keyword: &str) -> Result<u64, sqlx::
     )
     .bind(phone)
     .bind(keyword_text(keyword))
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
     let turned_off = sqlx::query(
         "WITH gone AS (
@@ -422,21 +451,19 @@ pub async fn stop(db: &PgPool, phone: &str, keyword: &str) -> Result<u64, sqlx::
          SELECT 'OPT_OUT', account_id, exchange_id, phone, 'SMS_REPLY' FROM gone",
     )
     .bind(phone)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?
     .rows_affected();
-    tx.commit().await?;
     Ok(turned_off)
 }
 
 /// Records a start keyword from `phone`: it is taken off the opt-out list.
 /// No agreement's updates come back on; each is turned on again by ticking
-/// its box.
-pub async fn start(db: &PgPool, phone: &str, keyword: &str) -> Result<(), sqlx::Error> {
-    let mut tx = db.begin().await?;
+/// its box. Run in a transaction.
+pub async fn start(conn: &mut PgConnection, phone: &str, keyword: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sms_opt_out WHERE phone = $1")
         .bind(phone)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     sqlx::query(
         "INSERT INTO sms_consent (action, phone, source, keyword)
@@ -444,9 +471,8 @@ pub async fn start(db: &PgPool, phone: &str, keyword: &str) -> Result<(), sqlx::
     )
     .bind(phone)
     .bind(keyword_text(keyword))
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -468,11 +494,17 @@ fn keyword_text(keyword: &str) -> String {
 // ---- Retention --------------------------------------------------------------
 
 /// Removes consent records past their retention (`Rules::sms_consent_retention`):
-/// those older than it, except an opt-in whose updates are still on and a
-/// STOP whose number is still opted out, which are what the texting (or not
-/// texting) now rests on. And the address and user agent of an opt-in after
-/// as long as a signature's. Returns how many rows went. Called by the
-/// worker.
+/// those older than it, except an opt-in whose updates are still on, or
+/// ended less than the retention ago, and a STOP whose number is still
+/// opted out, which are what the texting (or not texting) now rests on. And
+/// the address and user agent of an opt-in after as long as a signature's.
+/// Returns how many rows went. Called by the worker.
+///
+/// An opt-in's updates end with the first record after it for the same
+/// person and agreement (turned off, for whatever reason, or turned on
+/// again with another number) or the first STOP from its number, whichever
+/// comes first; the privacy policy keeps the opt-in until the retention has
+/// passed from then, not from the opt-in.
 pub async fn purge_consent(
     db: &PgPool,
     rules: &Rules,
@@ -490,6 +522,13 @@ pub async fn purge_consent(
                    SELECT 1 FROM sms_update u
                    WHERE u.account_id = c.account_id AND u.exchange_id = c.exchange_id
                      AND u.turned_on_at <= c.created_at))
+           AND NOT (c.action = 'OPT_IN' AND COALESCE((
+                   SELECT min(e.created_at) FROM sms_consent e
+                   WHERE e.id > c.id
+                     AND ((e.account_id = c.account_id AND e.exchange_id = c.exchange_id
+                           AND e.action IN ('OPT_OUT', 'OPT_IN'))
+                          OR (e.action = 'STOP' AND e.phone = c.phone))),
+                   '-infinity') >= $1)
            AND NOT (c.action = 'STOP' AND EXISTS (
                    SELECT 1 FROM sms_opt_out o
                    WHERE o.phone = c.phone AND o.opted_out_at <= c.created_at))",
@@ -499,6 +538,17 @@ pub async fn purge_consent(
     .await?
     .rows_affected();
     Ok(network + records)
+}
+
+/// Forgets the MessageSids of texts received longer ago than
+/// [`INBOUND_SEEN_RETENTION`]. Returns how many went. Called by the worker.
+pub async fn purge_inbound_seen(db: &PgPool, at: OffsetDateTime) -> Result<u64, sqlx::Error> {
+    let removed = sqlx::query("DELETE FROM sms_inbound_seen WHERE received_at < $1")
+        .bind(at - INBOUND_SEEN_RETENTION)
+        .execute(db)
+        .await?
+        .rows_affected();
+    Ok(removed)
 }
 
 // ---- Delivering -------------------------------------------------------------

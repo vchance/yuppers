@@ -225,6 +225,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # docker-compose.yml has no default for it (README, "Contact details
+      # at rest"), and migrate refuses the published keys for a database in
+      # another container: a new one for each run, never printed.
+      - name: Contact data key
+        run: |
+          key="$(openssl rand -base64 32)"
+          echo "::add-mask::$key"
+          echo "CONTACT_DATA_KEY=$key" >> "$GITHUB_ENV"
+
       # The Render Blueprint (render.yaml, docs/deploy-render.md) against the
       # JSON schema Render publishes for it. Reads the public schema only;
       # nothing here has a Render account.
@@ -360,6 +369,8 @@ jobs:
       DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
       MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers
       APP_SECRET: ci-only-secret-for-the-end-to-end-tests-0123456789
+      # A fixed key for CI alone (README, "Contact details at rest").
+      CONTACT_DATA_KEY: 5p7nTzW0IIJkboTNJ4ePM4NlIYippLdb7EvFQ27RWMk=
       # Where the API started below writes its log; the tests read codes from it.
       E2E_API_LOG: ${{ github.workspace }}/apps/web/e2e/.output/api.log
     services:
@@ -478,6 +489,8 @@ jobs:
       DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
       MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers
       APP_SECRET: ci-only-secret-for-the-end-to-end-tests-0123456789
+      # A fixed key for CI alone (README, "Contact details at rest").
+      CONTACT_DATA_KEY: 5p7nTzW0IIJkboTNJ4ePM4NlIYippLdb7EvFQ27RWMk=
       # Where the API started below writes its log; the tests read codes from it.
       E2E_MOBILE_API_LOG: ${{ github.workspace }}/apps/mobile/e2e/.output/api.log
     services:
@@ -600,6 +613,10 @@ jobs:
       REPLAYED_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers_replayed
       REPLAYED_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers_replayed
       APP_SECRET: ci-only-secret-for-the-backup-check-0123456789
+      # A fixed key for CI alone (README, "Contact details at rest"); the
+      # restore drill needs the key the backup was made under, as it does
+      # in production.
+      CONTACT_DATA_KEY: 5p7nTzW0IIJkboTNJ4ePM4NlIYippLdb7EvFQ27RWMk=
     services:
       postgres:
         # Pinned by digest, the same in every job and in the backup job's
@@ -790,16 +807,22 @@ jobs:
           NO_COLOR: "1"
         run: |
           set -o pipefail
-          read -r id email < <("$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "
-            SELECT a.id, a.email FROM account a
-            WHERE a.status = 'ACTIVE' AND a.email IS NOT NULL
+          # The database holds the address only encrypted (README, "Contact
+          # details at rest"), so it is found in the load check's codes in
+          # the api's log, by the label the load check named the account
+          # with: "Load 3a" signed in as load-<run>-3a@example.test.
+          read -r id label < <("$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "
+            SELECT a.id, substr(a.display_name, 6) FROM account a
+            WHERE a.status = 'ACTIVE' AND a.email_index IS NOT NULL
+              AND a.display_name LIKE 'Load %'
               AND EXISTS (SELECT 1 FROM account_session s WHERE s.account_id = a.id)
               AND a.id <> (SELECT created_by FROM exchange WHERE in_force_revision_id IS NOT NULL
                            ORDER BY created_at, id LIMIT 1)
             ORDER BY a.created_at DESC, a.id DESC LIMIT 1")
           test -n "$id"
+          email=$(grep -o "load-[a-z0-9]*-$label@example\.test" .backup/api.log | head -n 1)
+          test -n "$email"
           echo "DELETED_ID=$id" >> "$GITHUB_ENV"
-          echo "DELETED_EMAIL=$email" >> "$GITHUB_ENV"
           backend/target/debug/api > .backup/api-delete.log 2>&1 &
           echo $! > .backup/api.pid
           for _ in $(seq 1 30); do
@@ -856,7 +879,7 @@ jobs:
           "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "CREATE DATABASE yuppers_replayed OWNER exchange"
           scripts/restore.sh -d "$REPLAYED_URL" .backup/yuppers.dump
           read -r status has_email sessions < <("$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 "$REPLAYED_URL" -c "
-            SELECT status, email IS NOT NULL,
+            SELECT status, email_encrypted IS NOT NULL AND email_index IS NOT NULL,
                    (SELECT count(*) FROM account_session WHERE account_id = a.id)
             FROM account a WHERE id = '$DELETED_ID'")
           echo "restored: $status, has an email: $has_email, $sessions sessions"
@@ -875,20 +898,22 @@ jobs:
           grep --quiet "no longer marked as waiting" .backup/replay.out
           test "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "SELECT restore_replay_pending()")" = f
           test "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "SELECT event || ' ' || by_role FROM restore_marker ORDER BY id DESC LIMIT 1")" = "REPLAYED exchange_app"
-          read -r status email sessions devices holders < <(printf '%s\n' "
-            SELECT status, coalesce(email, '-'),
+          # The address in no form, encrypted or indexed; and, with its
+          # index gone, nobody holding it (the index is unique, so a replayed
+          # copy where it lingered would refuse it to anyone else).
+          read -r status forms sessions devices < <(printf '%s\n' "
+            SELECT status, num_nonnulls(email_encrypted, email_index, phone_encrypted,
+                                        phone_index),
                    (SELECT count(*) FROM account_session WHERE account_id = a.id),
-                   (SELECT count(*) FROM device WHERE account_id = a.id),
-                   (SELECT count(*) FROM account WHERE email = :'email')
+                   (SELECT count(*) FROM device WHERE account_id = a.id)
             FROM account a WHERE id = :'id'" \
             | "$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 -v id="$DELETED_ID" \
-                -v email="$DELETED_EMAIL" "$REPLAYED_URL" -f -)
-          echo "replayed: $status, email $email, $sessions sessions, $devices devices, $holders accounts with the address"
+                "$REPLAYED_URL" -f -)
+          echo "replayed: $status, $forms forms of an address or number, $sessions sessions, $devices devices"
           test "$status" = DELETED
-          test "$email" = -
+          test "$forms" = 0
           test "$sessions" = 0
           test "$devices" = 0
-          test "$holders" = 0
           # The log keeps the time it first happened.
           logged="SELECT deleted_at FROM deletion_log WHERE account_id = '$DELETED_ID'"
           test "$("$PSQL" --no-psqlrc -At "$SOURCE_URL" -c "$logged")" = "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "$logged")"

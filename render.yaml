@@ -125,6 +125,20 @@ envVarGroups:
       # creates exchange_app with it; the api and the worker sign in with it.
       - key: APP_DB_PASSWORD
         generateValue: true
+      # The key every email address and phone number in the database is
+      # encrypted under (README, "Contact details at rest"): 32 random
+      # bytes, `openssl rand -base64 32`, generated on the owner's machine
+      # and entered by hand, never generated here, because a copy MUST be
+      # kept outside Render: without it no address or number in the
+      # database or its backups can ever be read again. migrate, the api and
+      # the worker refuse to start without it, so it is entered before the
+      # deploy that first needs it (docs/deploy-render.md, "Contact data
+      # key"). CONTACT_DATA_KEY_PREVIOUS only while rotating
+      # (docs/operations.md, "Contact data key"); empty otherwise.
+      - key: CONTACT_DATA_KEY
+        sync: false
+      - key: CONTACT_DATA_KEY_PREVIOUS
+        sync: false
 
 services:
   # The API, serving the web app from the same origin, and the

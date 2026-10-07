@@ -588,10 +588,17 @@ async fn a_download_link_gives_the_pass_without_a_session_once_for_a_while() {
         .await
         .ok();
     let path = link["url"].as_str().unwrap()["https://app.test".len()..].to_owned();
-    sqlx::query("UPDATE wallet_download_link SET expires_at = now() WHERE used_at IS NULL")
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    // Only this exchange's links: tests running alongside have their own.
+    let exchange: Uuid = deal.exchange.parse().unwrap();
+    sqlx::query(
+        "UPDATE wallet_download_link SET expires_at = now()
+         WHERE used_at IS NULL
+           AND wallet_pass_id IN (SELECT id FROM wallet_pass WHERE exchange_id = $1)",
+    )
+    .bind(exchange)
+    .execute(&app.owner)
+    .await
+    .unwrap();
     let expired = app.call(None, Method::GET, &path, None, &[]).await;
     assert_eq!(
         (expired.status, &expired.body),

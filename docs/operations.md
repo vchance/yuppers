@@ -30,6 +30,7 @@ All three come from the same image: the `api` is its default command, the other 
    - `DATABASE_URL`: `exchange_app`'s connection string, for the api and the worker.
    - `MIGRATION_DATABASE_URL`: the owner's, for `migrate` only.
    - `APP_SECRET`: `openssl rand -hex 32`.
+   - `CONTACT_DATA_KEY`: `openssl rand -base64 32`, for `migrate`, the api and the worker. **Keep a copy outside the platform** before it is used: without it no address or number stored can be read again ("Contact data key" below).
    - `SMTP_PASSWORD`, and `SMTP_USERNAME` if the provider treats it as secret.
    - When they are switched on: for the api, `SMS_API_KEY_SECRET` with its `SMS_API_KEY_SID` (recommended) or else `SMS_AUTH_TOKEN`, and `EXPO_ACCESS_TOKEN` for the worker if the Expo project has push security on.
    - Once Wallet passes are wanted: `APPLE_PASS_KEY` and `GOOGLE_WALLET_SERVICE_ACCOUNT` ([docs/wallet.md](wallet.md)).
@@ -44,11 +45,11 @@ All three come from the same image: the `api` is its default command, the other 
    - `METRICS_ADDR=0.0.0.0:9100` on the api and the worker, if something will scrape them (below).
    - The Wallet settings, on the api and the worker, once the accounts exist, with `WALLET_DELIVERY=live` ([docs/wallet.md](wallet.md)). Until then, none of them.
 
-4. **Migrate.** Run the image with `/usr/local/bin/migrate` and `MIGRATION_DATABASE_URL`. It exits 0 with `migrations applied`. Safe to run again; every release runs it before the new api and worker start.
+4. **Migrate.** Run the image with `/usr/local/bin/migrate`, `MIGRATION_DATABASE_URL` and `CONTACT_DATA_KEY`. It exits 0 with `migrations applied`. Safe to run again; every release runs it before the new api and worker start.
 
-5. **The worker.** One copy, `/usr/local/bin/worker`, with `DATABASE_URL`, `WEB_ORIGIN`, the delivery and SMTP settings, and `PUSH_DELIVERY` (with `EXPO_ACCESS_TOKEN`) once push is on. It logs `worker started`. Give it a stop grace period of at least 35 seconds: on `SIGTERM` it finishes the message it is sending (at most 30 seconds) and exits 0.
+5. **The worker.** One copy, `/usr/local/bin/worker`, with `DATABASE_URL`, `CONTACT_DATA_KEY`, `WEB_ORIGIN`, the delivery and SMTP settings, and `PUSH_DELIVERY` (with `EXPO_ACCESS_TOKEN`) once push is on. It logs `worker started`. Give it a stop grace period of at least 35 seconds: on `SIGTERM` it finishes the message it is sending (at most 30 seconds) and exits 0.
 
-6. **The api.** The image's default command, with `DATABASE_URL`, `APP_SECRET`, `WEB_ORIGIN`, `CODE_DELIVERY`, the SMTP settings and `TRUSTED_PROXY_HEADER`, and once they are on, the `SMS_*` and `TWILIO_VERIFY_*` settings and the same `PUSH_DELIVERY` as the worker. It serves the web app itself from `/srv/web`. Point the platform's health check at `/readyz` (below). Any number of copies; each holds up to 10 database connections, so copies × 10 plus the worker's 10 must stay under the database's connection limit.
+6. **The api.** The image's default command, with `DATABASE_URL`, `APP_SECRET`, `CONTACT_DATA_KEY`, `WEB_ORIGIN`, `CODE_DELIVERY`, the SMTP settings and `TRUSTED_PROXY_HEADER`, and once they are on, the `SMS_*` and `TWILIO_VERIFY_*` settings and the same `PUSH_DELIVERY` as the worker. It serves the web app itself from `/srv/web`. Point the platform's health check at `/readyz` (below). Any number of copies; each holds up to 10 database connections, so copies × 10 plus the worker's 10 must stay under the database's connection limit.
 
 7. **TLS at the proxy.** The proxy or load balancer terminates HTTPS for `WEB_ORIGIN`'s host and forwards plain HTTP to port 8080, adding the header named in `TRUSTED_PROXY_HEADER`. Redirect HTTP to HTTPS there. Do not route the metrics port through it.
 
@@ -274,7 +275,7 @@ MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
 - It needs `pg_dump`, `pg_restore` and `psql` of the server's major version or newer (PostgreSQL 17); the image does not contain them. Run it from a small scheduled job in the same network, for example a `postgres:17` container with the repository's `scripts/` mounted, or set `PG_BIN` to where the tools are.
 - A connection string with a password in it is visible to other users of the same machine while the command runs. On a shared machine leave the password out of the URL and put it in `PGPASSWORD` or a `.pgpass` file.
 - Managed databases take their own snapshots and point-in-time recovery; keep those on. These files are the copy that does not depend on the provider, that can be restored anywhere, and that the drill below proves.
-- **What the file holds**: every account's email address and phone number, every agreement, signature and the network addresses recorded with signatures. Encrypt it at rest, keep it where access is as narrow as the database's, and never in the repository (`.gitignore` refuses `*.dump`).
+- **What the file holds**: every account's email address and phone number, encrypted under `CONTACT_DATA_KEY` (a backup made before that release holds them as they were), every agreement, signature and the network addresses recorded with signatures. Encrypt it at rest, keep it where access is as narrow as the database's, and never in the repository (`.gitignore` refuses `*.dump`). Keep the key apart from the backups, and keep it as long as they are kept ("Contact data key").
 - **How long to keep them**: the service forgets network metadata after 90 days and deleted accounts' contact details at once (`DESIGN.md` §14); a backup keeps whatever it held when it was taken. Keep backups no longer than the retention the privacy policy states (`/privacy#how-long-we-keep-it`: up to 7 days for Render's own recovery copies, and "for a limited time" for ours, until a number is decided, "Decisions still open"), and see "Restoring" for what a restore brings back.
 
 ## Restoring
@@ -290,7 +291,9 @@ psql "$ADMIN_URL" -c "CREATE DATABASE yuppers_restored OWNER exchange"
 scripts/restore.sh -d postgres://exchange:...@db.internal:5432/yuppers_restored yuppers.dump
 
 # Then, before the api and the worker start on it: migrate, and replay the
-# newest deletion log ("Replaying deletions" below). Not optional.
+# newest deletion log ("Replaying deletions" below). Not optional. Both need
+# the key the backup was made under ("Contact data key").
+export CONTACT_DATA_KEY=...
 MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers_restored migrate
 scripts/replay-deletions.sh -d postgres://exchange_app:...@db.internal:5432/yuppers_restored deletions.txt
 ```
@@ -345,6 +348,27 @@ A backup is only known to work once it has been restored. Do this on a schedule,
 6. Drop the scratch database and the backup copy you made for it.
 
 CI runs the same steps on every change (the `Backup and restore` job). It fills a database through the API with the load check and backs it up. It checks that `backup.sh` will replace neither that file nor a deletion log without `--force`, and that `restore.sh` refuses the non-empty source. It restores into a new database and compares the two with `check-restore.sh`, then restores again with `--overwrite` and compares again. Then the source stands for the live database: one person deletes their account through the API, with codes read from the log, and a newer backup and the live log are exported. The earlier backup is restored into another database, where that person's account is back with its address and sessions. The newer backup's deletion log is replayed, and the account is deleted again: no address, no sessions, no devices, nobody holding the address, and the log's original time. Replaying a second time does nothing. Last, `backend/tests/schema.rs` runs against both copies, and a signed agreement is read back from each.
+
+## Contact data key
+
+`CONTACT_DATA_KEY` encrypts every email address and phone number the database holds (README, "Contact details at rest"): 32 random bytes in base64, `openssl rand -base64 32`, apart from `APP_SECRET`. `migrate`, the api, the worker, `staff`, `contact-data` and `replay-deletions` need it. The api and the worker refuse to start if it does not decrypt the database's blind-index key (`contact_key`, migration 0025), or if any value stored is under a key that is neither it nor `CONTACT_DATA_KEY_PREVIOUS`; while the database cannot be reached they wait for it. Every process refuses a key that decodes to printable text (typed, not generated), and, wherever `WEB_ORIGIN` is not this machine, the keys published in the repository for development (`.env.example`), the tests and CI. No process ever writes it to a log or an error.
+
+**Keep a copy outside the platform**, in a password manager, from the moment it is made. Losing it loses every address and number stored, in the database and in every backup made since: nobody could be emailed or texted, and nobody could sign in by the address or number they used. Keep any key it replaced, too, for as long as backups made under that key are kept.
+
+**Where things stand.** `contact-data status`, as the owner (`MIGRATION_DATABASE_URL`; in the image, `/usr/local/bin/contact-data status`, run as a one-off job on Render), prints for each column that holds encrypted values how many are under the current key and how many under another, and whether `CONTACT_DATA_KEY_PREVIOUS` is still needed.
+
+**Rotating it**, if it may have leaked, or on a schedule:
+
+1. Make a new key and save it.
+2. On every process at once (on Render, in `yuppers-secrets`): `CONTACT_DATA_KEY_PREVIOUS` = the current key, `CONTACT_DATA_KEY` = the new one. Restart or redeploy. New values are now encrypted under the new key, and the old one only decrypts.
+3. Run `contact-data rotate` as the owner. It re-encrypts every value not under the new key, and the blind-index key with them, in batches while the service runs, and prints the counts. Running it again changes nothing. It exits 1, leaving them as they were, if any values decrypt under neither key.
+4. Once a run says that every value is under `CONTACT_DATA_KEY`, remove `CONTACT_DATA_KEY_PREVIOUS` and restart. A process started without the previous key while anything is still under it refuses to start, rather than fail later.
+
+**The blind indexes do not rotate.** The index key is derived once, from the first key, and kept in the database encrypted under whichever key is current; rotating re-encrypts it, so no index changes, every lookup and join stays exact, and nothing waits on step 3. An index key that changed with the key would leave, until every row was recomputed, an opt-out under one key and the number it stops under another: a text to someone who replied STOP. The cost: a leaked key leaks the index key, and whoever also has a copy of the database could test guessed addresses and numbers against the indexes (all US numbers can be tried). Rotating protects the encrypted values in later copies, not the indexes. Recomputing the indexes under a new index key needs every value decrypted and nothing writing meanwhile, which this build does not offer; treat a leak of the key as a leak of the contact details.
+
+**Backups and restores.** A backup holds the values and the index key encrypted, never the key. Restoring one needs the key it was made under, set as `CONTACT_DATA_KEY` (or as `CONTACT_DATA_KEY_PREVIOUS` beside a newer one) for `migrate`, `replay-deletions` and the api. The restore drill's `check-restored-record.sh` starts an api on the copy with it, which proves that the copy kept outside the platform still opens the backups.
+
+**The release that added it** started from an empty database. Its migration (0025) drops the plaintext columns rather than converting them, and refuses to run, changing nothing, on a database where any of those tables has a row; docs/deploy-render.md, "Contact data key", says how the live database was emptied first. A database restored from a backup made before that release cannot be migrated past it. From now on, any change to how contact details are stored, on a database with people in it, needs a migration that converts what is there.
 
 ## Rotating `APP_SECRET`
 

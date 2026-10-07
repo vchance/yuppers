@@ -339,6 +339,10 @@ describe('the composer', () => {
       w.a11y.required,
     );
 
+    await fireEvent.changeText(
+      await screen.findByLabelText(w.invitationLink.forLabel),
+      'carla@example.test',
+    );
     await fireEvent.changeText(screen.getByLabelText(w.composer.descriptionLabel), '');
     announced.mockClear();
     await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
@@ -355,6 +359,10 @@ describe('the composer', () => {
   test('the signing step says why its button cannot be pressed yet', async () => {
     await open(`/exchanges/${DRAFT}`, { signedIn: true });
     await screen.findByText(w.composer.titleFirst);
+    await fireEvent.changeText(
+      await screen.findByLabelText(w.invitationLink.forLabel),
+      'carla@example.test',
+    );
     await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
     await screen.findByText(w.composer.signIntro);
     expect(audit()).toEqual([]);
@@ -384,9 +392,29 @@ describe('passing the invitation on', () => {
     expect(audit()).toEqual([]);
   });
 
+  test('a link for anyone is chosen on purpose, and what it costs is said as it appears', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    const field = await screen.findByLabelText(w.invitationLink.forLabel);
+    // Naming them is expected, and said to be.
+    expect(field.props.accessibilityHint).toContain(w.a11y.required);
+    announced.mockClear();
+    await fireEvent.press(screen.getByRole('link', { name: w.invitationLink.forAnyone }));
+    await screen.findByText(w.invitationLink.forAnyoneText);
+    expect(announced.mock.calls.map(([text]) => text)).toContain(w.invitationLink.forAnyoneText);
+    expect(screen.queryByLabelText(w.invitationLink.forLabel)).toBeNull();
+    expect(audit()).toEqual([]);
+    await fireEvent.press(screen.getByRole('link', { name: w.invitationLink.forNamed }));
+    await screen.findByLabelText(w.invitationLink.forLabel);
+    expect(audit()).toEqual([]);
+  });
+
   test('the link once sent, its buttons named, and the QR code an image with a name', async () => {
     await open(`/exchanges/${DRAFT}`, { signedIn: true });
     await screen.findByText(w.composer.titleFirst);
+    await fireEvent.changeText(
+      await screen.findByLabelText(w.invitationLink.forLabel),
+      'carla@example.test',
+    );
     await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
     await screen.findByText(w.composer.signIntro);
     await fireEvent(screen.getByTestId('consent-agree'), 'valueChange', true);

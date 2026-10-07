@@ -6,6 +6,7 @@ import {
   button,
   field,
   heading,
+  nameInvitee,
   press,
   settle,
   start,
@@ -181,7 +182,7 @@ describe('the composer', () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     const w = wording.invitationLink
     await heading(wording.composer.titleFirst)
-    await until(() => document.body.textContent!.includes(w.forHint), 'the field')
+    await nameInvitee(w.forLabel, '')
     const bound = field(w.forLabel)
     await type(bound, 'carla@example')
     await press(button(wording.composer.review))
@@ -193,10 +194,29 @@ describe('the composer', () => {
     expect(await violations()).toEqual([])
   })
 
+  test('a link for anyone, chosen on purpose: what it costs is focused, and going back focuses the field', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.invitationLink
+    await heading(wording.composer.titleFirst)
+    await nameInvitee(w.forLabel, '')
+    // Naming them is expected, and said to be.
+    expect(field(w.forLabel).getAttribute('aria-required')).toBe('true')
+    expect(await violations()).toEqual([])
+
+    await press(button(w.forAnyone))
+    expect(document.activeElement?.textContent).toBe(w.forAnyoneText)
+    expect(document.activeElement?.getAttribute('tabindex')).toBe('-1')
+    expect(await violations()).toEqual([])
+
+    await press(button(w.forNamed))
+    expect(document.activeElement).toBe(field(w.forLabel))
+  })
+
   test('the invitation link once sent, its ways to share and its QR code', async () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     const w = wording.invitationLink
     await heading(wording.composer.titleFirst)
+    await nameInvitee(wording.invitationLink.forLabel, 'carla@example.test')
     await press(button(wording.composer.review))
     await heading(wording.composer.signTitle)
     await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
@@ -234,6 +254,7 @@ describe('the composer', () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     const w = wording.composer
     await heading(w.titleFirst)
+    await nameInvitee(wording.invitationLink.forLabel, 'carla@example.test')
     const description = document.getElementById(`${REPAIR}-description`) as HTMLTextAreaElement
     await type(description, '')
     await press(button(w.review))
@@ -248,6 +269,7 @@ describe('the composer', () => {
   test('the signing step', async () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     await heading(wording.composer.titleFirst)
+    await nameInvitee(wording.invitationLink.forLabel, 'carla@example.test')
     await press(button(wording.composer.review))
     await heading(wording.composer.signTitle)
 
@@ -404,6 +426,7 @@ describe('help', () => {
   test('a “Learn more” link in the signing step says it opens a new tab', async () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     await heading(wording.composer.titleFirst)
+    await nameInvitee(wording.invitationLink.forLabel, 'carla@example.test')
     await press(button(wording.composer.review))
     await heading(wording.composer.signTitle)
     const learn = [...document.querySelectorAll<HTMLAnchorElement>('.consent a')].find((a) =>

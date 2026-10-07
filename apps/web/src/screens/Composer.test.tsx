@@ -34,8 +34,19 @@ describe('who the invitation is for', () => {
     const otherName = field(wording.composer.otherName) as HTMLInputElement
     expect(inGroup.indexOf(bound)).toBe(inGroup.indexOf(otherName) + 1)
     expect(bound.type).toBe('email')
-    expect(document.body.textContent).toContain(w.forHint)
     expect(labels()).not.toContain(w.forLabel)
+
+    // Expected, not optional: why naming them helps, that we do not contact
+    // them, and that they must sign in with exactly this, in that order.
+    expect(bound.getAttribute('aria-required')).toBe('true')
+    const text = group.textContent!
+    expect(text.indexOf(w.forIntro)).toBeGreaterThan(-1)
+    expect(text.indexOf(w.forNoContact)).toBeGreaterThan(text.indexOf(w.forIntro))
+    expect(text.indexOf(w.forHint)).toBeGreaterThan(text.indexOf(w.forNoContact))
+    const hint = document.getElementById(bound.getAttribute('aria-describedby')!.split(' ')[0])
+    expect(hint?.textContent).toBe(w.forHint)
+    // A link for anyone is offered after it, as something to choose.
+    expect(text.indexOf(w.forAnyone)).toBeGreaterThan(text.indexOf(w.forHint))
   })
 
   test('something plainly wrong is flagged before signing, and the keyboard taken to it', async () => {
@@ -111,11 +122,52 @@ describe('who the invitation is for', () => {
     await heading(wording.composer.signTitle)
   })
 
-  test('left empty, it names nobody and nothing is said about it', async () => {
-    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+  test('left empty, it is asked for: an empty field never makes a link for anyone', async () => {
+    const { wording, service } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.invitationLink
     await heading(wording.composer.titleFirst)
+    await until(() => labels().includes(w.forLabel), 'the field')
+    await press(button(wording.composer.review))
+    await settle()
+
+    expect(document.querySelector('h1')?.textContent).toBe(wording.composer.titleFirst)
+    const bound = field(w.forLabel)
+    expect(bound.getAttribute('aria-invalid')).toBe('true')
+    expect(document.body.textContent).toContain(w.forMissing)
+    expect(document.activeElement).toBe(bound)
+    expect(service.sent.some((request) => request.call.endsWith('/revisions'))).toBe(false)
+  })
+
+  test('a link for anyone is a deliberate choice that says what it costs, and names nobody', async () => {
+    const { wording, service } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.invitationLink
+    await heading(wording.composer.titleFirst)
+    await until(() => labels().includes(w.forLabel), 'the field')
+    await type(field(w.forLabel), 'carla@')
+
+    await press(button(w.forAnyone))
+    // The field is gone, and what it costs is said and focused.
+    expect(labels()).not.toContain(w.forLabel)
+    expect(document.activeElement?.textContent).toBe(w.forAnyoneText)
+    expect(document.body.textContent).not.toContain(w.forNoContact)
+
+    // Changing one's mind back keeps what was typed.
+    await press(button(w.forNamed))
+    expect((field(w.forLabel) as HTMLInputElement).value).toBe('carla@')
+    expect(document.activeElement).toBe(field(w.forLabel))
+    await press(button(w.forAnyone))
+
+    // What was typed is not checked, nor sent.
     await press(button(wording.composer.review))
     await heading(wording.composer.signTitle)
+    expect(document.body.textContent).toContain(w.forAnyoneSummary)
     expect(document.body.textContent).not.toContain('will be able to use the link')
+    await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
+    await press(button(wording.composer.signAndSend))
+    await until(() => document.body.textContent!.includes(w.intro), 'the invitation link')
+    const sent = service.sent.find(
+      (request) => request.call === `POST /v1/exchanges/${DRAFT}/revisions`,
+    )
+    expect(sent?.body).toMatchObject({ invitation: { bound_to: null } })
   })
 })

@@ -245,6 +245,14 @@ describe('every word on the main mobile screens comes from the wording', () => {
   test('the composer, writing and then signing', async () => {
     await open(`/exchanges/${DRAFT}`, true);
     await screen.findByText(w.composer.titleFirst);
+    await fireEvent.changeText(
+      await screen.findByLabelText(w.invitationLink.forLabel),
+      'carla@example.test',
+    );
+    check();
+    // A link for anyone, chosen on purpose, with what it costs.
+    await fireEvent.press(screen.getByRole('link', { name: w.invitationLink.forAnyone }));
+    await screen.findByText(w.invitationLink.forAnyoneText);
     check();
     await fireEvent.press(screen.getByRole('button', { name: w.composer.review }));
     await screen.findByText(w.composer.signIntro);

@@ -2,11 +2,12 @@ import {
   boundToLabel,
   invitationLink,
   phoneOffered,
+  type InvitationChoice,
   type SignInChannels,
 } from '@yuppers/shared';
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
-import { Platform, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, Share, StyleSheet, Text, View, type TextInput } from 'react-native';
 
 import { WEB_URL } from '../lib/config';
 import { useI18n } from '../lib/context';
@@ -15,39 +16,89 @@ import { QrCode } from './QrCode';
 import { Actions, Button, ErrorNote, Hint, Label, Notice, P, TextField } from './ui';
 
 /**
- * Naming who an invitation is for, so that only an account verified with
- * that email address or phone number can use the link (DESIGN.md §8). An
- * email address only, until the service says it texts codes (`channels`),
+ * Who an invitation is for (DESIGN.md §8), with the same words, checks and
+ * order as on the web. Naming them is what is expected: only an account
+ * verified with that email address or phone number can use the link, and
+ * needs no confirming, so they can respond in full as soon as they sign in.
+ * The field says why, that we do not contact them, and that they must sign
+ * in with exactly what is typed. A link for anyone is offered after it as a
+ * deliberate choice, which says what it costs once chosen.
+ *
+ * An email address only, until the service says it texts codes (`channels`),
  * as signing in asks: a phone number nobody can sign in with would make the
  * link useless.
  */
 export function InvitationFor({
-  value,
+  choice,
   onChange,
   channels,
   error,
 }: {
-  value: string;
-  onChange(value: string): void;
+  choice: InvitationChoice;
+  onChange(choice: InvitationChoice): void;
   channels: SignInChannels | null;
   /** What is wrong with it, said with it once the person has tried to go on. */
   error?: string | null;
 }) {
   const { wording } = useI18n();
+  const w = wording.invitationLink;
   const phone = phoneOffered(channels);
+  const field = useRef<TextInput>(null);
+  // Set when the person goes back to naming them, so the keyboard follows,
+  // and not when the form is first shown.
+  const switched = useRef(false);
+
+  useEffect(() => {
+    if (!switched.current || choice.anyone) return;
+    switched.current = false;
+    field.current?.focus();
+  }, [choice.anyone]);
+
+  if (choice.anyone) {
+    return (
+      <View style={styles.block}>
+        {/* Read out as it appears, so what it costs is heard at once. */}
+        <Notice tone="warning">{w.forAnyoneText}</Notice>
+        <Actions>
+          <Button
+            variant="link"
+            label={w.forNamed}
+            onPress={() => {
+              switched.current = true;
+              onChange({ ...choice, anyone: false });
+            }}
+          />
+        </Actions>
+      </View>
+    );
+  }
+
   return (
-    <TextField
-      label={boundToLabel(wording.invitationLink, channels)}
-      hint={wording.invitationLink.forHint}
-      error={error}
-      inputMode="email"
-      keyboardType={phone ? 'default' : 'email-address'}
-      autoCapitalize="none"
-      autoCorrect={false}
-      autoComplete="off"
-      value={value}
-      onChangeText={onChange}
-    />
+    <View style={styles.block}>
+      <P>{w.forIntro}</P>
+      <P>{w.forNoContact}</P>
+      <TextField
+        input={field}
+        label={boundToLabel(w, channels)}
+        hint={w.forHint}
+        error={error}
+        required
+        inputMode="email"
+        keyboardType={phone ? 'default' : 'email-address'}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        value={choice.to}
+        onChangeText={(to) => onChange({ ...choice, to })}
+      />
+      <Actions>
+        <Button
+          variant="link"
+          label={w.forAnyone}
+          onPress={() => onChange({ ...choice, anyone: true })}
+        />
+      </Actions>
+    </View>
   );
 }
 

@@ -129,15 +129,34 @@ export interface Proposal {
   link: string
 }
 
-/** A first proposal, from a new exchange to the invitation link. */
+/**
+ * Who a first proposal's invitation is for, in the composer: naming them by
+ * `address`, as the composer expects, or, with `null`, choosing a link for
+ * anyone instead, which says what that costs.
+ */
+export async function inviteFor(page: Page, address: string | null): Promise<void> {
+  if (address !== null) {
+    await page.getByLabel(en.invitationLink.forLabel, { exact: true }).fill(address)
+    return
+  }
+  await page.getByRole('button', { name: en.invitationLink.forAnyone, exact: true }).click()
+  await expect(page.getByText(en.invitationLink.forAnyoneText)).toBeVisible()
+}
+
+/**
+ * A first proposal, from a new exchange to the invitation link. The link is
+ * for anyone, chosen on purpose, unless `invitee` names who it is for.
+ */
 export async function propose(
   initiator: Person,
   other: { name: string },
   items: readonly ItemSpec[],
+  { invitee = null }: { invitee?: string | null } = {},
 ): Promise<Proposal> {
   const { page } = initiator
   const id = await startExchange(initiator)
   await page.getByLabel(en.composer.otherName).fill(other.name)
+  await inviteFor(page, invitee)
   await addItems(page, items)
   await reviewAndSend(page)
   const field = page.getByLabel(en.invitationLink.linkLabel, { exact: true })
@@ -188,8 +207,9 @@ export async function acceptOpen(person: Person): Promise<void> {
 }
 
 /**
- * Two people with an agreement in force: `initiator` proposes, `other` joins
- * through the link and signs, and `initiator` confirms them. Both end on the
+ * Two people with an agreement in force: `initiator` proposes with a link for
+ * anyone, `other` joins through it and signs, and `initiator` confirms them,
+ * the longer way round that still has to work. Both end on the
  * exchange's page.
  */
 export async function agree(
@@ -209,8 +229,10 @@ export async function agree(
 }
 
 /**
- * Two people negotiating: `initiator` has proposed, `other` has joined
- * without signing, and `initiator` has confirmed them.
+ * Two people negotiating: `initiator` has proposed to `other` by name, as the
+ * composer expects, and `other` has joined without signing. Named, they need
+ * no confirming, so they can respond in full as soon as they sign in. Both
+ * end on the exchange's page.
  */
 export async function negotiate(
   initiator: Person,
@@ -218,11 +240,13 @@ export async function negotiate(
   items: readonly ItemSpec[],
 ): Promise<string> {
   await signUp(initiator)
-  const { id, link } = await propose(initiator, other, items)
+  const { id, link } = await propose(initiator, other, items, { invitee: other.email })
   await join(other, link)
-  await confirmClaimant(initiator)
-  await other.page.reload()
   await expect(other.page.getByText(en.claimant.limits)).toBeHidden()
+  await initiator.page.reload()
+  await expect(
+    initiator.page.getByRole('heading', { name: en.exchange.claimedHeading }),
+  ).toHaveCount(0)
   return id
 }
 

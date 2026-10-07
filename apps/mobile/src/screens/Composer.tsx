@@ -2,7 +2,6 @@ import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/a
 import {
   amendmentEffects,
   baseRevision,
-  boundToProblem,
   boundToProblemText,
   buildTerms,
   canCompose,
@@ -15,7 +14,10 @@ import {
   dueOf,
   failureCode,
   fractionDigitsOf,
+  invitationBoundTo,
+  invitationForProblem,
   lockedContributions,
+  NAMED_INVITATION,
   newContribution,
   otherSlot,
   parseDecimal,
@@ -31,6 +33,7 @@ import {
   type Draft,
   type DraftContribution,
   type DraftDue,
+  type InvitationChoice,
   type ItemEffect,
   type Problem,
   type ProblemField,
@@ -127,7 +130,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [step, setStep] = useState<'edit' | 'sign'>('edit');
   const [checked, setChecked] = useState(false);
   const [conflict, setConflict] = useState(false);
-  const [boundTo, setBoundTo] = useState('');
+  const [invitee, setInvitee] = useState<InvitationChoice>(NAMED_INVITATION);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -138,7 +141,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   // Who a first proposal's invitation is for is asked for beside their
   // name, and checked with the rest before the signing step.
   const channels = useSignInChannels(api);
-  const boundProblem = kind === 'first' && checked ? boundToProblem(boundTo, channels) : null;
+  const boundProblem = kind === 'first' && checked ? invitationForProblem(invitee, channels) : null;
 
   // The working copy was started from terms that have since been replaced.
   const stale = base !== null && draft.base !== base.id;
@@ -211,7 +214,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     setChecked(true);
     setConflict(false);
     setFailure(null);
-    if (built.ok && !(kind === 'first' && boundToProblem(boundTo, channels))) {
+    if (built.ok && !(kind === 'first' && invitationForProblem(invitee, channels))) {
       setStep('sign');
       return;
     }
@@ -231,7 +234,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     try {
       const result = await api.sendRevision(
         exchange.id,
-        revisionToSend(exchange, built, language, boundTo),
+        revisionToSend(exchange, built, language, invitationBoundTo(invitee) ?? ''),
       );
       saver.sent();
       onSent(result);
@@ -297,8 +300,12 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
           />
         </Card>
         {predicted && <Effects effects={predicted} />}
-        {kind === 'first' && boundTo.trim() ? (
-          <P>{fmt(wording.invitationLink.boundSummary, { identifier: boundTo.trim() })}</P>
+        {kind === 'first' ? (
+          <P>
+            {invitee.anyone
+              ? wording.invitationLink.forAnyoneSummary
+              : fmt(wording.invitationLink.boundSummary, { identifier: invitee.to.trim() })}
+          </P>
         ) : null}
         <Consent
           signLabel={w.signAndSend}
@@ -390,8 +397,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
         />
         {kind === 'first' && (
           <InvitationFor
-            value={boundTo}
-            onChange={setBoundTo}
+            choice={invitee}
+            onChange={setInvitee}
             channels={channels}
             error={
               boundProblem

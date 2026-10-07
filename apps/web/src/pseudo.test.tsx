@@ -25,7 +25,17 @@ import {
   ana,
   rita,
 } from './test/fake-service'
-import { button, field, press, settle, start, stop, type, until } from './test/harness'
+import {
+  button,
+  field,
+  nameInvitee,
+  press,
+  settle,
+  start,
+  stop,
+  type,
+  until,
+} from './test/harness'
 
 /*
  * Text written into a component instead of the wording stays in English
@@ -160,6 +170,10 @@ describe('every word on the main web screens comes from the wording', () => {
     const found = await screens(async (check) => {
       await start(`/exchanges/${DRAFT}`, ana, pseudo)
       await h1(pseudo.composer.titleFirst)
+      await nameInvitee(pseudo.invitationLink.forLabel, 'carla@example.test')
+      await check()
+      // A link for anyone, chosen on purpose, with what it costs.
+      await press(button(pseudo.invitationLink.forAnyone))
       await check()
       await press(button(pseudo.composer.review))
       await h1(pseudo.composer.signTitle)
@@ -173,8 +187,7 @@ describe('every word on the main web screens comes from the wording', () => {
       await start(`/exchanges/${DRAFT}`, ana, pseudo)
       await h1(pseudo.composer.titleFirst)
       // What is wrong with it, said under it.
-      await until(() => document.body.textContent!.includes(pseudo.invitationLink.forHint), 'the field')
-      await type(field(pseudo.invitationLink.forLabel), 'carla@')
+      await nameInvitee(pseudo.invitationLink.forLabel, 'carla@')
       await press(button(pseudo.composer.review))
       await check()
       await type(field(pseudo.invitationLink.forLabel), 'carla@example.test')

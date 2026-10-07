@@ -5,7 +5,7 @@ import type { HelpWording } from '@yuppers/shared'
 
 import { repoRoot } from './support/env'
 import { expect, test } from './support/fixtures'
-import { addItems, signUp, startExchange } from './support/flows'
+import { addItems, inviteFor, signUp, startExchange } from './support/flows'
 import { en, es } from './support/wording'
 
 /*
@@ -29,6 +29,7 @@ test('help opens from the signing step, in a new tab, and its contents lead arou
   await signUp(ana)
   await startExchange(ana)
   await ana.page.getByLabel(en.composer.otherName).fill('Bruno Díaz')
+  await inviteFor(ana.page, 'bruno@example.test')
   await addItems(ana.page, [{ from: 'me', kind: 'TASK', description: 'Paint the fence' }])
   await ana.page.getByRole('button', { name: en.composer.review, exact: true }).click()
   await expect(

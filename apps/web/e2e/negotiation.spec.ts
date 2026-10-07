@@ -23,7 +23,7 @@ function openRevision(page: Page) {
   return page.getByRole('region', { name: en.exchange.proposalHeading, exact: true })
 }
 
-test('a confirmed counterparty proposes changes, and the version they replace is set aside', async ({
+test('a named counterparty proposes changes, and the version they replace is set aside', async ({
   person,
 }) => {
   const ana = await person('Ana')

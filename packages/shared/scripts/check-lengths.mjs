@@ -70,6 +70,8 @@ const TIGHT = {
       'invitationLink.hideQr',
       'invitationLink.closeShare',
       'invitationLink.reissue',
+      'invitationLink.forAnyone',
+      'invitationLink.forNamed',
       'composer.addYours',
       'composer.addTheirs',
       'composer.review',

@@ -122,6 +122,18 @@ export function field(text: string): HTMLInputElement | HTMLTextAreaElement | HT
   return control as HTMLInputElement
 }
 
+/**
+ * Names who a first proposal's invitation is for, as the composer expects,
+ * once the field is labelled for what the service takes (`label`).
+ */
+export async function nameInvitee(label: string, address: string): Promise<void> {
+  await until(
+    () => [...document.querySelectorAll('label')].some((found) => found.textContent?.trim() === label),
+    `the field “${label}”`,
+  )
+  await type(field(label), address)
+}
+
 /** Presses a control from the keyboard: it has the focus first, as it would. */
 export async function press(element: HTMLElement): Promise<void> {
   await act(async () => {

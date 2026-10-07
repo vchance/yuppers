@@ -107,6 +107,45 @@ describe('who the invitation is for', () => {
     screen.getByRole('button', { name: w.invitationLink.copy });
   });
 
+  test('left empty, it is asked for: an empty field never makes a link for anyone', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    const field = await screen.findByLabelText(w.invitationLink.forLabel);
+    // Why naming them helps, that we do not contact them, and that it must match.
+    screen.getByText(w.invitationLink.forIntro);
+    screen.getByText(w.invitationLink.forNoContact);
+    expect(field.props.accessibilityHint).toContain(w.invitationLink.forHint);
+
+    await fireEvent.press(screen.getByText(w.composer.review));
+    await screen.findByText(w.invitationLink.forMissing);
+    expect(screen.queryByText(w.composer.signIntro)).toBeNull();
+    expect(service.sent.some((request) => request.path.endsWith('/revisions'))).toBe(false);
+  });
+
+  test('a link for anyone is a deliberate choice that says what it costs, and names nobody', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    await fireEvent.changeText(await screen.findByLabelText(w.invitationLink.forLabel), 'carla@');
+    await fireEvent.press(screen.getByText(w.invitationLink.forAnyone));
+    await screen.findByText(w.invitationLink.forAnyoneText);
+    expect(screen.queryByLabelText(w.invitationLink.forLabel)).toBeNull();
+
+    // Changing one's mind back keeps what was typed.
+    await fireEvent.press(screen.getByText(w.invitationLink.forNamed));
+    expect(screen.getByLabelText(w.invitationLink.forLabel).props.value).toBe('carla@');
+    await fireEvent.press(screen.getByText(w.invitationLink.forAnyone));
+
+    // What was typed is neither checked nor sent.
+    await fireEvent.press(screen.getByText(w.composer.review));
+    await screen.findByText(w.composer.signIntro);
+    screen.getByText(w.invitationLink.forAnyoneSummary);
+    await fireEvent(screen.getByTestId('consent-agree'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('consent-sign'));
+    await screen.findByText(w.invitationLink.intro);
+    const sent = service.sent.find(
+      (request) => request.path === `/v1/exchanges/${DRAFT}/revisions`,
+    );
+    expect(sent?.body).toMatchObject({ invitation: { bound_to: null } });
+  });
+
   test('is an email address only where codes go by email only', async () => {
     await open(`/exchanges/${DRAFT}`, { signedIn: true, phone: false });
     const field = await screen.findByLabelText(w.invitationLink.forLabelEmail);

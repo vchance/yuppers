@@ -97,7 +97,7 @@
         {
           "ul": [
             "Registros de solicitudes. De cada solicitud que responde nuestro servicio, registramos el método y la ruta (nunca los parámetros de consulta), el estado, cuánto tardó y un identificador de la solicitud. Los usamos para operar el servicio y para encontrar y corregir problemas. Nuestros registros nunca contienen lo que se envió o se respondió, códigos, tokens, correos electrónicos, números de teléfono ni direcciones IP.",
-            "Límites para entrar. Para impedir que alguien adivine códigos o pida demasiados, contamos los códigos que se piden desde cada dirección IP y los códigos incorrectos que se escriben para cada correo electrónico o número de teléfono; los códigos para confirmar la eliminación de una cuenta que se piden, y los incorrectos que se escriben, para cada cuenta; y los mensajes que enviamos, para todo el servicio y para cada grupo de números que empiezan igual (por código de área). Estas cuentas se guardan bajo un hash con clave, nunca la dirección IP, el correo electrónico, el número ni la cuenta.",
+            "Límites para entrar. Para impedir que alguien adivine códigos o pida demasiados, contamos los códigos que se piden desde cada dirección IP y los códigos incorrectos que se escriben para cada correo electrónico o número de teléfono; los códigos para confirmar la eliminación de una cuenta que se piden, y los incorrectos que se escriben, para cada cuenta; y los mensajes que enviamos, para todo el servicio y para cada grupo de números que empiezan igual (por código de área). Estos recuentos se guardan bajo un hash con clave, nunca bajo la propia dirección IP, el correo electrónico, el número ni la cuenta.",
             "Códigos de un solo uso. Para un código por correo, guardamos un hash con clave del código, nunca el código, junto con un hash con clave del correo electrónico al que se envió y cuándo. Para un código por mensaje de texto, Twilio Verify crea y comprueba el código, y guardamos un registro de que se pidió: un hash con clave del número de teléfono, para qué era el código, cuándo se pidió, hasta cuándo sirve y cuántos códigos incorrectos se escribieron para él. Cuando Twilio Verify acepta un código que escribes, agregamos al registro un hash con clave de ese código, nunca el código, para que el mismo código siga sirviendo si tienes que intentarlo de nuevo antes de que caduque. Usamos estos registros para comprobar el código que escribes y para limitar cuántos códigos se envían y se intentan. Cada registro, con el hash con clave del correo electrónico o del número de teléfono que contiene, se borra un día después de que se pidió el código, una vez que el código caducó o se usó."
           ]
         }
@@ -131,7 +131,7 @@
           "h": "La otra persona de un yup"
         },
         {
-          "p": "La otra persona ve lo que muestra el yup: sus términos, cada versión, los mensajes y notas, su historial, las firmas y cuándo se hicieron, y tu nombre tal como lo da el acuerdo. No ve tu correo electrónico, tu número de teléfono, tu dirección IP ni tu dispositivo. Cada uno puede descargar o imprimir el registro del yup, y lo que cada uno haga con esa copia depende de él."
+          "p": "La otra persona ve lo que muestra el yup: sus términos, cada versión, los mensajes y notas, su historial, las firmas y cuándo se hicieron, y tu nombre tal como lo da el acuerdo. No ve tu correo electrónico, tu número de teléfono, tu dirección IP ni tu dispositivo. Cada persona puede descargar o imprimir el registro del yup, y lo que cada una haga con esa copia depende de ella."
         },
         {
           "h": "Quienes revisan las denuncias"
@@ -204,7 +204,7 @@
             "El registro de cada código que pediste por mensaje de texto: {smsConsentYears} años, como prueba de que lo pediste. La dirección IP y el agente de usuario registrados con él: {networkDays} días.",
             "Los códigos de un solo uso: cada código sirve durante {codeMinutes} minutos, y una sola vez. Un código por mensaje de texto sirve durante {codeMinutes} minutos desde que se envió por primera vez, y si lo pides de nuevo en ese tiempo se reenvía el mismo código. El registro de un código (un hash con clave de adónde se envió, cuándo y el hash del código, donde guardamos uno) se borra un día después de que se pidió el código, una vez que caducó o se usó; al eliminar tu cuenta se borran de inmediato los de tu correo electrónico y tu número de teléfono.",
             "Las sesiones: cada una dura {sessionDays} días, salvo que la cierres antes.",
-            "Las cuentas de los límites para entrar: dos días.",
+            "Los recuentos de los límites para entrar: dos días.",
             "Los tokens de notificaciones: hasta que desactives las notificaciones, cierres la sesión en ese dispositivo o elimines tu cuenta, o hasta que el servicio de notificaciones nos diga que el token ya no funciona.",
             "Los pases de Wallet: el registro de un pase se queda con su yup; cuando eliminas tu cuenta, tus pases se anulan. Los identificadores de dispositivo que nos da Apple se borran cuando un dispositivo quita el pase, y a más tardar 30 días después de que el pase se anula.",
             "Las denuncias, y el historial de su revisión: se guardan, también después de que se elimina una cuenta, para que irse no borre una queja. Los bloqueos que haces: hasta que desbloquees a la persona o elimines tu cuenta.",
@@ -219,7 +219,7 @@
       "title": "Eliminar tu cuenta",
       "blocks": [
         {
-          "p": "Puedes eliminar tu cuenta tú mismo, en cualquier momento, desde la página de tu cuenta en el sitio web o en la app. Para confirmar que eres tú, te enviamos a tu correo electrónico o a tu teléfono un código de un solo uso que solo sirve para eliminar tu cuenta. A un número que respondió STOP no le enviamos mensajes, tampoco códigos, así que si tu cuenta solo tiene un número así para entrar, responde START a uno de nuestros mensajes antes, o escribe a {privacyEmail}. La eliminación no se puede deshacer."
+          "p": "Puedes eliminar tu cuenta directamente, en cualquier momento, desde la página de tu cuenta en el sitio web o en la app. Para confirmar que eres tú, te enviamos a tu correo electrónico o a tu teléfono un código de un solo uso que solo sirve para eliminar tu cuenta. A un número que respondió STOP no le enviamos mensajes, tampoco códigos, así que si tu cuenta solo tiene un número así para entrar, responde START a uno de nuestros mensajes antes, o escribe a {privacyEmail}. La eliminación no se puede deshacer."
         },
         {
           "h": "Qué se borra"
@@ -277,7 +277,7 @@
           ]
         },
         {
-          "p": "Para lo que no puedas hacer tú mismo, como cambiar tu correo electrónico o tu número de teléfono, pedir una copia de tu información o hacer una pregunta sobre esta política, escribe a {privacyEmail}. Puede que necesitemos confirmar que la solicitud viene de ti antes de atenderla."
+          "p": "Para lo que no puedas hacer por tu cuenta, como cambiar tu correo electrónico o tu número de teléfono, pedir una copia de tu información o hacer una pregunta sobre esta política, escribe a {privacyEmail}. Puede que necesitemos confirmar que la solicitud viene de ti antes de atenderla."
         },
         {
           "p": "Las personas que residen en algunos estados pueden tener derechos adicionales según las leyes de su estado. Puedes hacer cualquier solicitud de privacidad en {privacyEmail}, y te responderemos."

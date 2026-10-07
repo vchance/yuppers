@@ -81,8 +81,8 @@
           "body": "La otra parte disputó una contribución que marcaste como entregada. Lee su motivo en el acuerdo y responde."
         },
         "CONTRIBUTION_WAIVED": {
-          "subject": "Se renunció a una contribución ({code})",
-          "body": "La otra parte renunció a una de tus contribuciones. Ya no se espera que la entregues."
+          "subject": "Se dispensó una contribución ({code})",
+          "body": "La otra parte te dispensó de entregar una de tus contribuciones. Ya no se espera que la entregues."
         },
         "END_PROPOSED": {
           "subject": "Una propuesta para terminar tu acuerdo ({code})",
@@ -134,7 +134,7 @@
         },
         "CLOSED_COMPLETED": {
           "subject": "Tu acuerdo está completo ({code})",
-          "body": "Todas las contribuciones obligatorias fueron aceptadas o se renunció a ellas. El acuerdo está completo y cerrado."
+          "body": "Todas las contribuciones obligatorias fueron aceptadas o dispensadas. El acuerdo está completo y cerrado."
         },
         "CLOSED_ENDED_BY_AGREEMENT": {
           "subject": "Ambos aceptaron terminar su acuerdo ({code})",
@@ -283,7 +283,7 @@
     "start": "Nuevo yup",
     "empty": "Todavía no tienes yups. Inicia uno o abre un enlace de invitación que te hayan enviado.",
     "withParty": "Con {name}",
-    "noParty": "Aún sin nombre de la otra parte",
+    "noParty": "Aún sin nombrar a nadie",
     "reference": "Referencia {code}",
     "updated": "Actualizado el {date}",
     "tooManyToday": "Ya iniciaste todos los yups que se permiten en un día. Inténtalo mañana.",
@@ -352,12 +352,12 @@
     "optional": "Opcional",
     "quantity": "Cantidad: {amount}",
     "quantityWithUnit": "Cantidad: {amount} {unit}",
-    "amount": "Importe: {amount}",
+    "amount": "Monto: {amount}",
     "criteriaLabel": "Se considera hecho cuando",
     "dueOnAgreement": "Vence cuando se firme el acuerdo",
     "dueOnDate": "Vence el {date}",
     "dueOnDateInZone": "Vence el {date} (hora de {zone})",
-    "dueAfter": "Vence cuando se confirme «{description}»",
+    "dueAfter": "Vence cuando se confirme “{description}”",
     "overdue": "Atrasado",
     "timezone": "Las fechas están en la zona horaria {timezone}.",
     "fingerprint": "Huella de estos términos: {hash}",
@@ -383,7 +383,7 @@
     "fromLabel": "Quién lo aporta",
     "typeLabel": "Tipo",
     "descriptionLabel": "Descripción",
-    "amountLabel": "Importe en {currency}",
+    "amountLabel": "Monto en {currency}",
     "amountPreview": "Es decir, {amount}.",
     "quantityLabel": "Cantidad (opcional)",
     "unitLabel": "Unidad (opcional)",
@@ -414,8 +414,8 @@
       "NOTE_TOO_LONG": "El mensaje no puede pasar de {max} caracteres.",
       "DESCRIPTION_MISSING": "Descríbelo.",
       "QUANTITY_INVALID": "Escribe la cantidad como un número, por ejemplo {example}, o deja vacías la cantidad y la unidad.",
-      "AMOUNT_MISSING": "Escribe el importe.",
-      "AMOUNT_INVALID": "Escribe el importe como un número, por ejemplo {example}.",
+      "AMOUNT_MISSING": "Escribe el monto.",
+      "AMOUNT_INVALID": "Escribe el monto como un número, por ejemplo {example}.",
       "DATE_MISSING": "Elige una fecha.",
       "DEPENDENCY_MISSING": "Elige de qué elemento depende.",
       "DEPENDENCY_CYCLE": "Estos elementos dependen uno del otro, así que ninguno llegaría a vencer. Elige otro."
@@ -458,11 +458,11 @@
   "invitationLink": {
     "heading": "Enlace de invitación",
     "intro": "Yuppers no lo envía por ti. Comparte el enlace con la otra persona, y podrá leer la propuesta después de iniciar sesión.",
-    "shownOnce": "Este enlace se muestra solo esta vez. Si lo pierdes, usa «Crear un enlace nuevo»: tendrás uno nuevo, y el anterior deja de funcionar.",
+    "shownOnce": "Este enlace se muestra solo esta vez. Si lo pierdes, usa “Crear un enlace nuevo”: tendrás uno nuevo, y el anterior deja de funcionar.",
     "linkLabel": "Enlace",
     "copy": "Copiar enlace",
     "copied": "Copiado.",
-    "copyFailed": "No se pudo copiar. Selecciona el enlace y cópialo tú mismo.",
+    "copyFailed": "No se pudo copiar. Selecciona el enlace y cópialo tú.",
     "share": "Compartir enlace",
     "shareText": "Te envié un yup para que lo revises.",
     "shareMessage": "Te envié un yup para que lo revises: {link}",
@@ -527,7 +527,7 @@
     "heading": "Denunciar o bloquear",
     "report": "Denunciar este yup",
     "reportProposal": "Denunciar esta propuesta",
-    "reportIntro": "Cuéntanos qué está mal. Revisamos todas las denuncias. A {name} no se le avisa de que lo denunciaste.",
+    "reportIntro": "Cuéntanos qué está mal. Revisamos todas las denuncias. A {name} no se le avisa de la denuncia.",
     "reportProposalIntro": "Cuéntanos qué está mal en esta propuesta. Revisamos todas las denuncias. A quien la envió no se le avisa de que la denunciaste.",
     "reasonLegend": "Qué está mal",
     "reasons": {
@@ -689,12 +689,12 @@
     "notifications": {
       "heading": "Notificaciones",
       "switch": "Notificaciones en este teléfono",
-      "switchHint": "Un aviso en este teléfono cuando pasa algo en uno de tus yups. Nunca muestra los términos, los nombres ni los importes.",
+      "switchHint": "Un aviso en este teléfono cuando pasa algo en uno de tus yups. Nunca muestra los términos, los nombres ni los montos.",
       "blocked": "Las notificaciones de esta app están desactivadas en los ajustes de tu teléfono. Actívalas allí primero.",
       "openSettings": "Abrir ajustes",
       "failed": "No se pudieron cambiar las notificaciones. Inténtalo de nuevo.",
       "askHeading": "Entérate cuando pase algo",
-      "askBody": "Activa las notificaciones para saber en este teléfono cuando la otra persona responda o algo esté por vencer. Nunca muestran los términos, los nombres ni los importes.",
+      "askBody": "Activa las notificaciones para saber en este teléfono cuando la otra persona responda o algo esté por vencer. Nunca muestran los términos, los nombres ni los montos.",
       "turnOn": "Activar notificaciones",
       "notNow": "Ahora no",
       "channel": "Novedades de tus yups",
@@ -749,7 +749,7 @@
     "moves": {
       "CLAIM": "Marcar como entregado",
       "RECLAIM": "Marcar como entregado de nuevo",
-      "RETRACT_CLAIM": "Deshacer «entregado»",
+      "RETRACT_CLAIM": "Deshacer “entregado”",
       "CONFIRM": "Confirmar recepción",
       "DISPUTE": "Disputar",
       "WAIVE": "Dispensar"
@@ -757,7 +757,7 @@
     "moveText": {
       "CLAIM": "Esto le avisa a {name} que ya lo entregaste. Solo esa persona puede confirmarlo.",
       "RECLAIM": "Explica qué hiciste respecto a la disputa. Se le pedirá a {name} que confirme de nuevo.",
-      "RETRACT_CLAIM": "Esto lo regresa a aún sin entregar.",
+      "RETRACT_CLAIM": "Esto lo deja otra vez sin entregar.",
       "CONFIRM": "Confirmar es definitivo. No se puede deshacer.",
       "DISPUTE": "Explica qué está mal. {name} puede corregirlo y marcarlo como entregado de nuevo.",
       "WAIVE": "Dispensarlo libera a {name} de aportar esto. No se puede deshacer."
@@ -792,7 +792,7 @@
     "moneyMoves": {
       "CLAIM": "Ya pagué",
       "RECLAIM": "Ya pagué ahora",
-      "RETRACT_CLAIM": "Deshacer «ya pagué»",
+      "RETRACT_CLAIM": "Deshacer “ya pagué”",
       "CONFIRM": "Lo recibí",
       "DISPUTE": "Disputar",
       "WAIVE": "Dispensar"
@@ -800,7 +800,7 @@
     "moneyMoveText": {
       "CLAIM": "Esto registra que le pagaste a {name} fuera de nuestro servicio. No movemos ni retenemos dinero. Solo {name} puede confirmar que lo recibió.",
       "RECLAIM": "Explica qué hiciste respecto a la disputa. Se le pedirá a {name} que confirme de nuevo que lo recibió.",
-      "RETRACT_CLAIM": "Esto lo regresa a aún sin pagar.",
+      "RETRACT_CLAIM": "Esto lo deja otra vez sin pagar.",
       "CONFIRM": "Esto registra que recibiste el dinero. Confirmar es definitivo. No se puede deshacer.",
       "DISPUTE": "Explica qué está mal. {name} puede corregirlo y registrar el pago de nuevo.",
       "WAIVE": "Dispensarlo libera a {name} de pagar esto. No se puede deshacer."
@@ -812,8 +812,8 @@
   },
   "wallet": {
     "intro": "Guarda este acuerdo en la cartera de tu teléfono. El pase muestra cómo va y enlaza aquí; sus términos se quedan en {productName}.",
-    "addToApple": "Añadir a Apple Wallet",
-    "addToGoogle": "Añadir a Google Wallet",
+    "addToApple": "Agregar a Apple Wallet",
+    "addToGoogle": "Agregar a Google Wallet",
     "adding": "Preparando tu pase…",
     "pass": {
       "description": "{productName}: yup {code}",
@@ -831,10 +831,10 @@
       "inForce": "En vigor",
       "waitingForYou": "Te toca a ti",
       "dueSoon": "Vence pronto",
-      "overdue": "Vencido",
+      "overdue": "Atrasado",
       "disputed": "En disputa",
       "completed": "Completado",
-      "ended": "Terminado de mutuo acuerdo",
+      "ended": "Terminado de común acuerdo",
       "closed": "Cerrado",
       "void": "Ya no está en uso"
     },
@@ -951,7 +951,7 @@
         "REVISION_DECLINED": "Rechazaste la versión {number}.",
         "REVISION_WITHDRAWN": "Retiraste la versión {number}.",
         "CONTRIBUTION_CLAIMED": "Marcaste esto como entregado:",
-        "CONTRIBUTION_CLAIM_RETRACTED": "Deshiciste «entregado» para esto:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "Deshiciste “entregado” para esto:",
         "CONTRIBUTION_CONFIRMED": "Confirmaste haber recibido esto:",
         "CONTRIBUTION_DISPUTED": "Disputaste esto:",
         "CONTRIBUTION_WAIVED": "Dispensaste esto:",
@@ -970,7 +970,7 @@
         "REVISION_DECLINED": "{name} rechazó la versión {number}.",
         "REVISION_WITHDRAWN": "{name} retiró la versión {number}.",
         "CONTRIBUTION_CLAIMED": "{name} marcó esto como entregado:",
-        "CONTRIBUTION_CLAIM_RETRACTED": "{name} deshizo «entregado» para esto:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "{name} deshizo “entregado” para esto:",
         "CONTRIBUTION_CONFIRMED": "{name} confirmó haber recibido esto:",
         "CONTRIBUTION_DISPUTED": "{name} disputó esto:",
         "CONTRIBUTION_WAIVED": "{name} dispensó esto:",
@@ -1000,14 +1000,14 @@
       },
       "moneyYou": {
         "CONTRIBUTION_CLAIMED": "Registraste el pago de esto:",
-        "CONTRIBUTION_CLAIM_RETRACTED": "Deshiciste «pagado» para esto:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "Deshiciste “pagado” para esto:",
         "CONTRIBUTION_CONFIRMED": "Confirmaste haber recibido este pago:",
         "CONTRIBUTION_DISPUTED": "Disputaste este pago:",
         "CONTRIBUTION_WAIVED": "Dispensaste este pago:"
       },
       "moneyNamed": {
         "CONTRIBUTION_CLAIMED": "{name} registró el pago de esto:",
-        "CONTRIBUTION_CLAIM_RETRACTED": "{name} deshizo «pagado» para esto:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "{name} deshizo “pagado” para esto:",
         "CONTRIBUTION_CONFIRMED": "{name} confirmó haber recibido este pago:",
         "CONTRIBUTION_DISPUTED": "{name} disputó este pago:",
         "CONTRIBUTION_WAIVED": "{name} dispensó este pago:"
@@ -1017,7 +1017,7 @@
       "about": "Esta es una copia del registro de un acuerdo o una propuesta, tal como lo tenía el servicio cuando se hizo la copia. Lo que escribieron las partes aparece exactamente como lo escribieron.",
       "signatures": "Cada firma la hizo una persona que había iniciado sesión en una cuenta. La única comprobación de quién es esa persona fue un solo código de un solo uso, enviado a una dirección de correo electrónico o a un número de teléfono, que ingresó al iniciar sesión. Eso pudo ocurrir algún tiempo antes de firmar. No se pidió ninguna otra prueba de identidad.",
       "statements": "Marcar algo como entregado, confirmarlo, disputarlo o dispensarlo, y cada nota, motivo y declaración, son lo que las propias partes registraron. El servicio los guardó tal como se hicieron y no comprobó si alguno es cierto.",
-      "contentHash": "La huella de una versión es el resumen SHA-256, escrito en hexadecimal, de sus términos firmados como JSON canónico (RFC 8785) en UTF-8. En una copia descargada, los términos firmados son la parte «signed» de cada revisión y la huella es su «content_hash», así que cualquiera puede calcularla de nuevo y comparar. El mensaje enviado con una versión y la fecha hasta la que sigue abierta no forman parte de lo que se firma.",
+      "contentHash": "La huella de una versión es el resumen SHA-256, escrito en hexadecimal, de sus términos firmados como JSON canónico (RFC 8785) en UTF-8. En una copia descargada, los términos firmados son la parte “signed” de cada revisión y la huella es su “content_hash”, así que cualquiera puede calcularla de nuevo y comparar. El mensaje enviado con una versión y la fecha hasta la que sigue abierta no forman parte de lo que se firma.",
       "verification": {
         "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
         "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
@@ -1031,7 +1031,7 @@
       "givesAgreed": "Lo que {name} acordó dar",
       "givesLast": "Lo que {name} habría dado",
       "basisAgreement": "Según la versión {number}, la última que firmaron ambas partes.",
-      "basisLast": "Ambas partes nunca firmaron nada. Esto es lo que proponía la última versión, la número {number}.",
+      "basisLast": "Ninguna versión llegó a ser firmada por ambas partes. Esto es lo que proponía la última versión, la número {number}.",
       "basisNone": "Nunca se envió nada.",
       "signedBy": "{name} lo firmó el {date}.",
       "notSignedBy": "{name} no lo firmó.",
@@ -1106,7 +1106,7 @@
     "PHONE_COUNTRY_NOT_SERVED": "Todavía no podemos enviar códigos a teléfonos de ese país. Usa un correo electrónico.",
     "INVALID_CODE": "Ese código no funcionó. Revísalo o pide uno nuevo.",
     "TOO_MANY_REQUESTS": "Demasiadas solicitudes en poco tiempo. Espera un momento e inténtalo de nuevo.",
-    "TOO_MANY_GUESSES": "Se han introducido demasiados códigos incorrectos hoy. Por seguridad, no se podrán usar códigos hasta mañana.",
+    "TOO_MANY_GUESSES": "Se han ingresado demasiados códigos incorrectos hoy. Por seguridad, no se podrán usar códigos hasta mañana.",
     "UNAUTHENTICATED": "Inicia sesión para continuar.",
     "ACCOUNT_SUSPENDED": "Esta cuenta ha sido suspendida.",
     "IDENTIFIER_IN_USE": "Ese correo electrónico o número de teléfono pertenece a otra cuenta.",
@@ -1177,7 +1177,7 @@
     "nothing": "Ningún elemento cambia.",
     "termsChanged": "Los términos escritos cambiaron. Léelos completos más arriba.",
     "kinds": {
-      "ADDED": "Nuevo",
+      "ADDED": "Agregado",
       "REMOVED": "Quitado",
       "CHANGED": "Cambiado",
       "UNCHANGED": "Sin cambios"
@@ -1191,7 +1191,7 @@
       "quantity": "Cantidad",
       "amount": "Monto",
       "due": "Cuándo vence",
-      "criteria": "Se da por hecho cuando",
+      "criteria": "Se considera hecho cuando",
       "required": "Obligatorio u opcional"
     },
     "fieldChange": "{field}: antes {before}, ahora {after}.",

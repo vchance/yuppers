@@ -43,9 +43,9 @@
           "ul": [
             "Yuppers.app no es parte de los acuerdos que haces con Yuppers. Un acuerdo es entre las dos personas que lo firman.",
             "No guardamos ni movemos dinero. Cualquier pago es entre ustedes, fuera de Yuppers; Yuppers solo registra lo que cada uno dice sobre él.",
-            "No resolvemos disputas. Cuando no están de acuerdo, registramos lo que dice cada uno. No decidimos quién tiene razón.",
+            "No decidimos disputas. Cuando no están de acuerdo, registramos lo que dice cada uno. No decidimos quién tiene razón.",
             "No garantizamos que nadie cumpla, y no podemos obligar a nadie a hacer su parte.",
-            "No comprobamos lo que registras. Marcar algo como entregado, confirmarlo, disputarlo o renunciar a ello, y cada nota que escribes, son declaraciones tuyas.",
+            "No comprobamos lo que registras. Marcar algo como entregado, confirmarlo, disputarlo o dispensarlo, y cada nota que escribes, son declaraciones tuyas.",
             "No verificamos la identidad de nadie más allá del código de un solo uso que escribe para entrar. Ese código es la única comprobación de quién firmó, y el registro lo dice."
           ]
         },
@@ -59,7 +59,7 @@
       "blocks": [
         {
           "ul": [
-            "Entras con un código de un solo uso que se envía a tu correo electrónico o a tu teléfono. Cualquiera que pueda leer esos códigos puede entrar como tú, así que no compartas tu correo ni tu teléfono, y no le des un código a nadie.",
+            "Entras con un código de un solo uso que se envía a tu correo electrónico o a tu teléfono. Cualquiera que pueda leer esos códigos puede entrar como tú, así que no dejes que nadie más use tu correo ni tu teléfono, y no le des un código a nadie.",
             "Una cuenta es para una persona: tú. No crees una cuenta para otra persona y no compartas la tuya.",
             "Usa tu propio nombre, tal como quieres que aparezca en tus acuerdos. La otra persona lo ve, y queda escrito en lo que firman los dos.",
             "Si crees que otra persona usó tu cuenta, o necesitas cambiar tu correo electrónico o tu número de teléfono, escribe a {supportEmail}."

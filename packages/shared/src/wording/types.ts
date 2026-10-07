@@ -263,6 +263,18 @@ export interface Wording {
     versionBuildCommit: string
   }
   /**
+   * The appearance switch: System, Light or Dark, kept on this device only.
+   * On the account screen, and on the web in the footer too, for someone
+   * reading an invitation without an account.
+   */
+  appearance: {
+    heading: string
+    system: string
+    light: string
+    dark: string
+    hint: string
+  }
+  /**
    * Deleting the account: what it does and does not delete, said before it
    * is done, the code that confirms it, and what the other party of an open
    * exchange is shown afterwards.

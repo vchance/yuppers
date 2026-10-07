@@ -38,6 +38,12 @@ const LONGER_BY = 10
 const REPORT = 15
 
 const TIGHT = {
+  // The appearance switch: three options side by side in one row, a third of
+  // 320 CSS pixels each (less on the account screen's padding).
+  'appearance options': {
+    max: 10,
+    keys: ['appearance.system', 'appearance.light', 'appearance.dark'],
+  },
   // A button holds one or two lines at 320 CSS pixels. Link-style buttons
   // that read as a sentence and wrap, such as signIn.changeIdentifier, are
   // not here.
@@ -47,6 +53,7 @@ const TIGHT = {
       'common.cancel',
       'common.tryAgain',
       'common.goHome',
+      'appearance.heading',
       'nav.signOut',
       'signIn.sendCode',
       'signIn.submit',

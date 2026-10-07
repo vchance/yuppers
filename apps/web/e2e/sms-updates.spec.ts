@@ -156,7 +156,7 @@ test('the page on how people opt in shows each form on the website and in the ap
     const response = await page.goto(address)
     expect(response?.status(), address).toBe(200)
     expect(response?.headers()['content-security-policy']).toBe(
-      "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' 'sha256-KxR9MhTq1F37YaceB87TcfvvGJe+U71nuBxrnuq+JCQ='",
     )
     await expect(page.locator('html')).toHaveAttribute('lang', language)
     // Agreement updates and HELP and STOP in each part, each under its own

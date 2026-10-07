@@ -651,14 +651,15 @@ export function readSmsOptInPages(wordingDirectory: string): SmsOptInPage[] {
 
 /**
  * The built entry page made this page: its markers already filled in, the
- * markup in `#root`, the app's script and the chunks it preloads left out,
+ * markup in `#root`, the app's script, the theme's and the chunks it preloads
+ * left out (so it follows the device's light or dark setting only),
  * and the page's own stylesheet beside the app's.
  */
 export function asSmsOptInPage(html: string, page: SmsOptInPage): string {
   const root = '<div id="root"></div>'
   if (!html.includes(root)) throw new Error('the entry page has no empty #root to fill')
   return html
-    .replace(/\s*<script\b[^>]*>\s*<\/script>/g, '')
+    .replace(/\s*<script\b[^>]*>[^<]*<\/script>/g, '')
     .replace(/\s*<link rel="modulepreload"[^>]*>/g, '')
     .replace('</head>', '  <link rel="stylesheet" href="/sms-opt-in/page.css">\n  </head>')
     .replace(root, `<div id="root">${page.markup}</div>`)

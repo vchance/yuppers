@@ -5,6 +5,7 @@ import type { Plugin } from 'vite'
 
 import { readLegalPages, withDocument } from './legal-pages.ts'
 import { asSmsOptInPage, readSmsOptInPages } from './sms-opt-in.ts'
+import { withThemeScript } from './theme-script.ts'
 
 /*
  * One static entry page per language (DESIGN.md §4.2, §13.5).
@@ -90,7 +91,10 @@ function escapeHtml(text: string): string {
     .replaceAll('"', '&quot;')
 }
 
-/** Fills the `{{…}}` markers in `index.html` for one page. */
+/**
+ * Fills the `{{…}}` markers in `index.html` for one page, and puts the script
+ * that applies the chosen appearance first in its head (`theme-script.ts`).
+ */
 export function renderEntryPage(template: string, page: EntryPage): string {
   const values: Record<string, string> = {
     lang: page.lang,
@@ -99,8 +103,10 @@ export function renderEntryPage(template: string, page: EntryPage): string {
     description: page.description,
     robots: page.robots,
   }
-  return template.replace(/\{\{(\w+)\}\}/g, (marker, name: string) =>
-    name in values ? escapeHtml(values[name]) : marker,
+  return withThemeScript(
+    template.replace(/\{\{(\w+)\}\}/g, (marker, name: string) =>
+      name in values ? escapeHtml(values[name]) : marker,
+    ),
   )
 }
 

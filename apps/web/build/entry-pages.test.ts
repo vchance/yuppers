@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 
 import { entryPages, invitationPath, readEntryPages, renderEntryPage } from './entry-pages.ts'
+import { THEME_SCRIPT } from './theme-script.ts'
 
 const wordingDirectory = fileURLToPath(new URL('../../../packages/shared/wording', import.meta.url))
 const template = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
@@ -98,5 +99,6 @@ test('wording is escaped, so it cannot break out of the page', () => {
   })
   expect(html).toContain('<title>Tom &amp; &quot;Jerry&quot; &lt;script&gt;</title>')
   expect(html).toContain('content="a &quot;quoted&quot; line"')
-  expect(html).not.toContain('<script>')
+  // The one inline script is the theme's, fixed and allowed by its hash.
+  expect(html.replace(`<script>${THEME_SCRIPT}</script>`, '')).not.toContain('<script>')
 })

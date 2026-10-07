@@ -2228,6 +2228,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     blocked_people: {
@@ -3559,7 +3568,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The account was busy and nothing was done; the code still works */
+            /** @description The account was busy and nothing was done, or a code sent by text could not be checked because the provider that made it did not answer; the code still works */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3751,6 +3760,15 @@ export interface operations {
             };
             /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`) */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -20,10 +20,14 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
-use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture};
+use yuppers_backend::auth::{
+    AuthRules, CheckFuture, CodeMessage, CodeSender, CodeVerifier, Purpose, SendFuture,
+};
 use yuppers_backend::domain::Rules;
 use yuppers_backend::notifications::outbox::{Delivered, DeliveryRules};
-use yuppers_backend::notifications::sms::{CodeRouter, Sms, SmsSender, twilio_signature};
+use yuppers_backend::notifications::sms::{
+    CodeRouter, PhoneCodes, Sms, SmsSender, twilio_signature,
+};
 use yuppers_backend::notifications::sms_updates::{
     self, CONSENT_VERSION, DEFAULT_TEXTS_PER_PERSON_PER_DAY, SmsDelivery,
 };
@@ -97,20 +101,52 @@ struct Texting {
     /// worker's pass, the hourly caps and the retention purge all see.
     _turn: tokio::sync::MutexGuard<'static, ()>,
     app: App,
-    /// Codes by text message.
-    phone: Arc<Phone>,
+    /// Codes by text message, as Twilio Verify makes them.
+    phone: Arc<Codes>,
     /// Codes by email.
     mailbox: Arc<Mailbox>,
+}
+
+/// Stands in for Twilio Verify: makes a code for each number it is asked
+/// to text, keeps it, and approves it once.
+#[derive(Default)]
+struct Codes(Mutex<Vec<(String, Purpose, String)>>);
+
+impl Codes {
+    /// What was texted: the number, the purpose and the code.
+    fn sent(&self) -> Vec<(String, Purpose, String)> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl CodeVerifier for Codes {
+    fn start<'a>(&'a self, to: &'a str, purpose: Purpose, _language: &'a str) -> SendFuture<'a> {
+        Box::pin(async move {
+            let code = format!("{:06}", Uuid::new_v4().as_u128() % 1_000_000);
+            self.0.lock().unwrap().push((to.to_owned(), purpose, code));
+            Ok(())
+        })
+    }
+
+    fn check<'a>(&'a self, to: &'a str, purpose: Purpose, code: &'a str) -> CheckFuture<'a> {
+        Box::pin(async move {
+            let mut sent = self.0.lock().unwrap();
+            let found = sent
+                .iter()
+                .position(|each| each.0 == to && each.1 == purpose && each.2 == code);
+            Ok(found.map(|at| sent.remove(at)).is_some())
+        })
+    }
 }
 
 async fn start() -> Texting {
     let turn = TURN.lock().await;
     sms_updates::configure(true, DEFAULT_TEXTS_PER_PERSON_PER_DAY);
-    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    let (phone, mailbox) = (Arc::new(Codes::default()), Arc::new(Mailbox::default()));
+    // SMS_CODE_DELIVERY=verify, beside the updates sent here.
     let router = Arc::new(CodeRouter::new(
         mailbox.clone(),
-        phone.clone(),
-        Wording::embedded().unwrap(),
+        PhoneCodes::Verify(phone.clone()),
     ));
     let app = App::start_texting(DATABASE, rules(), router, TOKEN).await;
     // Nothing an earlier test left behind is counted or sent.
@@ -898,20 +934,10 @@ async fn a_number_is_verified_by_a_code_and_replacing_it_ends_the_old_numbers_up
                 &[],
             )
             .await;
-            let (to, text) = codes.sent().pop().unwrap();
-            assert_eq!(to, phone);
-            // The text says the code confirms the number.
-            let code = text
-                .strip_prefix("Yuppers.app: ")
-                .and_then(|rest| rest.get(..6))
-                .unwrap();
-            assert_eq!(
-                text,
-                format!(
-                    "Yuppers.app: {code} is your code to confirm this phone number. \
-                     Do not share it with anyone."
-                )
-            );
+            // Twilio Verify texts it, as a sign-in code: what adds a number
+            // to an account.
+            let (to, purpose, code) = codes.sent().pop().unwrap();
+            assert_eq!((to.as_str(), purpose), (phone.as_str(), Purpose::SignIn));
             app.post(
                 ben,
                 "/v1/me/identifiers",

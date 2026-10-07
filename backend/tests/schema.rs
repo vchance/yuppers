@@ -1209,6 +1209,32 @@ async fn sign_in_limits_are_counted_by_keyed_hash_and_the_service_can_forget_the
         )
         .bind(subject.clone())
     );
+    // A code with no hash is one Twilio Verify made (migration 0022), and
+    // only such a one; no other maker is known.
+    sqlx::query(
+        "INSERT INTO one_time_code (identifier, purpose, code_hash, checked_by, expires_at)
+         VALUES ('+12025550142', 'sign-in', NULL, 'TWILIO_VERIFY', now())",
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO one_time_code (identifier, purpose, code_hash, expires_at)
+             VALUES ('ana@example.com', 'sign-in', NULL, now())",
+        )
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO one_time_code (identifier, purpose, code_hash, checked_by, expires_at)
+             VALUES ('+12025550142', 'sign-in', $1, 'SOMEONE_ELSE', now())",
+        )
+        .bind(subject.clone())
+    );
 
     // The service adds to counts and removes old ones.
     sqlx::query("UPDATE sign_in_limit SET count = count + 1 WHERE subject = $1")

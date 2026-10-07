@@ -39,7 +39,7 @@ use sqlx::{PgConnection, PgPool};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::code_consent::{self, CodePurpose, CodeRequest};
+use crate::code_consent::{self, CodeRequest};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
 use crate::languages;
@@ -173,9 +173,12 @@ impl AuthRules {
 }
 
 /// What a code was asked for. A code does only that: one sent to sign in
-/// cannot delete the account, and one sent to delete it cannot sign in. The
-/// message that carries a code says which it is, so that nobody is talked
-/// into reading out a "sign-in code" that would delete their account.
+/// cannot delete the account, and one sent to delete it cannot sign in. An
+/// email that carries a code says which it is, so that nobody is talked into
+/// reading out a "sign-in code" that would delete their account. A text from
+/// Twilio Verify is Twilio's own template and cannot say, so each purpose
+/// has a Verify service of its own, and a code from one is never checked
+/// against another (`crate::notifications::verify`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Purpose {
     /// Proving control of an identifier: signing in, or attaching it to an
@@ -233,13 +236,28 @@ pub struct CodeMessage<'a> {
     pub code: &'a str,
     /// What the code is good for. An email must say so.
     pub purpose: Purpose,
-    /// Why it was asked for, which a text message names: a number being
-    /// added to an account gets a sign-in code (`purpose`), in a text that
-    /// says it confirms the number.
-    pub reason: CodePurpose,
     /// The language to write the message in: a supported language tag, or
     /// whatever the client asked for, to be resolved by the wording.
     pub language: &'a str,
+}
+
+pub type CheckFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<bool>> + Send + 'a>>;
+
+/// A provider that makes a one-time code, sends it and checks it itself, so
+/// that the service never sees the code it sends: Twilio Verify, for phone
+/// numbers (`crate::notifications::verify`). The service still records each
+/// code asked for, without a hash, and counts, limits and binds it to its
+/// purpose as any other ([`request_code`], [`OfferedCode::consult_verifier`]).
+pub trait CodeVerifier: Send + Sync {
+    /// Has a code for `purpose` sent to `to`, an E.164 number, in
+    /// `language`, a supported language tag. An error names no number and
+    /// quotes no provider's text.
+    fn start<'a>(&'a self, to: &'a str, purpose: Purpose, language: &'a str) -> SendFuture<'a>;
+
+    /// Whether `code` is the one the provider sent to `to` for `purpose`
+    /// and still works. `Ok(false)` for a wrong, expired or used-up code; an
+    /// error only when the provider could not be asked or gave no answer.
+    fn check<'a>(&'a self, to: &'a str, purpose: Purpose, code: &'a str) -> CheckFuture<'a>;
 }
 
 /// Delivers a one-time code by email or SMS.
@@ -267,6 +285,13 @@ pub trait CodeSender: Send + Sync {
     /// display name. `None` where there is no such address, as for the
     /// development log.
     fn email_sender(&self) -> Option<String> {
+        None
+    }
+
+    /// The provider that makes, sends and checks the codes for `to`, where
+    /// that is not this service ([`CodeVerifier`]). [`CodeSender::send`] is
+    /// then never called for `to`.
+    fn verifier(&self, _to: &Identifier) -> Option<&dyn CodeVerifier> {
         None
     }
 }
@@ -600,6 +625,13 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// keep working until they expire, except that only the newest
 /// [`AuthRules::live_codes`] are kept: older ones stop working.
 ///
+/// Where a provider makes the code itself ([`CodeSender::verifier`]: Twilio
+/// Verify, for a phone number), the service makes none: it records the
+/// request as it would a code, with no hash, so that every limit below
+/// counts it, and asks the provider to send one. Twilio Verify sends the
+/// same code again for a request within its code's ten minutes, so the
+/// newest few requests then share one code.
+///
 /// Refused with `TOO_MANY_REQUESTS` when the requester's address has asked
 /// for too many sign-in codes this hour, when the identifier has been sent
 /// too many, or, for deletion, when the account has asked for too many, or,
@@ -766,16 +798,30 @@ pub async fn request_code(
         taken = Some([(prefix, prefix_window), (everyone, everyone_window)]);
     }
 
-    let code = generate_code();
+    // A provider that makes the code itself (Twilio Verify) is only told to
+    // send one: the row then records the request, with no hash, and the
+    // provider checks what is offered back (`OfferedCode::consult_verifier`).
+    let verifier = sender.verifier(identifier);
+    let code = verifier.is_none().then(generate_code);
+    let hash = code
+        .as_deref()
+        .map(|code| code_hash(secret, purpose, identifier, code));
     // The clock, not the transaction's start: requests for one identifier
     // are ordered by the lock above, and so are their codes.
     sqlx::query(
-        "INSERT INTO one_time_code (identifier, purpose, code_hash, expires_at, created_at)
-         VALUES ($1, $2, $3, clock_timestamp() + $4 * interval '1 second', clock_timestamp())",
+        "INSERT INTO one_time_code
+             (identifier, purpose, code_hash, checked_by, expires_at, created_at)
+         VALUES ($1, $2, $3, $4,
+                 clock_timestamp() + $5 * interval '1 second', clock_timestamp())",
     )
     .bind(identifier.as_str())
     .bind(purpose.as_str())
-    .bind(code_hash(secret, purpose, identifier, &code).as_slice())
+    .bind(hash.as_ref().map(<[u8; 32]>::as_slice))
+    .bind(if verifier.is_some() {
+        "TWILIO_VERIFY"
+    } else {
+        "SERVICE"
+    })
     .bind(rules.code_ttl.whole_seconds() as f64)
     .execute(&mut *tx)
     .await?;
@@ -801,15 +847,23 @@ pub async fn request_code(
     }
     tx.commit().await?;
 
-    let sent = sender
-        .send(CodeMessage {
-            to: identifier,
-            code: &code,
-            purpose,
-            reason: request.purpose,
-            language,
-        })
-        .await;
+    let sent = match (verifier, code.as_deref()) {
+        (Some(verifier), _) => {
+            let language = languages::resolve(language).unwrap_or(languages::default());
+            verifier.start(identifier.as_str(), purpose, language).await
+        }
+        (None, Some(code)) => {
+            sender
+                .send(CodeMessage {
+                    to: identifier,
+                    code,
+                    purpose,
+                    language,
+                })
+                .await
+        }
+        (None, None) => unreachable!("a code is made whenever no verifier makes it"),
+    };
     if let Err(error) = sent {
         // The error names no address or number and quotes no provider's
         // text (each sender sees to it).
@@ -927,10 +981,16 @@ impl SmsPlace {
 /// sharing its address. What bounds guessing is the attempts per code, the
 /// identifier's daily cap, and the limit on code requests by address, since
 /// every code guessed at must first be asked for.
+///
+/// A code a provider made (`sender`'s [`CodeSender::verifier`]) is checked
+/// by that provider first ([`OfferedCode::consult_verifier`]), and then
+/// exactly as any other.
+#[allow(clippy::too_many_arguments)]
 pub async fn verify_code(
     db: &PgPool,
     secret: &[u8],
     rules: &AuthRules,
+    sender: &dyn CodeSender,
     identifier: &Identifier,
     code: &str,
     requester: Requester,
@@ -941,7 +1001,9 @@ pub async fn verify_code(
         identifier,
         code,
         requester,
+        verifier: sender.verifier(identifier),
     };
+    offered.consult_verifier(db).await?;
     let mut tx = db.begin().await?;
     let checked = offered.check(&mut tx).await?;
     tx.commit().await?;
@@ -962,6 +1024,9 @@ pub struct OfferedCode<'a> {
     pub identifier: &'a Identifier,
     pub code: &'a str,
     pub requester: Requester,
+    /// The provider that made the codes for `identifier`, if it was not
+    /// this service ([`CodeSender::verifier`]).
+    pub verifier: Option<&'a dyn CodeVerifier>,
 }
 
 /// What [`OfferedCode::check`] found. Either way the transaction holds what
@@ -977,25 +1042,23 @@ pub enum CodeCheck {
     Refused(ApiError),
 }
 
+/// A live code's ID, and its hash where there is one.
+type LiveCode = (Uuid, Option<Vec<u8>>);
+
 impl OfferedCode<'_> {
-    /// Checks the code within `conn`'s transaction, as [`verify_code`]
-    /// describes. The limit rows and the codes it reads stay locked until
-    /// the transaction ends, so nobody else checks a code for the same
-    /// identifier and purpose meanwhile.
-    pub async fn check(&self, conn: &mut PgConnection) -> Result<CodeCheck, ApiError> {
+    /// Where this code's wrong guesses are counted for the day, and how many
+    /// that count may reach. A sign-in guess is counted against the
+    /// identifier; a deletion is guessed at only through the account's own
+    /// session, so it is counted against the account.
+    fn owner_count(&self) -> (Counter, i64) {
         let Self {
             secret,
             rules,
             identifier,
-            code,
             requester,
+            ..
         } = *self;
-        let purpose = requester.purpose();
-
-        // A sign-in guess is counted against the identifier; a deletion is
-        // guessed at only through the account's own session, so it is counted
-        // against the account.
-        let (by_owner, owner_limit) = match requester {
+        match requester {
             Requester::SignIn { .. } => (
                 Counter::new(
                     secret,
@@ -1012,35 +1075,130 @@ impl OfferedCode<'_> {
                 ),
                 rules.failed_deletion_guesses_per_day,
             ),
-        };
-        lock_codes(conn, identifier, purpose).await?;
-        if by_owner.hold(conn).await? >= owner_limit {
-            return Ok(CodeCheck::Refused(ErrorCode::TooManyGuesses.into()));
         }
+    }
 
-        let live: Vec<(Uuid, Vec<u8>)> = sqlx::query_as(
+    /// The live codes for the identifier and purpose: each one's ID and, for
+    /// a code a provider made, its hash only once the provider approved it.
+    async fn live(&self, conn: &mut PgConnection) -> Result<Vec<LiveCode>, sqlx::Error> {
+        sqlx::query_as(
             "SELECT id, code_hash FROM one_time_code
              WHERE identifier = $1 AND purpose = $2
                AND consumed_at IS NULL AND expires_at > now() AND failed_attempts < $3
              FOR UPDATE",
         )
-        .bind(identifier.as_str())
-        .bind(purpose.as_str())
-        .bind(rules.code_max_failed_attempts)
-        .fetch_all(&mut *conn)
-        .await?;
+        .bind(self.identifier.as_str())
+        .bind(self.requester.purpose().as_str())
+        .bind(self.rules.code_max_failed_attempts)
+        .fetch_all(conn)
+        .await
+    }
 
-        // Constant-time comparison against each, and no stopping at the first
-        // match, so the time taken says nothing about which one it was.
-        let offered = code.trim();
-        let matches = live
-            .iter()
+    /// Whether the code offered is one of `live`, compared in constant time
+    /// against each, with no stopping at the first match, so the time taken
+    /// says nothing about which one it was. A code a provider made and has
+    /// not approved has no hash and matches nothing.
+    fn matches(&self, live: &[LiveCode]) -> bool {
+        let purpose = self.requester.purpose();
+        let offered = self.code.trim();
+        live.iter()
             .map(|(_, expected)| {
-                code_mac(secret, purpose, identifier, offered)
-                    .verify_slice(expected)
-                    .is_ok()
+                expected.as_deref().is_some_and(|expected| {
+                    code_mac(self.secret, purpose, self.identifier, offered)
+                        .verify_slice(expected)
+                        .is_ok()
+                })
             })
-            .fold(false, |any, this| any | this);
+            .fold(false, |any, this| any | this)
+    }
+
+    /// For a code a provider made (Twilio Verify), asks the provider
+    /// whether the code offered is right, before [`OfferedCode::check`]. A
+    /// right one is written to the live codes as its keyed hash, in a
+    /// transaction of its own, so that `check` then finds it as it finds
+    /// any code, and finds it again if the caller's transaction is rolled
+    /// back (a deletion that found the account busy, retried): the provider
+    /// forgets a verification once it approves it. A wrong one is left for
+    /// `check` to count, exactly as any wrong code.
+    ///
+    /// The provider is asked only when there is something to ask about: a
+    /// live code for this identifier and purpose that it made and has not
+    /// approved, while the day's wrong guesses are not used up, and a code
+    /// of the shape it makes. Every other case is `check`'s alone, so a code
+    /// asked for one purpose and offered for another is refused without the
+    /// provider, as a wrong guess against the other purpose's codes if there
+    /// are any. Nothing is done for a code this service made.
+    ///
+    /// Refused with `SERVICE_UNAVAILABLE`, nothing counted, when the
+    /// provider cannot be asked: the code may still be right.
+    pub async fn consult_verifier(&self, db: &PgPool) -> Result<(), ApiError> {
+        let (Some(verifier), Identifier::Phone(phone)) = (self.verifier, self.identifier) else {
+            return Ok(());
+        };
+        let purpose = self.requester.purpose();
+        let offered = self.code.trim();
+        // Twilio's codes are 4 to 10 digits; anything else is wrong without
+        // asking.
+        if !(4..=10).contains(&offered.len()) || !offered.bytes().all(|b| b.is_ascii_digit()) {
+            return Ok(());
+        }
+        let mut tx = db.begin().await?;
+        // Held while the provider is asked, so that two guesses at once for
+        // one identifier and purpose are asked about one after the other.
+        lock_codes(&mut tx, self.identifier, purpose).await?;
+        let (by_owner, owner_limit) = self.owner_count();
+        if by_owner.hold(&mut tx).await? >= owner_limit {
+            return Ok(());
+        }
+        let live = self.live(&mut tx).await?;
+        let unapproved: Vec<Uuid> = live
+            .iter()
+            .filter(|(_, hash)| hash.is_none())
+            .map(|(id, _)| *id)
+            .collect();
+        if unapproved.is_empty() || self.matches(&live) {
+            return Ok(());
+        }
+        match verifier.check(phone, purpose, offered).await {
+            Ok(true) => {
+                sqlx::query("UPDATE one_time_code SET code_hash = $2 WHERE id = ANY($1)")
+                    .bind(&unapproved)
+                    .bind(code_hash(self.secret, purpose, self.identifier, offered).as_slice())
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                Ok(())
+            }
+            Ok(false) => Ok(()),
+            Err(error) => {
+                // The error names no number and quotes no provider's text.
+                tracing::error!(%error, "a one-time code could not be checked");
+                Err(ErrorCode::ServiceUnavailable.into())
+            }
+        }
+    }
+
+    /// Checks the code within `conn`'s transaction, as [`verify_code`]
+    /// describes. The limit rows and the codes it reads stay locked until
+    /// the transaction ends, so nobody else checks a code for the same
+    /// identifier and purpose meanwhile. A code a provider made must have
+    /// been put to it first ([`OfferedCode::consult_verifier`]).
+    pub async fn check(&self, conn: &mut PgConnection) -> Result<CodeCheck, ApiError> {
+        let Self {
+            identifier,
+            requester,
+            ..
+        } = *self;
+        let purpose = requester.purpose();
+
+        let (by_owner, owner_limit) = self.owner_count();
+        lock_codes(conn, identifier, purpose).await?;
+        if by_owner.hold(conn).await? >= owner_limit {
+            return Ok(CodeCheck::Refused(ErrorCode::TooManyGuesses.into()));
+        }
+
+        let live = self.live(conn).await?;
+        let matches = self.matches(&live);
 
         if matches {
             sqlx::query(

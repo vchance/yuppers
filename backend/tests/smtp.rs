@@ -19,7 +19,6 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::MutexGuard;
 use tracing_subscriber::EnvFilter;
 use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose};
-use yuppers_backend::code_consent::CodePurpose;
 use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::domain::notification::Notice;
 use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
@@ -529,9 +528,6 @@ async fn a_one_time_code_goes_by_email_in_the_language_asked_for_and_not_by_sms(
             to: &ana,
             code: "123456",
             purpose: Purpose::SignIn,
-            // An address being added to an account: its code is a sign-in
-            // code, and its email the sign-in email, as ever.
-            reason: CodePurpose::VerifyNumber,
             language: "es-MX",
         },
     )
@@ -544,7 +540,6 @@ async fn a_one_time_code_goes_by_email_in_the_language_asked_for_and_not_by_sms(
             to: &delete,
             code: "654321",
             purpose: Purpose::DeleteAccount,
-            reason: CodePurpose::DeleteAccount,
             language: "en",
         },
     )
@@ -590,7 +585,6 @@ async fn a_one_time_code_goes_by_email_in_the_language_asked_for_and_not_by_sms(
             to: &phone,
             code: "111111",
             purpose: Purpose::SignIn,
-            reason: CodePurpose::SignIn,
             language: "en",
         },
     )
@@ -668,7 +662,6 @@ async fn a_refused_recipient_leaves_no_part_of_their_address_in_the_outbox_or_th
             to: &Identifier::parse(&deal.ana.email).unwrap(),
             code: "123456",
             purpose: Purpose::SignIn,
-            reason: CodePurpose::SignIn,
             language: "en",
         },
     )

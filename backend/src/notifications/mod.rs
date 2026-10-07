@@ -6,8 +6,9 @@
 //! [`smtp`]) and, to those with the app, by push ([`push`], [`expo`]).
 //! Which change calls for which message is a rule, and lives in
 //! `domain::notification`. One-time codes go by email, or by text message
-//! to a phone number ([`sms`]); a party who turned on text updates for an
-//! agreement is also texted about its status changes ([`sms_updates`]).
+//! to a phone number, made, sent and checked by Twilio Verify ([`verify`],
+//! routed by [`sms`]); a party who turned on text updates for an agreement
+//! is also texted about its status changes ([`sms_updates`]).
 
 use crate::auth::SendFuture;
 
@@ -18,6 +19,7 @@ pub mod push;
 pub mod sms;
 pub mod sms_updates;
 pub mod smtp;
+pub mod verify;
 pub mod wording;
 
 /// One email, ready to send.

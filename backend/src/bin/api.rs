@@ -33,11 +33,23 @@ async fn main() -> anyhow::Result<()> {
     let (sms, sms_cap) = (config.sms, config.auth.sms_codes_per_hour);
     // Agreement updates are queued wherever an exchange changes.
     sms_updates::configure(sms, config.sms_updates_per_day);
+    if config.sms_codes {
+        tracing::info!(
+            cap = sms_cap,
+            "codes for phone numbers go by text message (SMS_CODE_DELIVERY), with agreement updates at most this many an hour"
+        );
+    }
     if sms {
         tracing::info!(
             cap = sms_cap,
-            "codes for phone numbers, and agreement updates, go by text message, at most this many an hour"
+            "agreement updates go by text message (SMS_DELIVERY), with codes at most this many an hour"
         );
+        if !config.sms_codes {
+            tracing::warn!(
+                "SMS_CODE_DELIVERY is off, so a number added for agreement updates is sent its \
+                 code only as CODE_DELIVERY sends codes to phone numbers, if at all"
+            );
+        }
         if config.sms_webhook_token.is_none() {
             tracing::warn!(
                 "no auth token checks Twilio's requests to /v1/sms/inbound, so STOP and START \
@@ -107,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
         let wallet = wallet.clone();
         let max_attempts = DeliveryRules::default().max_attempts;
         // Text messages are counted only while they are sent.
-        let sms_cap = sms.then_some(sms_cap);
+        let sms_cap = (sms || config.sms_codes).then_some(sms_cap);
         metrics::serve(addr, move || {
             let (requests, db, wallet) = (requests.clone(), db.clone(), wallet.clone());
             async move {

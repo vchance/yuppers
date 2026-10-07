@@ -1,8 +1,10 @@
-//! One-time codes by text message: routed by identifier, written in one
-//! segment in the reader's language, sent to Twilio's Messages API in the
-//! shape it takes (against a stand-in in this process), only to the
-//! countries served, capped per hour for the whole service and for numbers
-//! beginning alike, and never logged with a whole phone number.
+//! Text messages: one-time codes for phone numbers routed by identifier to
+//! the provider that makes them (Twilio Verify, here an in-process stand-in
+//! that keeps what it is asked; `tests/verify.rs` has Verify's own API),
+//! in the reader's language, only to the countries served, capped per hour
+//! for the whole service and for numbers beginning alike; agreement updates
+//! sent to Twilio's Messages API in the shape it takes (against a stand-in
+//! in this process); and nothing logged with a whole phone number.
 //!
 //! The cap counts every text message the database has seen this hour, so
 //! the tests here take turns, and each starts with the counts cleared.
@@ -23,12 +25,13 @@ use serde_json::{Value, json};
 use tokio::sync::MutexGuard;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
-use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, LogSender, Purpose, SendFuture};
-use yuppers_backend::code_consent::CodePurpose;
+use yuppers_backend::auth::{
+    AuthRules, CheckFuture, CodeMessage, CodeSender, CodeVerifier, LogSender, Purpose, SendFuture,
+};
 use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::metrics::{self, Text};
 use yuppers_backend::notifications::sms::{
-    CodeRouter, LogSmsSender, Sms, SmsSender, TwilioCredential, TwilioSmsSender, encoding,
+    CodeRouter, LogSmsSender, PhoneCodes, Sms, SmsSender, TwilioCredential, TwilioSmsSender,
 };
 use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
@@ -92,19 +95,33 @@ async fn ask(app: &App, identifier: &str, language: &str) -> common::Reply {
     .await
 }
 
-/// Keeps the text messages it is handed.
-#[derive(Default)]
-struct Phone(Mutex<Vec<(String, String)>>);
+/// The code this stand-in for Twilio Verify sends every time.
+const CODE: &str = "424242";
 
-impl SmsSender for Phone {
-    fn send<'a>(&'a self, sms: Sms<'a>) -> SendFuture<'a> {
+/// Stands in for Twilio Verify: keeps each code it is asked to send, by
+/// number, purpose and language, and takes [`CODE`] as the right code.
+#[derive(Default)]
+struct Phone(Mutex<Vec<(String, Purpose, String)>>);
+
+impl Phone {
+    fn sent(&self) -> Vec<(String, Purpose, String)> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl CodeVerifier for Phone {
+    fn start<'a>(&'a self, to: &'a str, purpose: Purpose, language: &'a str) -> SendFuture<'a> {
         Box::pin(async move {
             self.0
                 .lock()
                 .unwrap()
-                .push((sms.to.to_owned(), sms.text.to_owned()));
+                .push((to.to_owned(), purpose, language.to_owned()));
             Ok(())
         })
+    }
+
+    fn check<'a>(&'a self, _to: &'a str, _purpose: Purpose, code: &'a str) -> CheckFuture<'a> {
+        Box::pin(async move { Ok(code == CODE) })
     }
 }
 
@@ -121,20 +138,12 @@ impl CodeSender for Mailbox {
     }
 }
 
+/// `SMS_CODE_DELIVERY=verify`, with `phone` for Twilio Verify.
 fn router(phone: &Arc<Phone>, mailbox: &Arc<Mailbox>) -> Arc<CodeRouter> {
     Arc::new(CodeRouter::new(
         mailbox.clone(),
-        phone.clone(),
-        Wording::embedded().unwrap(),
+        PhoneCodes::Verify(phone.clone()),
     ))
-}
-
-/// The code in a text: the six digits after the program's name.
-fn code_in(text: &str) -> String {
-    let code = text
-        .strip_prefix("Yuppers.app: ")
-        .unwrap_or_else(|| panic!("{text:?} does not begin with the program's name"));
-    code[..6].to_owned()
 }
 
 /// The SMS counts for this hour, as the API's metrics show them.
@@ -160,28 +169,23 @@ async fn a_phone_number_gets_its_code_by_sms_in_its_language_and_an_email_addres
         StatusCode::NO_CONTENT
     );
 
-    let sent = phone.0.lock().unwrap().clone();
-    assert_eq!(sent.len(), 2);
-    assert_eq!(sent[0].0, es);
-    assert_eq!(sent[1].0, en);
-    let (spanish, english) = (&sent[0].1, &sent[1].1);
+    // Verify is told the language, as a supported tag, and makes the code.
     assert_eq!(
-        *spanish,
-        format!(
-            "Yuppers.app: {} es tu código para entrar. No se lo des a nadie.",
-            code_in(spanish)
-        )
+        phone.sent(),
+        [
+            (es.clone(), Purpose::SignIn, "es".to_owned()),
+            (en.clone(), Purpose::SignIn, "en".to_owned()),
+        ]
     );
-    assert_eq!(
-        *english,
-        format!(
-            "Yuppers.app: {} is your sign-in code. Do not share it with anyone.",
-            code_in(english)
-        )
-    );
-    for text in [spanish, english] {
-        assert!(encoding(text).fits_one_segment(), "{text}");
-    }
+    // The service keeps no hash of a code it never saw, only that one was
+    // asked for.
+    let stored: Vec<(Option<Vec<u8>>, String)> =
+        sqlx::query_as("SELECT code_hash, checked_by FROM one_time_code WHERE identifier = $1")
+            .bind(&es)
+            .fetch_all(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(stored, [(None, "TWILIO_VERIFY".to_owned())]);
     assert_eq!(*mailbox.0.lock().unwrap(), ["ana@example.test"]);
     assert!(
         counted(&app, 50)
@@ -191,13 +195,13 @@ async fn a_phone_number_gets_its_code_by_sms_in_its_language_and_an_email_addres
 }
 
 /// A code asked for by a signed-in account, which is only ever to add a
-/// number to it, says it confirms the number; one to delete the account
-/// says so; and signing in, as above, says it signs in. In each language.
+/// number to it, and a code to sign in go to the sign-in purpose's Verify
+/// service; a code to delete the account to the deletion service's, in the
+/// account's language. Each is checked against its own purpose.
 #[tokio::test]
-async fn each_code_text_says_what_its_code_was_asked_for() {
+async fn each_code_goes_to_its_purposes_verify_service() {
     let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
     let (app, _turn) = start(50, router(&phone, &mailbox)).await;
-    let wording = Wording::embedded().unwrap();
 
     for language in ["en", "es"] {
         // Adding a number, from a signed-in account.
@@ -213,11 +217,9 @@ async fn each_code_text_says_what_its_code_was_asked_for() {
             )
             .await;
         assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
-        let (to, text) = phone.0.lock().unwrap().last().unwrap().clone();
-        assert_eq!(to, added);
         assert_eq!(
-            text,
-            wording.code_sms(language, CodePurpose::VerifyNumber, &code_in(&text))
+            phone.sent().last().unwrap(),
+            &(added.clone(), Purpose::SignIn, language.to_owned())
         );
         // Its code is a sign-in code: it adds the number.
         let reply = app
@@ -225,7 +227,7 @@ async fn each_code_text_says_what_its_code_was_asked_for() {
                 Some(&ana),
                 Method::POST,
                 "/v1/me/identifiers",
-                Some(json!({ "identifier": added, "code": code_in(&text) })),
+                Some(json!({ "identifier": added, "code": CODE })),
                 &[],
             )
             .await;
@@ -248,11 +250,9 @@ async fn each_code_text_says_what_its_code_was_asked_for() {
             )
             .await;
         assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
-        let (to, text) = phone.0.lock().unwrap().last().unwrap().clone();
-        assert_eq!(to, added);
         assert_eq!(
-            text,
-            wording.code_sms(language, CodePurpose::DeleteAccount, &code_in(&text))
+            phone.sent().last().unwrap(),
+            &(added.clone(), Purpose::DeleteAccount, language.to_owned())
         );
 
         // Signing in, with nobody signed in.
@@ -261,28 +261,12 @@ async fn each_code_text_says_what_its_code_was_asked_for() {
             ask(&app, &signing_in, language).await.status,
             StatusCode::NO_CONTENT
         );
-        let (to, text) = phone.0.lock().unwrap().last().unwrap().clone();
-        assert_eq!(to, signing_in);
         assert_eq!(
-            text,
-            wording.code_sms(language, CodePurpose::SignIn, &code_in(&text))
+            phone.sent().last().unwrap(),
+            &(signing_in, Purpose::SignIn, language.to_owned())
         );
     }
-    // Three different texts in each language, every one of them sent.
-    let sent: Vec<String> = phone
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|(_, text)| text.clone())
-        .collect();
-    assert_eq!(sent.len(), 6);
-    assert!(sent[0].contains("confirm this phone number"), "{sent:?}");
-    assert!(sent[1].contains("delete your account"), "{sent:?}");
-    assert!(sent[2].contains("sign-in code"), "{sent:?}");
-    assert!(sent[3].contains("confirmar tu número"), "{sent:?}");
-    assert!(sent[4].contains("eliminar tu cuenta"), "{sent:?}");
-    assert!(sent[5].contains("para entrar"), "{sent:?}");
+    assert_eq!(phone.sent().len(), 6);
     // No email for any of them.
     assert!(mailbox.0.lock().unwrap().is_empty());
 }
@@ -305,7 +289,7 @@ async fn the_service_sends_no_more_than_its_hourly_cap_of_text_messages() {
             .await
             .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
     }
-    assert_eq!(phone.0.lock().unwrap().len(), 2);
+    assert_eq!(phone.sent().len(), 2);
     // Email is not text messages, and not capped by them.
     assert_eq!(
         ask(&app, "ben@example.test", "en").await.status,
@@ -396,7 +380,7 @@ async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_
 
     // Nothing sent, stored or counted against anyone: not the address, not
     // the account, not the caps.
-    assert!(phone.0.lock().unwrap().is_empty());
+    assert!(phone.sent().is_empty());
     for number in [uk, mexico, france] {
         assert_eq!(codes_for(&app, number).await, 0, "{number}");
     }
@@ -424,7 +408,7 @@ async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_
     ask(&app, &number(), "en")
         .await
         .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
-    assert_eq!(phone.0.lock().unwrap().len(), 1);
+    assert_eq!(phone.sent().len(), 1);
 }
 
 #[tokio::test]
@@ -456,7 +440,7 @@ async fn numbers_beginning_alike_have_their_own_hourly_cap() {
         ask(&app, &number_elsewhere(), "en").await.status,
         StatusCode::NO_CONTENT
     );
-    assert_eq!(phone.0.lock().unwrap().len(), 3);
+    assert_eq!(phone.sent().len(), 3);
 
     let page = counted(&app, 50).await;
     for line in [
@@ -489,8 +473,8 @@ fn smtp() -> Arc<SmtpSender> {
 
 #[tokio::test]
 async fn with_sms_off_a_code_for_a_phone_number_is_refused_as_before_and_costs_nothing() {
-    // CODE_DELIVERY=smtp and SMS_DELIVERY=off: the SMTP sender alone. It
-    // refuses a phone number before it would connect anywhere.
+    // CODE_DELIVERY=smtp and SMS_CODE_DELIVERY=off: the SMTP sender alone.
+    // It refuses a phone number before it would connect anywhere.
     let (app, _turn) = start(50, smtp()).await;
     ask(&app, &number(), "en")
         .await
@@ -607,23 +591,28 @@ async fn the_service_says_which_identifiers_it_can_send_codes_to() {
         )
     };
     let with_sms = |email: Arc<dyn CodeSender>| -> Arc<dyn CodeSender> {
+        Arc::new(CodeRouter::new(email, PhoneCodes::Log))
+    };
+    let with_verify = |email: Arc<dyn CodeSender>| -> Arc<dyn CodeSender> {
         Arc::new(CodeRouter::new(
             email,
-            Arc::new(LogSmsSender),
-            Wording::embedded().unwrap(),
+            PhoneCodes::Verify(Arc::new(Phone::default())),
         ))
     };
 
-    // CODE_DELIVERY=smtp, SMS_DELIVERY=off: email only, and no countries.
+    // CODE_DELIVERY=smtp, SMS_CODE_DELIVERY=off: email only, and no
+    // countries, whatever SMS_DELIVERY says.
     assert_eq!(
         meta(open(50, smtp()).await).await,
         (json!(["email"]), json!([]))
     );
-    // CODE_DELIVERY=smtp with SMS_DELIVERY on (log or twilio alike).
-    assert_eq!(
-        meta(open(50, with_sms(smtp())).await).await,
-        (json!(["email", "phone"]), json!(["+1"]))
-    );
+    // CODE_DELIVERY=smtp with SMS_CODE_DELIVERY on (log or verify alike).
+    for sender in [with_sms(smtp()), with_verify(smtp())] {
+        assert_eq!(
+            meta(open(50, sender).await).await,
+            (json!(["email", "phone"]), json!(["+1"]))
+        );
+    }
     // CODE_DELIVERY=log: phone codes go to the development log, SMS or not.
     let log: Arc<dyn CodeSender> = Arc::new(LogSender);
     for sender in [log.clone(), with_sms(log)] {
@@ -678,11 +667,11 @@ async fn the_service_names_the_address_codes_come_from_where_it_has_one() {
         sender(open(50, named.clone()).await).await,
         Some(json!("No-Reply@example.test"))
     );
-    // With SMS on too, codes for email addresses still come from it.
+    // With codes by text on too, codes for email addresses still come from
+    // it.
     let routed: Arc<dyn CodeSender> = Arc::new(CodeRouter::new(
         named,
-        Arc::new(LogSmsSender),
-        Wording::embedded().unwrap(),
+        PhoneCodes::Verify(Arc::new(Phone::default())),
     ));
     assert_eq!(
         sender(open(50, routed).await).await,
@@ -789,7 +778,7 @@ async fn with_an_api_key_twilio_is_sent_the_key_as_basic_auth_and_the_account_in
     twilio_with_key(addr)
         .send(Sms {
             to: "+15551234567",
-            text: "Yuppers.app: 123456 is your sign-in code. Do not share it with anyone.",
+            text: "Yuppers.app: an agreement you turned on updates for has changed. See it: https://yuppers.app/exchanges/1. Reply STOP to opt out.",
         })
         .await
         .unwrap();
@@ -864,7 +853,7 @@ async fn twilio_is_sent_the_message_in_the_shape_its_api_takes() {
     )
     .await;
     let sender = twilio(addr, "+15550000000");
-    let text = "Yuppers.app: 123456 es tu código para entrar. No se lo des a nadie.";
+    let text = "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: https://yuppers.app/exchanges/1. Responde STOP para cancelar.";
     sender
         .send(Sms {
             to: "+15551234567",
@@ -899,62 +888,6 @@ async fn twilio_is_sent_the_message_in_the_shape_its_api_takes() {
             ("From".to_owned(), "+15550000000".to_owned()),
             ("Body".to_owned(), text.to_owned()),
         ]
-    );
-}
-
-#[tokio::test]
-async fn a_message_the_provider_refuses_uses_up_no_place_under_either_cap() {
-    let _turn = TURN.lock().await;
-    // Twilio refusing, as it does a number outside the account's
-    // geographic permissions.
-    let (stand_in, addr) = Twilio::start(
-        StatusCode::BAD_REQUEST,
-        json!({ "code": 21408, "message": "Permission to send an SMS has not been enabled" }),
-    )
-    .await;
-    let mailbox = Arc::new(Mailbox::default());
-    let refusing = Arc::new(CodeRouter::new(
-        mailbox.clone(),
-        Arc::new(twilio(addr, "+15550000000")),
-        Wording::embedded().unwrap(),
-    ));
-    // One message an hour, for the service and for each prefix.
-    let one = AuthRules {
-        sms_codes_per_prefix_per_hour: 1,
-        ..rules(1)
-    };
-    let app = open_with(one.clone(), refusing).await;
-    for _ in 0..3 {
-        ask(&app, &number(), "en")
-            .await
-            .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
-    }
-    assert_eq!(stand_in.received.lock().unwrap().len(), 3);
-    let page = counted(&app, 1).await;
-    for line in [
-        "yuppers_sms_codes_this_hour{result=\"sent\"} 0",
-        "yuppers_sms_codes_this_hour{result=\"failed\"} 3",
-        "yuppers_sms_codes_this_hour{result=\"refused\"} 0",
-    ] {
-        assert!(page.contains(line), "{line} in\n{page}");
-    }
-
-    // The place is still there for a message the provider takes, in the
-    // same area code; and then the caps hold.
-    let phone = Arc::new(Phone::default());
-    let app = App::start_messaging(DATABASE, one, router(&phone, &mailbox), false).await;
-    assert_eq!(
-        ask(&app, &number(), "en").await.status,
-        StatusCode::NO_CONTENT
-    );
-    ask(&app, &number_elsewhere(), "en")
-        .await
-        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
-    assert_eq!(phone.0.lock().unwrap().len(), 1);
-    assert!(
-        counted(&app, 1)
-            .await
-            .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 1")
     );
 }
 
@@ -1022,23 +955,25 @@ async fn no_log_holds_a_whole_phone_number_and_only_the_development_delivery_hol
     let number = "+15551234567";
     let digits = "5551234567";
 
-    // The development deliveries: the code is there to be read, the number
-    // masked, for SMS and for the code sender as before.
+    // The development deliveries, the number masked: an update text
+    // (`SMS_DELIVERY=log`), and a code for a phone number
+    // (`SMS_CODE_DELIVERY=log`), which is there to be read.
     LogSmsSender
         .send(Sms {
             to: number,
-            text: "Yuppers.app: 111111 is your sign-in code. Do not share it with anyone.",
+            text: "Yuppers.app: an agreement you turned on updates for has changed. See it: https://yuppers.app/exchanges/111111. Reply STOP to opt out.",
         })
         .await
         .unwrap();
     let phone = Identifier::parse(number).unwrap();
+    let codes = CodeRouter::new(Arc::new(Mailbox::default()), PhoneCodes::Log);
+    assert!(codes.verifier(&phone).is_none());
     CodeSender::send(
-        &LogSender,
+        &codes,
         CodeMessage {
             to: &phone,
             code: "222222",
             purpose: Purpose::SignIn,
-            reason: CodePurpose::SignIn,
             language: "en",
         },
     )
@@ -1048,33 +983,4 @@ async fn no_log_holds_a_whole_phone_number_and_only_the_development_delivery_hol
     assert!(development.contains("111111") && development.contains("222222"));
     assert!(development.contains("+1••••••••67"), "{development}");
     assert!(!development.contains(digits), "{development}");
-
-    // A real provider refusing, through the API: neither the number nor the
-    // code is logged, nor the provider's message.
-    log.0.lock().unwrap().clear();
-    let (_stand_in, addr) = Twilio::start(
-        StatusCode::BAD_REQUEST,
-        json!({ "code": 21614, "message": format!("{number} is not a mobile number") }),
-    )
-    .await;
-    let mailbox = Arc::new(Mailbox::default());
-    let sender = Arc::new(CodeRouter::new(
-        mailbox,
-        Arc::new(twilio(addr, "+15550000000")),
-        Wording::embedded().unwrap(),
-    ));
-    let app = open(50, sender).await;
-    ask(&app, number, "en")
-        .await
-        .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
-    let refused = log.text();
-    assert!(refused.contains("error 21614"), "{refused}");
-    assert!(!refused.contains(digits), "{refused}");
-    assert!(!refused.contains("not a mobile number"), "{refused}");
-    assert!(!refused.contains("auth-token-not-for-logs"), "{refused}");
-    assert!(
-        counted(&app, 50)
-            .await
-            .contains("yuppers_sms_codes_this_hour{result=\"failed\"} 1")
-    );
 }

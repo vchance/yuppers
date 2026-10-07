@@ -1,5 +1,6 @@
-//! Consent to a one-time code by text: "Yuppers.app sign-in codes", the
-//! first SMS program (README, "Signing in").
+//! Consent to a one-time code by text, which Twilio Verify sends and checks
+//! (`crate::notifications::verify`; README, "Signing in"): no SMS program of
+//! ours, but each code is still texted only on a ticked box.
 //!
 //! Every form that texts a code shows a box, never ticked to begin with,
 //! beside wording that says what will be sent, from whom and how often, the
@@ -61,8 +62,8 @@ pub struct SmsCodeConsent {
 }
 
 /// Why a code was asked for, as the record names it. Each has its own words
-/// beside the box, and its own text message carrying the code
-/// (`sms` in the wording files).
+/// beside the box. The text that carries the code is Twilio Verify's, the
+/// same for all three.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodePurpose {
     SignIn,

@@ -11,7 +11,6 @@ use serde::Deserialize;
 
 use super::html;
 use crate::auth::Purpose;
-use crate::code_consent::CodePurpose;
 use crate::domain::notification::Notice;
 use crate::languages;
 
@@ -29,8 +28,7 @@ struct File {
     /// every notice, because a lock screen is read by whoever holds the
     /// phone.
     push: PushWording,
-    /// The text messages: one carrying a one-time code for each reason one
-    /// is asked for, and the agreement updates'.
+    /// The service's text messages: the agreement updates'.
     sms: SmsWording,
 }
 
@@ -39,15 +37,11 @@ struct PushWording {
     body: String,
 }
 
+/// The service's own texts, all of them "Yuppers.app agreement updates".
+/// One-time codes are texted by Twilio Verify in its own template
+/// (`super::verify`), so there is no wording for them here.
 #[derive(Deserialize)]
 struct SmsWording {
-    #[serde(rename = "signIn")]
-    sign_in: String,
-    #[serde(rename = "deleteAccount")]
-    delete_account: String,
-    /// The code checking a number being added to an account.
-    #[serde(rename = "verifyNumber")]
-    verify_number: String,
     /// An agreement update ("Yuppers.app agreement updates"): only that
     /// something changed, and the link. No terms, names, amounts or code.
     update: String,
@@ -300,25 +294,6 @@ impl Wording {
         fill(
             &file.push.body,
             &[("productName", file.product_name.as_str())],
-        )
-    }
-
-    /// The text message that carries a one-time code, in `language` where
-    /// that language has wording and in the default language otherwise. It
-    /// begins with the program's sender, "Yuppers.app:", says what the code
-    /// was asked for (`reason`: a number being added has its own words,
-    /// though its code is a sign-in code) and warns not to share it, within
-    /// one SMS segment (`super::sms`).
-    pub fn code_sms(&self, language: &str, reason: CodePurpose, code: &str) -> String {
-        let file = self.file_for(language);
-        let template = match reason {
-            CodePurpose::SignIn => &file.sms.sign_in,
-            CodePurpose::DeleteAccount => &file.sms.delete_account,
-            CodePurpose::VerifyNumber => &file.sms.verify_number,
-        };
-        fill(
-            template,
-            &[("productName", file.product_name.as_str()), ("code", code)],
         )
     }
 

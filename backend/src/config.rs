@@ -23,9 +23,11 @@ use crate::http::{AppLinks, TrustedProxies};
 use crate::notifications::expo::{EXPO_ORIGIN, ExpoPushSender};
 use crate::notifications::push::{LogPushSender, PushSender};
 use crate::notifications::sms::{
-    CodeRouter, LogSmsSender, SmsSender, TWILIO_ORIGIN, TwilioCredential, TwilioSmsSender,
+    CodeRouter, LogSmsSender, PhoneCodes, SmsSender, TWILIO_ORIGIN, TwilioCredential,
+    TwilioSmsSender,
 };
 use crate::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
+use crate::notifications::verify::{TwilioVerify, VERIFY_ORIGIN, VerifyServices};
 use crate::notifications::wording::Wording;
 use crate::notifications::{EmailSender, LogEmailSender};
 
@@ -148,26 +150,88 @@ fn email_sender(get: Lookup<'_>) -> anyhow::Result<Arc<dyn EmailSender>> {
 }
 
 /// The sender of one-time codes: `CODE_DELIVERY` for email addresses, and
-/// for phone numbers too while `SMS_DELIVERY` is off (as before SMS was
-/// built: `log` writes them to the log, `smtp` refuses them); with
-/// `SMS_DELIVERY` on, phone numbers get their codes by text message.
+/// for phone numbers too while `SMS_CODE_DELIVERY` is off (as before SMS
+/// was built: `log` writes them to the log, `smtp` refuses them); with
+/// `SMS_CODE_DELIVERY` on, phone numbers get their codes as it says
+/// ([`phone_codes`]). `SMS_DELIVERY` has no part in it: it sends agreement
+/// updates only.
 fn code_sender(get: Lookup<'_>) -> anyhow::Result<Arc<dyn CodeSender>> {
     let email: Arc<dyn CodeSender> = match required(get, "CODE_DELIVERY")?.as_str() {
         "log" => Arc::new(LogSender),
         "smtp" => smtp_sender(get)?,
         other => bail!("CODE_DELIVERY={other} is not supported; use `smtp` or `log`"),
     };
-    Ok(match sms_sender(get)? {
+    Ok(match phone_codes(get)? {
         None => email,
-        Some(sms) => Arc::new(CodeRouter::new(email, sms, Wording::embedded()?)),
+        Some(phone) => Arc::new(CodeRouter::new(email, phone)),
     })
+}
+
+/// How one-time codes reach phone numbers, from `SMS_CODE_DELIVERY`.
+/// Default `off`.
+///
+/// - `off`: as `CODE_DELIVERY` says, with no rule of text messages.
+/// - `log`: written to the log, the number masked, and counted, capped and
+///   refused after STOP as a text would be. Development only.
+/// - `verify`: through Twilio Verify, with the account of the Messages API
+///   (`SMS_ACCOUNT_SID` and its credential) and two Verify services:
+///   `TWILIO_VERIFY_SERVICE_SID` for signing in and confirming a number,
+///   `TWILIO_VERIFY_DELETION_SERVICE_SID` for deleting an account. They must
+///   differ: a Verify service sends one number the same code for every
+///   request within ten minutes, so one service for both would let a code
+///   sent for one purpose work for the other (`notifications::verify`).
+fn phone_codes(get: Lookup<'_>) -> anyhow::Result<Option<PhoneCodes>> {
+    match optional(get, "SMS_CODE_DELIVERY")
+        .as_deref()
+        .unwrap_or("off")
+    {
+        "off" => Ok(None),
+        "log" => Ok(Some(PhoneCodes::Log)),
+        "verify" => {
+            let (account_sid, credential) = twilio_account(get)?;
+            let service = |name: &str| -> anyhow::Result<String> {
+                let sid = required(get, name)?.trim().to_owned();
+                if !is_twilio_sid(&sid, "VA") {
+                    bail!(
+                        "{name} is not a Verify service SID: VA followed by 32 hexadecimal \
+                         digits, as Twilio's console shows it"
+                    );
+                }
+                Ok(sid)
+            };
+            let services = VerifyServices {
+                sign_in: service("TWILIO_VERIFY_SERVICE_SID")?,
+                delete_account: service("TWILIO_VERIFY_DELETION_SERVICE_SID")?,
+            };
+            if services
+                .sign_in
+                .eq_ignore_ascii_case(&services.delete_account)
+            {
+                bail!(
+                    "TWILIO_VERIFY_SERVICE_SID and TWILIO_VERIFY_DELETION_SERVICE_SID must be two \
+                     different Verify services, so that a sign-in code can never confirm a deletion"
+                );
+            }
+            Ok(Some(PhoneCodes::Verify(Arc::new(TwilioVerify::new(
+                VERIFY_ORIGIN,
+                account_sid,
+                credential,
+                services,
+                SMS_TIMEOUT,
+            )))))
+        }
+        other => {
+            bail!("SMS_CODE_DELIVERY={other} is not supported; use `off`, `log` or `verify`")
+        }
+    }
 }
 
 /// How long the SMS provider has to take a message. A person is waiting on
 /// the request that sends it.
 const SMS_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The SMS provider named by `SMS_DELIVERY`, if any. Default `off`.
+/// The sender of agreement updates by text, named by `SMS_DELIVERY`, if
+/// any. Default `off`.
 fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
     match optional(get, "SMS_DELIVERY").as_deref().unwrap_or("off") {
         "off" => Ok(None),
@@ -255,8 +319,8 @@ fn twilio_account(get: Lookup<'_>) -> anyhow::Result<(String, TwilioCredential)>
             }
         }
         (None, None, None) => bail!(
-            "SMS_DELIVERY=twilio needs a credential: SMS_API_KEY_SID and SMS_API_KEY_SECRET \
-             (recommended), or SMS_AUTH_TOKEN"
+            "Twilio (SMS_DELIVERY=twilio, SMS_CODE_DELIVERY=verify) needs a credential: SMS_API_KEY_SID \
+             and SMS_API_KEY_SECRET (recommended), or SMS_AUTH_TOKEN"
         ),
         (Some(_), _, _) => {
             bail!("set either SMS_AUTH_TOKEN or SMS_API_KEY_SID and SMS_API_KEY_SECRET, not both")
@@ -716,9 +780,12 @@ pub struct ApiConfig {
     /// Whether the worker sends push notifications (`PUSH_DELIVERY`), which
     /// the API tells the apps so they offer them only then.
     pub push_notifications: bool,
-    /// Whether codes for phone numbers go by text message (`SMS_DELIVERY`),
-    /// and with it whether agreement updates can be turned on.
+    /// Whether agreement updates are sent by text (`SMS_DELIVERY`), and so
+    /// whether they can be turned on.
     pub sms: bool,
+    /// Whether codes for phone numbers are counted as text messages
+    /// (`SMS_CODE_DELIVERY` is not `off`).
+    pub sms_codes: bool,
     /// Update texts one person may be queued a day
     /// (`SMS_UPDATES_PER_PERSON_PER_DAY`).
     pub sms_updates_per_day: i64,
@@ -760,6 +827,7 @@ impl ApiConfig {
             auth: auth_rules(get)?,
             push_notifications: push_mode(get)? != PushMode::Off,
             sms: sms_sender(get)?.is_some(),
+            sms_codes: phone_codes(get)?.is_some(),
             sms_updates_per_day: sms_updates_per_day(get)?,
             sms_webhook_token: sms_webhook_token(get)?,
             wallet: crate::wallet::WalletConfig::from_lookup(get)?,
@@ -1096,41 +1164,131 @@ mod tests {
         assert!(sms_sender(&lookup(&pairs)).unwrap().is_some());
     }
 
+    const SIGN_IN_SERVICE: &str = "VA00000000000000000000000000000001";
+    const DELETION_SERVICE: &str = "VA00000000000000000000000000000002";
+
+    /// `SMS_CODE_DELIVERY=verify` with everything it needs.
+    const VERIFY: &[(&str, &str)] = &[
+        ("SMS_CODE_DELIVERY", "verify"),
+        ("SMS_ACCOUNT_SID", ACCOUNT_SID),
+        ("SMS_API_KEY_SID", KEY_SID),
+        ("SMS_API_KEY_SECRET", "hunter2-verify"),
+        ("TWILIO_VERIFY_SERVICE_SID", SIGN_IN_SERVICE),
+        ("TWILIO_VERIFY_DELETION_SERVICE_SID", DELETION_SERVICE),
+    ];
+
+    /// `SMS_DELIVERY=twilio` with everything it needs.
+    const TWILIO: &[(&str, &str)] = &[
+        ("SMS_DELIVERY", "twilio"),
+        ("SMS_ACCOUNT_SID", ACCOUNT_SID),
+        ("SMS_API_KEY_SID", KEY_SID),
+        ("SMS_API_KEY_SECRET", "hunter2-sms"),
+        ("SMS_FROM", "+15550000000"),
+    ];
+
     #[test]
-    fn codes_for_phone_numbers_go_by_sms_only_when_it_is_on() {
+    fn codes_for_phone_numbers_go_as_sms_code_delivery_says_and_never_by_sms_delivery() {
         let phone = Identifier::parse("+15551234567").unwrap();
         let email = Identifier::parse("ana@example.test").unwrap();
         let sender = |pairs: &[(&str, &str)]| code_sender(&lookup(&table(pairs))).unwrap();
-        // Off: codes go as before, and none is charged as a text message.
-        let off = sender(&[("CODE_DELIVERY", "log")]);
-        assert!(!off.charged_per_message(&phone));
-        let on = sender(&[("CODE_DELIVERY", "log"), ("SMS_DELIVERY", "log")]);
-        assert!(on.charged_per_message(&phone));
-        assert!(!on.charged_per_message(&email));
+        // Off: codes go as before, and none is charged as a text message,
+        // whatever SMS_DELIVERY says: it sends agreement updates only.
+        for updates in [&[][..], &[("SMS_DELIVERY", "log")][..], TWILIO] {
+            let off = sender(&[&[("CODE_DELIVERY", "log")][..], updates].concat());
+            assert!(!off.charged_per_message(&phone));
+            assert!(off.verifier(&phone).is_none());
+        }
+        // The development log: counted as a text, made by the service.
+        let log = sender(&[("CODE_DELIVERY", "log"), ("SMS_CODE_DELIVERY", "log")]);
+        assert!(log.charged_per_message(&phone));
+        assert!(!log.charged_per_message(&email));
+        assert!(log.verifier(&phone).is_none());
+        // Verify: counted as a text, made and checked by Twilio, for phone
+        // numbers only; and so with agreement updates on as well.
+        for updates in [&[][..], TWILIO] {
+            let verify = sender(&[&[("CODE_DELIVERY", "log")][..], VERIFY, updates].concat());
+            assert!(verify.charged_per_message(&phone));
+            assert!(verify.verifier(&phone).is_some());
+            assert!(verify.verifier(&email).is_none());
+            assert!(!verify.charged_per_message(&email));
+        }
+    }
+
+    #[test]
+    fn verify_needs_the_account_a_credential_and_two_different_services() {
+        let read = |pairs: &[(&str, &str)]| phone_codes(&lookup(&table(pairs)));
+        assert!(read(&[]).unwrap().is_none());
+        assert!(read(&[("SMS_CODE_DELIVERY", "off")]).unwrap().is_none());
+        assert!(matches!(
+            read(&[("SMS_CODE_DELIVERY", "log")]).unwrap(),
+            Some(PhoneCodes::Log)
+        ));
+        assert!(matches!(read(VERIFY).unwrap(), Some(PhoneCodes::Verify(_))));
+        for wrong in ["on", "twilio", "VERIFY", "sms"] {
+            let error = format!("{:#}", read(&[("SMS_CODE_DELIVERY", wrong)]).err().unwrap());
+            assert!(error.contains("SMS_CODE_DELIVERY"), "{error}");
+        }
+        let refused = |pairs: Vec<(&str, &str)>, says: &str| {
+            let error = format!("{:#}", read(&pairs).err().expect("refused"));
+            assert!(error.contains(says), "{says} in {error}");
+            assert!(!error.contains("hunter2"), "{error}");
+        };
+        // Each setting is needed.
+        for missing in 1..VERIFY.len() {
+            let mut pairs = VERIFY.to_vec();
+            let (name, _) = pairs.remove(missing);
+            let says = if name.starts_with("SMS_API_KEY") {
+                "SMS_API_KEY_SID and SMS_API_KEY_SECRET"
+            } else {
+                name
+            };
+            refused(pairs, says);
+        }
+        // The auth token will do in place of the key.
+        let with_token: Vec<(&str, &str)> = VERIFY
+            .iter()
+            .copied()
+            .filter(|(name, _)| !name.starts_with("SMS_API_KEY"))
+            .chain([("SMS_AUTH_TOKEN", "hunter2-token")])
+            .collect();
+        assert!(read(&with_token).unwrap().is_some());
+        // A service SID is VA and 32 hexadecimal digits.
+        for wrong in ["VA123", "MG00000000000000000000000000000001", "Yuppers.app"] {
+            let mut pairs = VERIFY.to_vec();
+            pairs[4].1 = wrong;
+            refused(
+                pairs,
+                "TWILIO_VERIFY_SERVICE_SID is not a Verify service SID",
+            );
+        }
+        // One service for both purposes would let a sign-in code confirm a
+        // deletion.
+        let mut pairs = VERIFY.to_vec();
+        pairs[5].1 = SIGN_IN_SERVICE;
+        refused(pairs, "must be two different Verify services");
     }
 
     #[test]
     fn the_channels_offered_are_the_ones_the_deployment_can_deliver() {
         use crate::auth::{SignInChannel::*, sign_in_channels};
-        const TWILIO: &[(&str, &str)] = &[
-            ("SMS_DELIVERY", "twilio"),
-            ("SMS_ACCOUNT_SID", ACCOUNT_SID),
-            ("SMS_API_KEY_SID", KEY_SID),
-            ("SMS_API_KEY_SECRET", "hunter2-sms"),
-            ("SMS_FROM", "+15550000000"),
-        ];
         let channels = |codes: &str, sms: &[(&str, &str)]| {
             let pairs = [SMTP, &[("CODE_DELIVERY", codes)], sms].concat();
             sign_in_channels(code_sender(&lookup(&table(&pairs))).unwrap().as_ref())
         };
-        for sms in [&[][..], &[("SMS_DELIVERY", "off")]] {
-            // Codes by email, and nothing to send a text message with: what
-            // a deployment has before it buys SMS.
+        for sms in [
+            &[][..],
+            &[("SMS_CODE_DELIVERY", "off")],
+            // Agreement updates send no codes.
+            &[("SMS_DELIVERY", "log")],
+            TWILIO,
+        ] {
+            // Codes by email, and nothing to send a code by text with: what
+            // a deployment has before it buys Verify.
             assert_eq!(channels("smtp", sms), [Email]);
             // The development log takes phone codes too.
             assert_eq!(channels("log", sms), [Email, Phone]);
         }
-        for sms in [&[("SMS_DELIVERY", "log")][..], TWILIO] {
+        for sms in [&[("SMS_CODE_DELIVERY", "log")][..], VERIFY] {
             assert_eq!(channels("smtp", sms), [Email, Phone]);
             assert_eq!(channels("log", sms), [Email, Phone]);
         }

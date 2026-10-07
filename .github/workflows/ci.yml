@@ -433,8 +433,10 @@ jobs:
           # address is raised out of the way (signInLimits in env.ts).
           SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: "1000000"
           # Texts written to the log, so agreement updates are offered and
-          # read back (textMessages in env.ts).
+          # read back, and codes for phone numbers too (textMessages in
+          # env.ts).
           SMS_DELIVERY: log
+          SMS_CODE_DELIVERY: log
           SMS_MAX_PER_HOUR: "1000000"
           SMS_MAX_PER_PREFIX_PER_HOUR: "1000000"
         run: |

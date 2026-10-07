@@ -122,7 +122,7 @@ pub struct DeleteAccount {
         (status = 401, description = "Not signed in, or the code is wrong, expired, used up or was sent for something else", body = ErrorBody),
         (status = 422, description = "The account has no such identifier", body = ErrorBody),
         (status = 429, description = "Too many wrong deletion codes from this account today", body = ErrorBody),
-        (status = 503, description = "The account was busy and nothing was done; the code still works", body = ErrorBody)
+        (status = 503, description = "The account was busy and nothing was done, or a code sent by text could not be checked because the provider that made it did not answer; the code still works", body = ErrorBody)
     )
 )]
 pub async fn delete_account(
@@ -142,6 +142,7 @@ pub async fn delete_account(
         requester: Requester::DeleteAccount {
             account: session.account_id,
         },
+        verifier: state.code_sender.verifier(&identifier),
     };
     deletion::delete_account_with_code(&state.db, &settings.rules, session.account_id, &code)
         .await?;

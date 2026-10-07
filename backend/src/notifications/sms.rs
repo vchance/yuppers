@@ -1,18 +1,21 @@
-//! One-time codes by text message (DESIGN.md §8, §12): the SMS adapter at
-//! the edge.
+//! Text messages (DESIGN.md §8, §12): the SMS adapter at the edge.
 //!
-//! SMS carries one-time codes, and the agreement updates a person turns on
-//! (`super::sms_updates`, which the worker sends through the same
-//! [`SmsSender`]). A code for a phone number goes through an [`SmsSender`];
-//! a code for an email address goes on as before. [`CodeRouter`] makes that
-//! choice, so the rest of the service still sees one [`CodeSender`].
+//! The service's own texts are the agreement updates a person turns on,
+//! "Yuppers.app agreement updates" (`super::sms_updates`, which the worker
+//! sends through an [`SmsSender`]: Twilio's Messages API, from the number
+//! registered for that program). One-time codes for phone numbers are not
+//! among them: Twilio Verify makes, texts and checks those, from Twilio's own
+//! senders and in its own template (`super::verify`). [`CodeRouter`] sends a
+//! code for a phone number that way, or to the development log, and a code
+//! for an email address as before, so the rest of the service still sees one
+//! [`CodeSender`].
 //!
-//! Texts people send back reach the service through Twilio's webhook,
-//! whose requests are signed ([`twilio_signature_valid`]).
+//! Texts people send back to the updates' number reach the service through
+//! Twilio's webhook, whose requests are signed ([`twilio_signature_valid`]).
 //!
 //! Each message costs money, so it is kept to one segment in every language
 //! (`encoding` below, and the tests), and the service caps how many it sends
-//! per hour (`crate::auth`, `SMS_MAX_PER_HOUR`).
+//! per hour, codes and updates together (`crate::auth`, `SMS_MAX_PER_HOUR`).
 //!
 //! What this file never does: write a phone number in full, or a code
 //! outside the development delivery, to a log or an error.
@@ -24,8 +27,7 @@ use base64::Engine as _;
 use hyper::http::{HeaderName, HeaderValue, StatusCode, header};
 
 use super::smtp::Secret;
-use super::wording::Wording;
-use crate::auth::{CodeMessage, CodeSender, SendFuture, SignInChannel};
+use crate::auth::{CodeMessage, CodeSender, CodeVerifier, LogSender, SendFuture, SignInChannel};
 use crate::domain::identity::Identifier;
 use crate::outbound::Client;
 
@@ -136,6 +138,39 @@ pub enum TwilioCredential {
     ApiKey { sid: String, secret: Secret },
 }
 
+/// The headers of a form POST to any of Twilio's REST APIs (Messages,
+/// Verify): HTTP Basic with the [`TwilioCredential`], marked sensitive.
+pub(crate) fn twilio_headers(
+    account_sid: &str,
+    credential: &TwilioCredential,
+) -> Vec<(HeaderName, HeaderValue)> {
+    let (username, password) = match credential {
+        TwilioCredential::AuthToken(token) => (account_sid, token),
+        TwilioCredential::ApiKey { sid, secret } => (sid.as_str(), secret),
+    };
+    let credentials = base64::engine::general_purpose::STANDARD
+        .encode(format!("{username}:{}", password.expose()));
+    let mut authorization = HeaderValue::from_str(&format!("Basic {credentials}"))
+        .expect("base64 is a valid header value");
+    authorization.set_sensitive(true);
+    vec![
+        (header::AUTHORIZATION, authorization),
+        (
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/x-www-form-urlencoded"),
+        ),
+        (header::ACCEPT, HeaderValue::from_static("application/json")),
+    ]
+}
+
+/// Twilio's error code in an answer's JSON body, the only part of a refusal
+/// kept: its message often quotes the number.
+pub(crate) fn twilio_error_code(body: &[u8]) -> Option<u64> {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|body| body["code"].as_u64())
+}
+
 /// Sends through Twilio's Messages API: one POST per message, with a
 /// [`TwilioCredential`] as HTTP Basic credentials. Other providers' APIs are
 /// much the same shape and would be another [`SmsSender`].
@@ -174,23 +209,7 @@ impl TwilioSmsSender {
     }
 
     fn headers(&self) -> Vec<(HeaderName, HeaderValue)> {
-        let (username, password) = match &self.credential {
-            TwilioCredential::AuthToken(token) => (self.account_sid.as_str(), token),
-            TwilioCredential::ApiKey { sid, secret } => (sid.as_str(), secret),
-        };
-        let credentials = base64::engine::general_purpose::STANDARD
-            .encode(format!("{username}:{}", password.expose()));
-        let mut authorization = HeaderValue::from_str(&format!("Basic {credentials}"))
-            .expect("base64 is a valid header value");
-        authorization.set_sensitive(true);
-        vec![
-            (header::AUTHORIZATION, authorization),
-            (
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-www-form-urlencoded"),
-            ),
-            (header::ACCEPT, HeaderValue::from_static("application/json")),
-        ]
+        twilio_headers(&self.account_sid, &self.credential)
     }
 
     /// The form Twilio takes: who to, from what, and the text.
@@ -219,9 +238,7 @@ impl SmsSender for TwilioSmsSender {
             }
             // Twilio's message often quotes the number ("The 'To' number
             // +1555... is not valid"), so only its error code is kept.
-            let code = serde_json::from_slice::<serde_json::Value>(&answer.body)
-                .ok()
-                .and_then(|body| body["code"].as_u64());
+            let code = twilio_error_code(&answer.body);
             let status = answer.status.as_u16();
             match code {
                 Some(code) => anyhow::bail!(
@@ -288,40 +305,43 @@ pub fn twilio_signature_valid(
 
 // ---- Choosing the channel ---------------------------------------------------
 
-/// Sends a code for a phone number by SMS, and any other code the way it
-/// went before (`CODE_DELIVERY`).
+/// How one-time codes reach phone numbers (`SMS_CODE_DELIVERY`).
+#[derive(Clone)]
+pub enum PhoneCodes {
+    /// Development delivery: the service makes the code and writes it to
+    /// the log, the number masked ([`LogSender`]). Counted as a text would
+    /// be, so development meets every rule a real text does.
+    Log,
+    /// Twilio Verify makes the code, texts it in its own template from its
+    /// own senders, and checks it (`super::verify`).
+    Verify(Arc<dyn CodeVerifier>),
+}
+
+/// Sends a code for a phone number the way `SMS_CODE_DELIVERY` says
+/// ([`PhoneCodes`]), and any other code the way it went before
+/// (`CODE_DELIVERY`). A code for a phone number is counted as a text
+/// message, against the service's hourly caps, whichever way it goes.
 pub struct CodeRouter {
     email: Arc<dyn CodeSender>,
-    sms: Arc<dyn SmsSender>,
-    wording: Wording,
+    phone: PhoneCodes,
 }
 
 impl CodeRouter {
-    pub fn new(email: Arc<dyn CodeSender>, sms: Arc<dyn SmsSender>, wording: Wording) -> Self {
-        Self {
-            email,
-            sms,
-            wording,
-        }
+    pub fn new(email: Arc<dyn CodeSender>, phone: PhoneCodes) -> Self {
+        Self { email, phone }
     }
 }
 
 impl CodeSender for CodeRouter {
     fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a> {
         Box::pin(async move {
-            match message.to {
-                Identifier::Phone(number) => {
-                    let text =
-                        self.wording
-                            .code_sms(message.language, message.reason, message.code);
-                    self.sms
-                        .send(Sms {
-                            to: number,
-                            text: &text,
-                        })
-                        .await
+            match (message.to, &self.phone) {
+                (Identifier::Email(_), _) => self.email.send(message).await,
+                (Identifier::Phone(_), PhoneCodes::Log) => LogSender.send(message).await,
+                // `crate::auth::request_code` has Verify make the code.
+                (Identifier::Phone(_), PhoneCodes::Verify(_)) => {
+                    anyhow::bail!("a code for a phone number is made and sent by Twilio Verify")
                 }
-                Identifier::Email(_) => self.email.send(message).await,
             }
         })
     }
@@ -340,13 +360,18 @@ impl CodeSender for CodeRouter {
     fn email_sender(&self) -> Option<String> {
         self.email.email_sender()
     }
+
+    fn verifier(&self, to: &Identifier) -> Option<&dyn CodeVerifier> {
+        match (to, &self.phone) {
+            (Identifier::Phone(_), PhoneCodes::Verify(verifier)) => Some(verifier.as_ref()),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::code_consent::CodePurpose;
-    use crate::languages;
 
     #[test]
     fn plain_text_is_gsm_and_an_accent_outside_it_is_ucs2() {
@@ -362,98 +387,6 @@ mod tests {
         assert!(!Encoding::Gsm7 { septets: 161 }.fits_one_segment());
         assert!(Encoding::Ucs2 { units: 70 }.fits_one_segment());
         assert!(!Encoding::Ucs2 { units: 71 }.fits_one_segment());
-    }
-
-    const REASONS: [CodePurpose; 3] = [
-        CodePurpose::SignIn,
-        CodePurpose::DeleteAccount,
-        CodePurpose::VerifyNumber,
-    ];
-
-    #[test]
-    fn every_code_message_fits_one_segment_in_every_language() {
-        let wording = Wording::embedded().unwrap();
-        for language in languages::supported() {
-            let texts = REASONS.map(|reason| wording.code_sms(language, reason, "123456"));
-            for (reason, text) in REASONS.iter().zip(&texts) {
-                let encoding = encoding(text);
-                assert!(
-                    encoding.fits_one_segment(),
-                    "{language} {}: {encoding:?} for {text:?}",
-                    reason.as_str()
-                );
-                // The program's name first, as in every text of ours.
-                assert!(text.starts_with("Yuppers.app: "), "{language}: {text:?}");
-                assert!(text.contains("123456"), "{language}: {text:?}");
-                assert!(!text.contains('{') && !text.contains('}'), "{text:?}");
-            }
-            // Each says what its code is for.
-            let [sign_in, delete, verify] = &texts;
-            assert!(
-                sign_in != delete && delete != verify && sign_in != verify,
-                "{language}: {texts:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_code_messages_read_as_written_and_are_sent_as_expected() {
-        let wording = Wording::embedded().unwrap();
-        let cases = [
-            (
-                "en",
-                CodePurpose::SignIn,
-                "Yuppers.app: 123456 is your sign-in code. Do not share it with anyone.",
-                Encoding::Gsm7 { septets: 70 },
-            ),
-            (
-                "en",
-                CodePurpose::DeleteAccount,
-                "Yuppers.app: 123456 is your code to delete your account. Do not share it with anyone.",
-                Encoding::Gsm7 { septets: 85 },
-            ),
-            (
-                "en",
-                CodePurpose::VerifyNumber,
-                "Yuppers.app: 123456 is your code to confirm this phone number. Do not share it with anyone.",
-                Encoding::Gsm7 { septets: 91 },
-            ),
-            // "código" is not in the GSM alphabet, so Spanish goes as UCS-2
-            // and must stay within 70.
-            (
-                "es",
-                CodePurpose::SignIn,
-                "Yuppers.app: 123456 es tu código para entrar. No se lo des a nadie.",
-                Encoding::Ucs2 { units: 67 },
-            ),
-            (
-                "es",
-                CodePurpose::DeleteAccount,
-                "Yuppers.app: 123456: código para eliminar tu cuenta. No lo compartas.",
-                Encoding::Ucs2 { units: 69 },
-            ),
-            (
-                "es",
-                CodePurpose::VerifyNumber,
-                "Yuppers.app: 123456: código para confirmar tu número. No lo compartas.",
-                Encoding::Ucs2 { units: 70 },
-            ),
-        ];
-        for (language, reason, text, sent_as) in cases {
-            let written = wording.code_sms(language, reason, "123456");
-            assert_eq!(written, text);
-            assert_eq!(encoding(&written), sent_as, "{written}");
-            assert!(sent_as.fits_one_segment(), "{written}");
-        }
-        // A regional tag gets its base language; an unknown one the default.
-        assert_eq!(
-            wording.code_sms("es-MX", CodePurpose::SignIn, "1"),
-            wording.code_sms("es", CodePurpose::SignIn, "1")
-        );
-        assert_eq!(
-            wording.code_sms("tlh", CodePurpose::VerifyNumber, "1"),
-            wording.code_sms(languages::default(), CodePurpose::VerifyNumber, "1")
-        );
     }
 
     #[test]

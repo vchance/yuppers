@@ -213,6 +213,11 @@ enum Done {
 /// trying again costs a guess like any other: only a code that matched is
 /// ever checked more than once.
 ///
+/// A code Twilio Verify made is put to it once, first
+/// (`auth::OfferedCode::consult_verifier`), which keeps an approved code's
+/// hash, so that every attempt, and a later try with the same code, checks
+/// it here as any other.
+///
 /// Everything happens in one transaction, so an account is never half
 /// deleted.
 pub async fn delete_account_with_code(
@@ -221,6 +226,7 @@ pub async fn delete_account_with_code(
     account: Uuid,
     code: &OfferedCode<'_>,
 ) -> Result<(), ApiError> {
+    code.consult_verifier(db).await?;
     retry(db, rules, account, Request::Code(code)).await?;
     Ok(())
 }

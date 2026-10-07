@@ -185,6 +185,10 @@ Consent to a one-time code by text, "Yuppers.app sign-in codes" (README, "Signin
 
 Not `sms_consent` (0020): an opt-in there is always a person and an agreement, and its number always kept, and its purge keeps what a subscription rests on; a code is asked for without an agreement, often without an account, for a number nobody has yet shown to be theirs. Fitting these rows there would loosen every check of 0020. `backend/tests/schema.rs` checks the checks and grants; `backend/tests/auth.rs` and `backend/tests/deletion.rs` the refusals and the records through the API.
 
+## 0022_verify_codes
+
+One-time codes for phone numbers through Twilio Verify (README, "Signing in"; `backend/src/notifications/verify.rs`): Twilio makes, texts and checks the code, so the service never sees it and has no hash to keep. `one_time_code` gains `checked_by`, `SERVICE` for every code the service makes (email, and the development log) and `TWILIO_VERIFY` for the others, and `code_hash` may be empty, but only for `TWILIO_VERIFY`. Such a row records that a code was asked for, for which identifier and purpose, when and until when, so the hourly limits, the live codes, the wrong guesses per code and per day and the purpose binding hold as before. Once Twilio approves a code offered back, its keyed hash is written to the row, so that the same code is recognised again until it is used or expires: Twilio forgets an approved verification, and a deletion that found the account busy is retried with the same code. Rows already stored are `SERVICE`, as they were. The application role's grants on the table are unchanged. `backend/tests/verify.rs` checks it through the API, against a stand-in for Verify.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

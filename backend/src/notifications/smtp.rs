@@ -3,8 +3,8 @@
 //! Nearly every email provider offers SMTP, so a deployment supplies a host
 //! and credentials, not code. One sender serves both notifications
 //! ([`EmailSender`]) and one-time codes ([`CodeSender`]). It sends codes to
-//! email addresses only; a code for a phone number goes by SMS when
-//! `SMS_DELIVERY` is on (`super::sms::CodeRouter`), and is refused here
+//! email addresses only; a code for a phone number goes by Twilio Verify when
+//! `SMS_CODE_DELIVERY` is on (`super::sms::CodeRouter`), and is refused here
 //! when it is off.
 //!
 //! What this file never does: write the password anywhere, or put anything in

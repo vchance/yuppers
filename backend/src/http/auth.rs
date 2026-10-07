@@ -141,7 +141,8 @@ pub struct SessionCreated {
         (status = 401, description = "The code is wrong, expired or used up", body = ErrorBody),
         (status = 403, description = "The account is suspended", body = ErrorBody),
         (status = 422, description = "Invalid request", body = ErrorBody),
-        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
+        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody),
+        (status = 503, description = "A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted", body = ErrorBody)
     )
 )]
 pub async fn create_session(
@@ -162,6 +163,7 @@ pub async fn create_session(
         &state.db,
         &settings.app_secret,
         &settings.auth,
+        state.code_sender.as_ref(),
         &identifier,
         &body.code,
         Requester::SignIn { address },

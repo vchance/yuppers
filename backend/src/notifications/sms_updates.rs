@@ -1,4 +1,6 @@
-//! "Yuppers.app agreement updates": the second SMS program (DESIGN.md §12).
+//! "Yuppers.app agreement updates": the one SMS program (DESIGN.md §12),
+//! sent through Twilio's Messages API under its own campaign. One-time codes
+//! are not part of it: Twilio Verify sends them (`super::verify`).
 //!
 //! **Opting in.** A party to an agreement may turn on text updates for it,
 //! by ticking a box that shows the consent wording the terms quote word for

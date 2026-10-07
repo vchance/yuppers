@@ -160,7 +160,8 @@ pub struct AddIdentifier {
         (status = 401, description = "Not signed in, or the code is wrong", body = ErrorBody),
         (status = 409, description = "The identifier belongs to another account", body = ErrorBody),
         (status = 422, description = "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
-        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
+        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody),
+        (status = 503, description = "A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted", body = ErrorBody)
     )
 )]
 pub async fn add_identifier(
@@ -178,6 +179,7 @@ pub async fn add_identifier(
         &state.db,
         &settings.app_secret,
         &settings.auth,
+        state.code_sender.as_ref(),
         &identifier,
         &body.code,
         Requester::SignIn { address },

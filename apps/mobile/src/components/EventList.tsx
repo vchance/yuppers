@@ -3,7 +3,7 @@ import { eventMessage, noteKind, type RecordEvent } from '@yuppers/shared';
 import { StyleSheet, View } from 'react-native';
 
 import { useI18n } from '../lib/context';
-import { space, useColors } from '../lib/theme';
+import { radius, space, useColors, type Colors } from '../lib/theme';
 import { Hint, Label, P, Written } from './ui';
 
 type Schemas = components['schemas'];
@@ -45,7 +45,7 @@ export function EventList({ events, parties, reader, when, money }: Props) {
             key={event.sequence}
             role="listitem"
             accessible
-            style={[styles.entry, { borderTopColor: colors.border }]}>
+            style={[styles.entry, sideOf(event, reader, colors)]}>
             <Hint>{when(event.at)}</Hint>
             <P>{fmt(message, values)}</P>
             {event.contribution?.description ? (
@@ -64,7 +64,27 @@ export function EventList({ events, parties, reader, when, money }: Props) {
   );
 }
 
+/**
+ * Where an entry sits: what the reader did at the end in their yellow, what
+ * the other party did at the start in their blue, what happened to both (and
+ * every entry, where nobody reads as "you") across the middle. The sentence
+ * always says who; the colour only repeats it. Something done from the
+ * invited party's place by someone since removed from it was done by neither
+ * party as they are now.
+ */
+function sideOf(event: RecordEvent, reader: Schemas['Slot'] | null, colors: Colors) {
+  if (reader === null || event.actor === 'SYSTEM' || event.by_removed_claimant) {
+    return { backgroundColor: colors.surface, borderColor: colors.divider, borderWidth: 1 };
+  }
+  return event.actor === reader
+    ? [styles.side, styles.yours, { backgroundColor: colors.warningSurface, borderColor: colors.partyYou }]
+    : [styles.side, styles.theirs, { backgroundColor: colors.noticeSurface, borderColor: colors.partyThem }];
+}
+
 const styles = StyleSheet.create({
-  list: { gap: space.m },
-  entry: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.m, gap: space.s },
+  list: { gap: space.s },
+  entry: { borderRadius: radius.m, padding: space.m, gap: space.xs },
+  side: { borderWidth: 2, maxWidth: '88%' },
+  yours: { alignSelf: 'flex-end', borderBottomEndRadius: 6 },
+  theirs: { alignSelf: 'flex-start', borderBottomStartRadius: 6 },
 });

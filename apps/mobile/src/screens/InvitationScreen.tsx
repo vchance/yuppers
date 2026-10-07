@@ -9,6 +9,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
+import { YupCard } from '../components/Callouts';
 import { TermsView } from '../components/TermsView';
 import {
   Actions,
@@ -271,6 +272,10 @@ function Proposal({ token, onAnother }: { token: string; onAnother(): void }) {
 
       {preview && (
         <>
+          <YupCard
+            from={sender}
+            to={preview.revision.terms.party_b_name || wording.party.other}
+          />
           {/* Whoever holds a link that names nobody can open it, so its sender
               confirms them before they can do more than sign (DESIGN.md §8). */}
           <P>

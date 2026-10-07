@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useI18n } from '../lib/context';
-import { space, useColors } from '../lib/theme';
+import { fonts, space, useColors } from '../lib/theme';
 import { Card, Heading, Hint, Lines, P, Written } from './ui';
 
 /**
@@ -40,7 +40,7 @@ export function RecordSummary({ record }: { record: RecordDocument }) {
                   key={item.id}
                   role="listitem"
                   accessible
-                  style={[styles.item, { borderTopColor: colors.border }]}>
+                  style={[styles.item, { borderTopColor: colors.divider }]}>
                   <Written>{item.description}</Written>
                   {item.details.map((detail) => (
                     <P key={detail}>{detail}</P>
@@ -70,5 +70,5 @@ const styles = StyleSheet.create({
   side: { gap: space.s },
   list: { gap: space.m },
   item: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.m, gap: space.xs },
-  outcome: { fontWeight: '600' },
+  outcome: { fontFamily: fonts.textBold },
 });

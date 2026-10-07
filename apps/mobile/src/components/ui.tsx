@@ -20,11 +20,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { announce, focusOn, notePressed } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
-import { space, TOUCH_TARGET, type, useColors } from '../lib/theme';
+import { fonts, radius, space, TOUCH_TARGET, type, useColors } from '../lib/theme';
 
 /*
  * The app's few building blocks: React Native's own components with the
- * system font and the platform's controls, and no UI kit. Each carries its
+ * app's two fonts (`lib/theme.ts`) and the platform's controls, and no UI kit. Each carries its
  * accessibility role, label and state, and nothing interactive is smaller
  * than a comfortable touch target. Text follows the size the person has
  * chosen for their device, with no upper limit, and every row wraps.
@@ -93,7 +93,16 @@ export type HeadingLevel = 1 | 2 | 3 | 4;
  * of iOS and Android do not use but the browser harness turns into `h1` to
  * `h4`, so the harness shows the same outline a browser would.
  */
-export function Heading({ children, level = 1 }: { children: string; level?: HeadingLevel }) {
+export function Heading({
+  children,
+  level = 1,
+  color,
+}: {
+  children: string;
+  level?: HeadingLevel;
+  /** On a party's colour, that colour's own ink. */
+  color?: string;
+}) {
   const colors = useColors();
   const { language } = useI18n();
   const size = level === 1 ? type.title : level === 2 ? type.heading : type.subheading;
@@ -102,7 +111,7 @@ export function Heading({ children, level = 1 }: { children: string; level?: Hea
       accessibilityRole="header"
       accessibilityLanguage={language}
       aria-level={level}
-      style={[size, styles.heading, { color: colors.text }]}>
+      style={[size, styles.heading, { color: color ?? colors.text }]}>
       {children}
     </Text>
   );
@@ -194,9 +203,9 @@ export function Button({
         link
           ? styles.buttonLink
           : {
-              borderColor: primary ? colors.primary : colors.border,
-              backgroundColor: primary ? colors.primary : colors.background,
-              borderWidth: 1,
+              borderColor: primary ? colors.primary : colors.text,
+              backgroundColor: primary ? colors.primary : colors.surface,
+              borderWidth: 2,
             },
         (pressed || disabled) && styles.dimmed,
       ]}>
@@ -204,7 +213,8 @@ export function Button({
         style={[
           type.body,
           styles.buttonText,
-          { color: primary ? colors.onPrimary : link ? colors.primary : colors.text },
+          primary && styles.buttonTextPrimary,
+          { color: primary ? colors.onPrimary : link ? colors.link : colors.text },
           link && styles.underlined,
         ]}>
         {label}
@@ -239,12 +249,16 @@ function Note({ children, tone = 'info', spoken }: NoteProps) {
       style={[
         styles.note,
         {
-          borderStartColor: error ? colors.danger : colors.primary,
+          borderStartColor: error
+            ? colors.danger
+            : tone === 'warning'
+              ? colors.partyYou
+              : colors.border,
           backgroundColor: error
             ? colors.dangerSurface
             : tone === 'warning'
               ? colors.warningSurface
-              : colors.noticeSurface,
+              : colors.surfaceRaised,
         },
       ]}>
       {typeof children === 'string' ? <P>{children}</P> : children}
@@ -392,7 +406,7 @@ export function TextField({
           {
             color: colors.text,
             borderColor: error ? colors.danger : colors.border,
-            backgroundColor: colors.background,
+            backgroundColor: colors.surface,
           },
           disabled && styles.dimmed,
         ]}
@@ -513,7 +527,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
   const colors = useColors();
   return (
     <View
-      style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }, style]}>
+      style={[styles.card, { borderColor: colors.divider, backgroundColor: colors.surface }, style]}>
       {children}
     </View>
   );
@@ -533,9 +547,7 @@ export function Tag({ children, alert }: { children: string; alert?: boolean }) 
         {
           color: alert ? colors.danger : colors.text,
           borderColor: alert ? colors.danger : colors.border,
-          backgroundColor: colors.background,
         },
-        alert && styles.strong,
       ]}>
       {children}
     </Text>
@@ -570,7 +582,7 @@ export function Panel({
   return (
     <View
       accessibilityLabel={title}
-      style={[styles.panel, { borderColor: colors.primary, backgroundColor: colors.background }]}>
+      style={[styles.panel, { borderColor: colors.divider, backgroundColor: colors.surfaceRaised }]}>
       <Text
         ref={heading}
         accessibilityRole="header"
@@ -611,7 +623,7 @@ const styles = StyleSheet.create({
   // Readable line length on a tablet; the full width on a phone.
   column: { width: '100%', maxWidth: 640, alignSelf: 'center', gap: space.l },
   heading: { marginTop: space.xs },
-  label: { fontWeight: '600' },
+  label: { fontFamily: fonts.textBold },
   button: {
     minHeight: TOUCH_TARGET,
     minWidth: TOUCH_TARGET,
@@ -620,22 +632,23 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     paddingVertical: space.m,
     paddingHorizontal: space.l,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonLink: { paddingHorizontal: space.xs },
-  buttonText: { fontWeight: '600', textAlign: 'center' },
+  buttonText: { fontFamily: fonts.textBold, textAlign: 'center' },
+  buttonTextPrimary: { fontFamily: fonts.display, fontSize: 18 },
   underlined: { textDecorationLine: 'underline' },
   dimmed: { opacity: 0.5 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.m, alignItems: 'center' },
-  note: { borderStartWidth: 4, borderRadius: 4, padding: space.m, gap: space.s },
+  note: { borderStartWidth: 4, borderRadius: radius.m, padding: space.m, gap: space.s },
   field: { gap: space.s },
-  fieldError: { fontWeight: '600' },
+  fieldError: { fontFamily: fonts.textBold },
   input: {
     minHeight: TOUCH_TARGET,
-    borderWidth: 1,
-    borderRadius: 8,
+    borderWidth: 2,
+    borderRadius: radius.m,
     paddingVertical: space.m,
     paddingHorizontal: space.m,
   },
@@ -660,17 +673,17 @@ const styles = StyleSheet.create({
   radioDot: { width: 12, height: 12, borderRadius: 6 },
   check: { minHeight: TOUCH_TARGET, flexDirection: 'row', alignItems: 'center', gap: space.m },
   checkLabel: { flex: 1 },
-  card: { borderWidth: 1, borderRadius: 12, padding: space.l, gap: space.m },
+  card: { borderWidth: 1, borderRadius: radius.l, padding: space.l, gap: space.m },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s },
   tag: {
-    borderWidth: 1,
-    borderRadius: 6,
+    fontFamily: fonts.textBold,
+    borderWidth: 2,
+    borderRadius: radius.s,
     paddingVertical: space.xs,
     paddingHorizontal: space.s,
     overflow: 'hidden',
   },
-  strong: { fontWeight: '700' },
-  panel: { borderWidth: 2, borderRadius: 12, padding: space.l, gap: space.m },
+  panel: { borderWidth: 2, borderRadius: radius.m, padding: space.l, gap: space.m },
   written: { borderStartWidth: 3, paddingStart: space.m },
   lines: { gap: space.xs },
 });

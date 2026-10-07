@@ -14,7 +14,7 @@ import { Heading, Hint, Label, P, Tag, Tags, Written } from '../components/ui';
 import { useI18n } from '../lib/context';
 import { deviceTimezone } from '../lib/time-zone';
 import { api } from '../lib/session';
-import { space, useColors } from '../lib/theme';
+import { fonts, space, useColors } from '../lib/theme';
 
 interface Props {
   exchange: ExchangeView;
@@ -52,7 +52,7 @@ export function ProposalChanges({ exchange, revision }: Props) {
   const anyItemChanged = changes.items.some((item) => item.kind !== 'UNCHANGED');
 
   return (
-    <View style={[styles.section, { borderTopColor: colors.border }]}>
+    <View style={[styles.section, { borderTopColor: colors.divider }]}>
       <Heading level={3}>{w.heading}</Heading>
       <Hint>{fmt(amendment ? w.againstInForce : w.againstPrevious, { number: base.sequence })}</Hint>
       {changes.names.map((name) => (
@@ -66,7 +66,7 @@ export function ProposalChanges({ exchange, revision }: Props) {
             <View
               key={item.id}
               role="listitem"
-              style={[styles.item, { borderTopColor: colors.border }]}>
+              style={[styles.item, { borderTopColor: colors.divider }]}>
               <Tags>
                 <Tag>{w.kinds[item.kind]}</Tag>
               </Tags>
@@ -120,5 +120,5 @@ const styles = StyleSheet.create({
   list: { gap: space.m },
   item: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.m, gap: space.xs },
   change: { gap: space.xs },
-  status: { fontWeight: '600' },
+  status: { fontFamily: fonts.textBold },
 });

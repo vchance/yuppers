@@ -16,6 +16,7 @@ import {
 } from '@yuppers/shared';
 import { useState } from 'react';
 
+import { StatusChip } from '../components/StatusChip';
 import { Actions, Button, Failure, Hint, Notice, P, Panel, TextField } from '../components/ui';
 import { useI18n } from '../lib/context';
 
@@ -57,7 +58,7 @@ export function Fulfillment({ contribution, status, since, you, otherName, activ
 
   return (
     <>
-      <P style={{ fontWeight: '600' }}>{statusWording(wording, status, money)}</P>
+      <StatusChip status={status}>{statusWording(wording, status, money)}</StatusChip>
       {stuck && since ? (
         <Notice quiet>
           {fmt(money ? w.waitingLongMoney : w.waitingLong, { name: otherName, date: moment(since) })}

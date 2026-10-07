@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { useI18n } from '../lib/context';
 import { deviceTimezone } from '../lib/time-zone';
-import { space, useColors } from '../lib/theme';
+import { radius, space, useColors } from '../lib/theme';
 import { HelpLink } from './HelpLink';
 import { Heading, Hint, Label, P, Tag, Tags, Written } from './ui';
 
@@ -40,6 +40,9 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
   // Named beside each due date when the reader's device keeps another zone.
   const zone = useMemo(() => dueDateZone(timezone, deviceTimezone()), [timezone]);
   const nameOf = (slot: Slot) => (slot === 'A' ? terms.party_a_name : terms.party_b_name);
+  // Whose side is drawn in the reader's colour. Someone who has not joined
+  // yet is reading an invitation to take the invited party's place.
+  const coloured = you ?? 'B';
 
   function due(contribution: Contribution): string {
     const condition = contribution.due;
@@ -69,12 +72,20 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
 
       {(['A', 'B'] as const).map((slot) => {
         const provided = terms.contributions.filter((contribution) => contribution.from === slot);
+        // Each side in its party's colour, the reader's in yellow and the
+        // other party's in blue, headed by whose it is.
+        const ink = slot === coloured ? colors.onPartyYou : colors.onPartyThem;
         return (
-          <View key={slot} style={styles.terms}>
-            <Heading level={3}>
+          <View
+            key={slot}
+            style={[
+              styles.party,
+              { backgroundColor: slot === coloured ? colors.partyYou : colors.partyThem },
+            ]}>
+            <Heading level={3} color={ink}>
               {slot === you ? w.youProvide : fmt(w.otherProvides, { name: nameOf(slot) })}
             </Heading>
-            {provided.length === 0 && <P>{w.nothing}</P>}
+            {provided.length === 0 && <P style={{ color: ink }}>{w.nothing}</P>}
             {provided.map((contribution) => {
               const status = statuses?.get(contribution.id);
               const overdue =
@@ -84,7 +95,7 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
               return (
                 <View
                   key={contribution.id}
-                  style={[styles.contribution, { borderColor: colors.border }]}>
+                  style={[styles.contribution, { backgroundColor: colors.surface }]}>
                   <Tags>
                     <Tag>{wording.contributionTypes[contribution.type]}</Tag>
                     <Tag>{contribution.required ? w.required : w.optional}</Tag>
@@ -113,10 +124,10 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
                   )}
                   <P>{due(contribution)}</P>
                   {contribution.completion_criteria ? (
-                    <>
+                    <View style={[styles.criteria, { backgroundColor: colors.noticeSurface }]}>
                       <Label>{w.criteriaLabel}</Label>
                       <Written>{contribution.completion_criteria}</Written>
-                    </>
+                    </View>
                   ) : null}
                   {footer?.(contribution)}
                 </View>
@@ -135,5 +146,7 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
 
 const styles = StyleSheet.create({
   terms: { gap: space.m },
-  contribution: { borderTopWidth: 1, paddingTop: space.m, gap: space.s },
+  party: { borderRadius: radius.l, padding: space.m, gap: space.s },
+  contribution: { borderRadius: radius.m, padding: space.m, gap: space.s },
+  criteria: { borderRadius: radius.m, padding: space.m, gap: space.xs },
 });

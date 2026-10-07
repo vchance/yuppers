@@ -61,7 +61,7 @@ export function BlockedPeople() {
                     style={[
                       type.body,
                       styles.name,
-                      { color: colors.primary, borderStartColor: colors.border },
+                      { color: colors.link, borderStartColor: colors.border },
                     ]}>
                     {nameOf(person)}
                   </Text>

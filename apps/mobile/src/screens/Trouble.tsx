@@ -145,7 +145,7 @@ function Way({ offer, otherName, actions, onRevise }: WayProps) {
   const means = fmt(wording.trouble.means[offer.way], { name: otherName });
 
   return (
-    <View style={[styles.way, { borderTopColor: colors.border }]}>
+    <View style={[styles.way, { borderTopColor: colors.divider }]}>
       <P>{means}</P>
       {offer.items.map((item) => (
         <View key={item.id} style={styles.item}>

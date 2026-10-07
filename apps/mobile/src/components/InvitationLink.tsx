@@ -123,5 +123,5 @@ export function InvitationLink({ token }: { token: string }) {
 
 const styles = StyleSheet.create({
   block: { gap: space.m },
-  link: { borderWidth: 1, borderRadius: 8, padding: space.m, writingDirection: 'ltr' },
+  link: { borderWidth: 2, borderRadius: 16, padding: space.m, writingDirection: 'ltr' },
 });

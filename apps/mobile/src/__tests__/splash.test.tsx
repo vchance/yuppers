@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
 
 import { SPLASH_LIMIT_MS, useSplashUntil } from '../lib/splash';
+import { colorsFor } from '../lib/theme';
 import { TOKEN, ana, fakeService, type FakeService } from './fake-service';
 
 /*
@@ -72,7 +73,7 @@ test('the launch screen stays until the app knows who is signed in, then the scr
 test('the window behind the screens takes the app background', async () => {
   await renderRouter('src/app', { initialUrl: '/' });
   await screen.findByText(w.signIn.intro);
-  expect(SystemUI.setBackgroundColorAsync).toHaveBeenCalledWith('#ffffff');
+  expect(SystemUI.setBackgroundColorAsync).toHaveBeenCalledWith(colorsFor('light').background);
   expect(hide).toHaveBeenCalled();
 });
 

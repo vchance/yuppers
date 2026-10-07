@@ -1,3 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <g transform="translate(0 0) scale(1)"><path d="M18 4H46A14 14 0 0 1 60 18V36A14 14 0 0 1 46 50H27L14 60L18 50A14 14 0 0 1 4 36V18A14 14 0 0 1 18 4Z" fill="#0b57b0"/><path d="M22 15L32 27L42 15M32 27V39" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #111327 }
+      .you { fill: #F2C94C }
+      .them { fill: #7B93FF }
+      .agree { fill: #3FCB85 }
+    }
+  </style>
+  <rect class="tile" width="64" height="64" rx="14" fill="#1A1B2E"/>
+  <g transform="translate(5 12.714285714285715) scale(0.48214285714285715)">
+    <circle class="you" cx="40" cy="40" r="34" fill="#FFD23F"/>
+    <circle class="them" cx="72" cy="40" r="34" fill="#2F4BE0"/>
+    <path class="agree" d="M56 10A34 34 0 0 1 56 70A34 34 0 0 1 56 10Z" fill="#1B9A5C"/>
+  </g>
 </svg>

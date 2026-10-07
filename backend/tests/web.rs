@@ -239,12 +239,14 @@ async fn the_privacy_policy_and_the_terms_are_pages_of_their_own_in_each_languag
         assert!(page.header(CONTENT_TYPE).starts_with("text/html"), "{path}");
         assert_eq!(page.body, body, "{path}");
         // A page like any other: checked each time, and under the same
-        // policy, which allows no inline script or style.
+        // policy, which allows no inline style and only the one inline
+        // script it names by its hash (apps/web/build/theme-script.ts).
         assert_eq!(page.header(CACHE_CONTROL), "no-cache", "{path}");
         assert_eq!(
             page.header(CONTENT_SECURITY_POLICY),
             "default-src 'self'; img-src 'self' data:; object-src 'none'; \
-             base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+             base-uri 'none'; form-action 'self'; frame-ancestors 'none'; \
+             script-src 'self' 'sha256-KxR9MhTq1F37YaceB87TcfvvGJe+U71nuBxrnuq+JCQ='",
             "{path}"
         );
         assert_eq!(page.header(X_CONTENT_TYPE_OPTIONS), "nosniff", "{path}");
@@ -392,7 +394,8 @@ async fn every_response_carries_the_headers_a_signing_page_needs() {
         assert_eq!(
             reply.header(CONTENT_SECURITY_POLICY),
             "default-src 'self'; img-src 'self' data:; object-src 'none'; \
-             base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+             base-uri 'none'; form-action 'self'; frame-ancestors 'none'; \
+             script-src 'self' 'sha256-KxR9MhTq1F37YaceB87TcfvvGJe+U71nuBxrnuq+JCQ='",
             "{path}"
         );
         assert_eq!(reply.header(X_CONTENT_TYPE_OPTIONS), "nosniff", "{path}");

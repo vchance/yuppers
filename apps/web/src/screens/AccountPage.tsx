@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useI18n, useSession } from '../app/context'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
+import { Appearance } from '../components/Appearance'
 import { BuildVersion } from '../components/BuildVersion'
 import { LegalLink } from '../components/LegalLink'
 import { PageHeading } from '../components/ui'
@@ -11,7 +12,10 @@ import { BlockedPeople } from './BlockedPeople'
 import DeleteAccount from './DeleteAccount'
 import { ProfileForm } from './ProfileForm'
 
-/** The account: what it is verified with, its name and language, and signing out. */
+/**
+ * The account: what it is verified with, its name and language, this
+ * device's appearance, and signing out.
+ */
 export default function AccountPage() {
   const { wording } = useI18n()
   const { account, setAccount } = useSession()
@@ -50,6 +54,7 @@ export default function AccountPage() {
         )}
       </dl>
       <ProfileForm account={account} first={false} />
+      <Appearance />
       <BlockedPeople />
       <hr />
       <div className="actions">

@@ -20,6 +20,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { EventList } from '../components/EventList';
 import { HelpLink } from '../components/HelpLink';
 import { RecordSummary } from '../components/RecordSummary';
+import { StatusChip } from '../components/StatusChip';
 import { TermsView } from '../components/TermsView';
 import {
   Actions,
@@ -40,7 +41,7 @@ import { useI18n } from '../lib/context';
 import { recordHtml } from '../lib/record-html';
 import { recordSharer } from '../lib/record-sharer';
 import { api } from '../lib/session';
-import { space, type, useColors } from '../lib/theme';
+import { fonts, space, type, useColors } from '../lib/theme';
 import { VoidSignature } from './Claimant';
 
 /**
@@ -230,9 +231,9 @@ function Record({ record, failure, reload }: RecordProps) {
               <Item key={contribution.id}>
                 <Written>{contribution.description}</Written>
                 <P>{fmt(w.itemFrom, { name: parties[contribution.from] })}</P>
-                <P style={styles.status}>
+                <StatusChip status={contribution.status}>
                   {statusWording(wording, contribution.status, money.has(contribution.id))}
-                </P>
+                </StatusChip>
                 {contribution.since ? (
                   <Hint>{fmt(w.since, { date: when(contribution.since) })}</Hint>
                 ) : null}
@@ -276,7 +277,7 @@ function Record({ record, failure, reload }: RecordProps) {
 function Item({ children }: { children: ReactNode }) {
   const colors = useColors();
   return (
-    <View role="listitem" accessible style={[styles.item, { borderTopColor: colors.border }]}>
+    <View role="listitem" accessible style={[styles.item, { borderTopColor: colors.divider }]}>
       {children}
     </View>
   );
@@ -378,6 +379,6 @@ function Version({ revision, name, when }: VersionProps) {
 const styles = StyleSheet.create({
   list: { gap: space.m },
   item: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.m, gap: space.xs },
-  status: { fontWeight: '600' },
+  status: { fontFamily: fonts.textBold },
   fingerprint: { fontVariant: ['tabular-nums'] },
 });

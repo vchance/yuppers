@@ -14,6 +14,7 @@ import {
 } from '../../../packages/shared/src/legal-text.ts'
 import { renderEntryPage } from './entry-pages.ts'
 import { legalPagePath, readLegalPages, withDocument } from './legal-pages.ts'
+import { THEME_SCRIPT } from './theme-script.ts'
 import { smsRequirements } from '../src/test/sms-requirements.ts'
 
 // Under jsdom, `import.meta.url` is not a file's; the directory still is.
@@ -116,9 +117,11 @@ describe('the static pages of the privacy policy and the terms', () => {
   test('the app still starts on them, and nothing is inline', () => {
     for (const [document, language] of cases) {
       const page = html(document, language)
-      // The same script and stylesheet as every page: the template's, untouched.
+      // The same script and stylesheet as every page: the template's, untouched,
+      // and the theme's, which the policy allows by its hash.
       expect(page).toContain('<script type="module" src="/src/main.tsx"></script>')
-      expect(page.match(/<script/g)).toHaveLength(1)
+      expect(page).toContain(`<script>${THEME_SCRIPT}</script>`)
+      expect(page.match(/<script/g)).toHaveLength(2)
       expect(page).not.toMatch(/<style|\sstyle=|\son[a-z]+=/i)
       expect(page).not.toMatch(/\{\{\w+\}\}/)
     }

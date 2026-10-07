@@ -20,6 +20,7 @@ import { paths } from '../app/routes'
 import { EventList } from '../components/EventList'
 import { HelpLink } from '../components/HelpLink'
 import { RecordSummary } from '../components/RecordSummary'
+import { StatusChip } from '../components/StatusChip'
 import { TermsView } from '../components/TermsView'
 import { Failure, PageHeading, WithName, Written } from '../components/ui'
 import { api } from '../lib/api'
@@ -176,7 +177,9 @@ function Record({ record }: { record: RecordDocument }) {
                 <Written>{contribution.description}</Written>
                 <p>{fmt(w.itemFrom, { name: parties[contribution.from] })}</p>
                 <p className="status">
-                  {statusWording(wording, contribution.status, money.has(contribution.id))}
+                  <StatusChip status={contribution.status}>
+                    {statusWording(wording, contribution.status, money.has(contribution.id))}
+                  </StatusChip>
                 </p>
                 {contribution.since && (
                   <p className="hint">{fmt(w.since, { date: when(contribution.since) })}</p>

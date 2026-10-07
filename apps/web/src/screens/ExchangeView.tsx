@@ -32,6 +32,7 @@ import { Link } from '../app/Link'
 import { paths } from '../app/routes'
 import { Consent } from '../components/Consent'
 import { InvitationFor, InvitationLink } from '../components/InvitationLink'
+import { Mark } from '../components/Mark'
 import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
@@ -218,7 +219,12 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       {inForce && (
         <section className="card" aria-labelledby="agreement-heading">
           <h2 id="agreement-heading">{w.agreementHeading}</h2>
-          <p>{w.agreementSigned}</p>
+          {/* Where the two meet it turns green: the one moment that moves,
+              settling straight as it appears (`.agreed` in index.css). */}
+          <div className="agreed">
+            <Mark check />
+            <p className="agreed-text">{w.agreementSigned}</p>
+          </div>
           {active && remaining > 0 && <p>{fmt(w.remaining, { count: remaining })}</p>}
           {active && <WalletButton exchange={exchange} />}
           <TermsView

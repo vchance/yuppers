@@ -24,10 +24,10 @@ export function DateField({ label, hint, value, onChange, error, disabled }: Dat
           minHeight: 48,
           fontSize: 17,
           padding: 12,
-          borderRadius: 8,
-          border: `1px solid ${error ? colors.danger : colors.border}`,
+          borderRadius: 16,
+          border: `2px solid ${error ? colors.danger : colors.border}`,
           color: colors.text,
-          backgroundColor: colors.background,
+          backgroundColor: colors.surface,
           alignSelf: 'flex-start',
         },
       })}

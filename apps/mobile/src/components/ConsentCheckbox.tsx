@@ -67,7 +67,7 @@ export function ConsentCheckbox({ wording, checked, onChange, disabled = false }
               accessibilityRole="link"
               accessibilityHint={words.help.inBrowser}
               onPress={() => openInBrowser(piece.url)}
-              style={[styles.link, { color: colors.primary }]}>
+              style={[styles.link, { color: colors.link }]}>
               {piece.url}
             </Text>
           ) : (

@@ -20,6 +20,7 @@ import {
 } from 'react'
 
 import { AccountDeleted } from '../components/AccountDeleted'
+import { FooterAppearance } from '../components/Appearance'
 import { LiveRegions } from '../components/LiveRegions'
 import { Failure, PageHeading } from '../components/ui'
 import { api, failureCode, onClientTooOld, onSignedOut, WEB_CLIENT } from '../lib/api'
@@ -308,6 +309,7 @@ function Shell({ outdated }: { outdated: boolean }) {
         >
           {wording.termsOfUse.link}
         </Link>
+        <FooterAppearance />
       </footer>
       <LiveRegions />
     </>

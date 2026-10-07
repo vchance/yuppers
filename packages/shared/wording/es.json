@@ -236,6 +236,13 @@
     "versionBuild": "Versión {version} (compilación {build})",
     "versionBuildCommit": "Versión {version} (compilación {build}, {commit})"
   },
+  "appearance": {
+    "heading": "Apariencia",
+    "system": "Sistema",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "hint": "Sistema sigue el ajuste de tu dispositivo."
+  },
   "deletion": {
     "heading": "Eliminar tu cuenta",
     "open": "Eliminar mi cuenta",

@@ -1,4 +1,5 @@
 import { directionOf } from '@yuppers/shared';
+import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, LocaleProvider, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -11,7 +12,7 @@ import { useReduceMotion } from '../lib/accessibility';
 import { installPluralRules } from '../lib/plural-rules';
 import { installNotificationHandling, syncDevice, useNotificationTaps } from '../lib/push';
 import { holdSplash, useSplashUntil, useWindowBackground } from '../lib/splash';
-import { colorsFor, useScheme } from '../lib/theme';
+import { colorsFor, FONT_FILES, fonts, useScheme } from '../lib/theme';
 
 // Before any wording is formatted: the engine lacks the plural rules it needs.
 installPluralRules();
@@ -21,6 +22,11 @@ holdSplash();
 installNotificationHandling();
 
 export default function RootLayout() {
+  // The bundled fonts, loaded while the launch screen is still up. Nothing is
+  // drawn before they are, or before they fail to, in which case the system
+  // font stands in.
+  const [fontsLoaded, fontsFailed] = useFonts(FONT_FILES);
+  if (!fontsLoaded && !fontsFailed) return null;
   return (
     <SafeAreaProvider>
       <AppProviders>
@@ -32,7 +38,7 @@ export default function RootLayout() {
 
 /**
  * One stack of screens. Titles come from the wording; colors follow the
- * system's light or dark setting; the layout runs in the direction of the
+ * system's light or dark setting, or the one chosen on this device; the layout runs in the direction of the
  * language being shown (DESIGN.md §4.2).
  */
 function Navigation() {
@@ -63,10 +69,10 @@ function Navigation() {
         colors: {
           ...base.colors,
           background: colors.background,
-          card: colors.surface,
+          card: colors.background,
           text: colors.text,
           border: colors.border,
-          primary: colors.primary,
+          primary: colors.link,
         },
       }}>
       <LocaleProvider direction={direction}>
@@ -77,14 +83,14 @@ function Navigation() {
             screenOptions={{
               title: wording.productName,
               headerBackTitle: wording.mobile.back,
-              headerTintColor: colors.primary,
-              headerTitleStyle: { color: colors.text },
+              headerTintColor: colors.link,
+              headerTitleStyle: { color: colors.text, fontFamily: fonts.display },
               // In the browser harness the bar's own title would be a second
               // `h1` above the screen's (React Navigation marks it as one);
               // there it is plain text. A device keeps the system's own bar,
               // whose title VoiceOver and TalkBack already treat as a heading.
               headerTitle: Platform.OS === 'web' ? NavigationTitle : undefined,
-              headerStyle: { backgroundColor: colors.surface },
+              headerStyle: { backgroundColor: colors.background },
               contentStyle: { backgroundColor: colors.background },
               animation: reduceMotion ? 'none' : 'default',
             }}>
@@ -107,7 +113,7 @@ function Navigation() {
             <Stack.Screen name="+not-found" options={{ title: wording.common.notFoundTitle }} />
           </Stack>
         </View>
-        <StatusBar style="auto" />
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       </LocaleProvider>
     </ThemeProvider>
   );
@@ -150,6 +156,6 @@ function Outdated() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  navigationTitle: { fontSize: 18, fontWeight: '500' },
+  navigationTitle: { fontSize: 18, fontFamily: fonts.display },
   cover: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 1 },
 });

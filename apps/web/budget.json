@@ -1,7 +1,7 @@
 {
   "invitation": {
-    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%. How and when to raise it: scripts/check-budget.mjs.",
-    "gzip": 107500,
-    "brotli": 94000
+    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%; raised for the Tandem design (its stylesheet, the mark, the appearance switch) at 109,319 gzip and 95,327 brotli (Spanish) plus about 10%. Fonts are not counted: none is preloaded, and text shows in the system font until they arrive (font-display: swap). How and when to raise it: scripts/check-budget.mjs.",
+    "gzip": 120000,
+    "brotli": 105000
   }
 }

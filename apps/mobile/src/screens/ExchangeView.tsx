@@ -23,6 +23,7 @@ import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, type ScrollView } from 'react-native';
 
+import { AgreedHero } from '../components/Callouts';
 import { Consent } from '../components/Consent';
 import { InvitationFor, InvitationLink } from '../components/InvitationLink';
 import { ContentHidden, OtherPartyLeft } from '../components/OtherPartyLeft';
@@ -225,7 +226,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       {inForce && (
         <Card>
           <Heading level={2}>{w.agreementHeading}</Heading>
-          <P>{w.agreementSigned}</P>
+          <AgreedHero>{w.agreementSigned}</AgreedHero>
           {active && remaining > 0 && <P>{fmt(w.remaining, { count: remaining })}</P>}
           {active && <WalletButton exchange={exchange} />}
           <TermsView

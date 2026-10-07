@@ -209,11 +209,15 @@ async fn observe(State(state): State<AppState>, request: Request, next: Next) ->
 /// What a page may load, and from where: only this origin's own scripts,
 /// styles, fonts and API, images from here or inline as `data:`, no plugins,
 /// no `<base>` and no frame around it. The built web app needs nothing more:
-/// it has no inline script or style, and talks to the API on its own origin.
+/// it has no inline style, and talks to the API on its own origin. Its one
+/// inline script, which applies the appearance chosen on the device before
+/// the page paints, is allowed by its hash and nothing else inline is
+/// (`apps/web/build/theme-script.ts`, whose test checks the hash here).
 /// API responses carry it too, which costs nothing and covers a response
 /// some browser decides to render.
 pub const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'self'; img-src 'self' data:; \
-    object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+    object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; \
+    script-src 'self' 'sha256-KxR9MhTq1F37YaceB87TcfvvGJe+U71nuBxrnuq+JCQ='";
 
 async fn security_headers(hsts: bool, request: Request, next: Next) -> Response {
     // The API's answers are about one person, often behind a session: no

@@ -39,26 +39,53 @@ function contrast(a: string, b: string): number {
 // Text and what it is drawn on.
 const text: [string, string][] = [
   ['text', 'page'],
-  ['text', 'raised'], // buttons, panels, notices
+  ['text', 'raised'], // cards, buttons, fields
+  ['text', 'surface-raised'], // panels, notices, the both-signed moment
   ['text', 'alert-surface'],
-  ['text', 'warning-surface'],
+  ['text', 'warning-surface'], // notices, your entries in the history
+  ['text', 'them-surface'], // their entries in the history, "Done when"
   ['muted', 'page'], // hints
-  ['muted', 'raised'], // hints in a panel
-  ['accent', 'page'], // links
-  ['accent', 'raised'], // links and link buttons in a panel
-  ['on-accent', 'accent'], // the primary button
+  ['muted', 'raised'], // hints on a card
+  ['muted', 'surface-raised'], // hints in a panel
+  ['muted', 'warning-surface'], // the time of your entry in the history
+  ['muted', 'them-surface'], // the time of theirs
+  ['link', 'page'], // links
+  ['link', 'raised'], // links and link buttons on a card
+  ['link', 'surface-raised'], // links in a panel
+  ['them-text', 'raised'], // their name as text
+  ['them-text', 'them-surface'],
+  ['on-accent', 'accent'], // the primary button, the chosen appearance
+  ['on-you', 'you'], // your side of the terms, the summary card
+  ['on-them', 'them'], // theirs
+  ['on-strong', 'surface-strong'],
+  ['on-strong-muted', 'surface-strong'],
+  ['on-waiting', 'waiting'], // status chips
+  ['on-disputed', 'disputed'],
+  ['on-confirmed', 'confirmed'],
   ['alert', 'page'], // field errors, the overdue tag
-  ['alert', 'raised'], // field errors in a panel
+  ['alert', 'raised'], // field errors on a card
+  ['alert', 'surface-raised'], // field errors in a panel
 ]
 
-// The edge of a control, or the focus ring, against what is around it.
+// The edge of a control, or the focus ring, against what is around it, and
+// the shapes that carry meaning without text.
 const edges: [string, string][] = [
   ['line', 'page'],
   ['line', 'raised'],
-  ['accent', 'page'], // focus ring, primary button
+  ['line', 'surface-raised'],
+  ['text', 'page'], // buttons' edges
+  ['text', 'raised'],
+  ['accent', 'page'], // the primary button
   ['accent', 'raised'],
+  ['focus', 'page'], // the focus ring
+  ['focus', 'raised'],
+  ['focus', 'surface-raised'],
   ['alert', 'page'], // a field marked invalid
   ['alert', 'raised'],
+  ['agree', 'page'], // the overlap of the mark
+  ['on-agree', 'agree'], // the check on it
+  ['confirmed-icon', 'confirmed'], // the check on a confirmed chip
+  ['text', 'raised'], // a not-yet chip's outline
 ]
 
 describe.each<Scheme>(['light', 'dark'])('the %s palette', (scheme) => {

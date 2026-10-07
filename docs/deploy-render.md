@@ -185,9 +185,9 @@ Each field of the campaign, ready to paste:
   - "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
   - "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e. Responde STOP para cancelar."
 - **Opt-in confirmation message** (sent by the service when updates are turned on): "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
-- **Help message**: "Yuppers.app: Text updates about agreements you turned them on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out."
+- **Help message**: "Yuppers.app: Text updates about agreements you turned updates on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out."
 - **Opt-out (STOP) message**: "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
-- **Opt-in keywords**: none (people opt in on the website or in the app, never by texting a keyword). **Opt-out keywords**: STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, OPTOUT, REVOKE. **Help keywords**: HELP, INFO.
+- **Opt-in keywords**: START, UNSTOP, YES (they lift a STOP; they don't turn on updates for any agreement, which only the box does). **Opt-in message** (the reply to START, set in Advanced Opt-Out): "Yuppers.app: You can receive our agreement update texts again. Turn updates on for an agreement in the app to get one text per status change; frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out." **Opt-out keywords**: STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, OPTOUT, REVOKE. **Help keywords**: HELP, INFO.
 - **Message frequency**: "Message frequency varies; there is no fixed maximum: one text per status change of an agreement the user turned updates on for, and one confirmation when they turn them on."
 - **Embedded links**: yes (an update links to the agreement on `https://yuppers.app`). **Embedded phone numbers**: no. **Age-gated content**: no. **Direct lending**: no.
 
@@ -198,7 +198,7 @@ Each field of the campaign, ready to paste:
 3. **Register a Sole Proprietor brand** (Messaging → Regulatory Compliance): first the Starter Profile with your name, email and US address, then the brand, which texts a one-time code to your own mobile number; answer it within 24 hours.
 4. **Create the campaign** with the number, using the text above. Twilio links the campaign to a Messaging Service and adds the number to it as the sender. Vetting is manual and can take weeks; resubmitting after a refusal costs a further fee. If the refused campaign is still listed, delete it or let this one replace it, as the console offers.
 5. **Advanced Opt-Out** (the Messaging Service → Opt-Out Management): turn it on, keep the default opt-out, opt-in and help keywords, add **OPTOUT** and **REVOKE** to the opt-out keywords, and set the replies, word for word (the help reply has changed: codes are no longer sent from this number):
-   - **Help**: "Yuppers.app: Text updates about agreements you turned them on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out."
+   - **Help**: "Yuppers.app: Text updates about agreements you turned updates on for. Help: support@yuppers.app or https://yuppers.app/help. Msg & data rates may apply. Reply STOP to opt out."
    - **Opt-out (STOP)**: "Yuppers.app: You're unsubscribed and will get no more texts from us. You can still sign in with your email address. Reply START to resubscribe."
 
    Twilio sends these itself, at once, and stops any message to a number that has opted out (error 21610). The service never replies to a text, so nothing is sent twice. Leave the opt-in (START) reply as Twilio's default or set your own; the service does not depend on it.

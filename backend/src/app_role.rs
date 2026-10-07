@@ -13,9 +13,12 @@
 //!   included: changing it is a deliberate step (docs/deploy-render.md,
 //!   "Rotating the application role's password").
 //! - Either way, the role must be restricted: not a superuser, unable to
-//!   create roles or databases, bypass row security or replicate, and not a
-//!   member of the role migrating. If it is any of those, `migrate` stops
-//!   before applying anything, rather than grant to it.
+//!   create roles or databases, bypass row security or replicate, and a
+//!   member of no other role: not of the role migrating, and not of the
+//!   built-in ones that read or write every table or the server's files
+//!   (`pg_read_all_data`, `pg_write_server_files`, ...). If it is any of
+//!   those, `migrate` stops before applying anything, rather than grant to
+//!   it. What it may do comes only from the migrations' grants.
 //! - The password never reaches the server in clear text, not even in the
 //!   statement a server might log: the role is created with a SCRAM-SHA-256
 //!   verifier computed here, which PostgreSQL stores as it is.
@@ -122,7 +125,8 @@ async fn exists(pool: &PgPool, role: &str) -> anyhow::Result<bool> {
 
 /// Refuses a role that can do more than log in.
 async fn check_restricted(pool: &PgPool, role: &str) -> anyhow::Result<()> {
-    let (login, superuser, create_role, create_db, bypass_rls, replication, member): (
+    #[allow(clippy::type_complexity)]
+    let (login, superuser, create_role, create_db, bypass_rls, replication, member, member_of): (
         bool,
         bool,
         bool,
@@ -130,10 +134,14 @@ async fn check_restricted(pool: &PgPool, role: &str) -> anyhow::Result<()> {
         bool,
         bool,
         bool,
+        Vec<String>,
     ) = sqlx::query_as(
-        "SELECT rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication,
-                pg_has_role(rolname, current_user, 'MEMBER')
-         FROM pg_roles WHERE rolname = $1",
+        "SELECT r.rolcanlogin, r.rolsuper, r.rolcreaterole, r.rolcreatedb, r.rolbypassrls,
+                r.rolreplication, pg_has_role(r.rolname, current_user, 'MEMBER'),
+                ARRAY(SELECT g.rolname::text FROM pg_auth_members m
+                      JOIN pg_roles g ON g.oid = m.roleid
+                      WHERE m.member = r.oid ORDER BY 1)
+         FROM pg_roles r WHERE r.rolname = $1",
     )
     .bind(role)
     .fetch_one(pool)
@@ -147,11 +155,17 @@ async fn check_restricted(pool: &PgPool, role: &str) -> anyhow::Result<()> {
         (replication, "REPLICATION"),
     ] {
         if has {
-            extra.push(what);
+            extra.push(what.to_owned());
         }
     }
     if member {
-        extra.push("membership of the role migrating");
+        extra.push("membership of the role migrating".to_owned());
+    }
+    // Any other role's privileges would come with a membership, the
+    // built-in ones (pg_read_all_data, pg_write_server_files,
+    // pg_execute_server_program, ...) above all.
+    if !member_of.is_empty() {
+        extra.push(format!("membership of {}", member_of.join(", ")));
     }
     if !extra.is_empty() {
         bail!(

@@ -784,9 +784,11 @@ async fn codes_are_removed_a_day_after_they_are_done_with() {
             "created_at = now() - interval '2 days', \
              expires_at = now() - interval '2 days' + interval '10 minutes'",
         ),
+        // Younger than the ten minutes after which another test starting
+        // meanwhile clears test rows away (`App::start`).
         (
             &used,
-            "created_at = now() - interval '2 hours', consumed_at = now() - interval '2 hours'",
+            "created_at = now() - interval '5 minutes', consumed_at = now() - interval '5 minutes'",
         ),
     ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(

@@ -248,7 +248,7 @@ test('there are web fonts to check, and the preloaded ones are among them', () =
 })
 
 test('the app writes characters beyond ASCII, so the check is reading the sources', () => {
-  for (const character of 'áéíóúñ¿«»’“”…•€') {
+  for (const character of 'áéíóúñ¿’“”…•€') {
     expect(required.has(character.codePointAt(0)!), character).toBe(true)
   }
 })

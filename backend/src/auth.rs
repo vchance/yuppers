@@ -623,11 +623,14 @@ async fn lock_codes(
 
 /// This process's turn to put a guess for `identifier` and `purpose` to the
 /// code's provider ([`OfferedCode::consult_verifier`]), held until the
-/// provider has answered. Kept in memory rather than in the database, so
+/// guess is counted. Kept in memory rather than in the database, so
 /// that waiting for the provider holds no connection. Another copy of the
 /// API has turns of its own; what bounds guesses across copies is the
 /// place each takes in the day's count before asking.
-async fn verifier_turn(purpose: Purpose, identifier: &Identifier) -> OwnedMutexGuard<()> {
+/// A turn from [`verifier_turn`]; the next guess waits until it is dropped.
+pub type VerifierTurn = OwnedMutexGuard<()>;
+
+async fn verifier_turn(purpose: Purpose, identifier: &Identifier) -> VerifierTurn {
     type Turns = HashMap<String, Weak<tokio::sync::Mutex<()>>>;
     static TURNS: LazyLock<std::sync::Mutex<Turns>> = LazyLock::new(Default::default);
     let turn = {
@@ -1081,7 +1084,7 @@ pub async fn verify_code(
         requester,
         verifier: sender.verifier(identifier),
     };
-    offered.consult_verifier(db).await?;
+    let _turn = offered.consult_verifier(db).await?;
     let mut tx = db.begin().await?;
     let checked = offered.check(&mut tx).await?;
     tx.commit().await?;
@@ -1217,25 +1220,28 @@ impl OfferedCode<'_> {
     /// provider at once than the day has left; it is given back once the
     /// provider answers, and `check` then counts a wrong code as it counts
     /// any. Within this process, guesses for one identifier and purpose are
-    /// put to the provider one after the other ([`verifier_turn`]).
-    pub async fn consult_verifier(&self, db: &PgPool) -> Result<(), ApiError> {
+    /// put to the provider one after the other ([`verifier_turn`]); the turn
+    /// is returned, and the caller holds it until `check` has counted the
+    /// guess and committed, or the next guess would find the place given
+    /// back but the wrong guess not yet counted, and go to the provider too.
+    pub async fn consult_verifier(&self, db: &PgPool) -> Result<Option<VerifierTurn>, ApiError> {
         let (Some(verifier), Identifier::Phone(phone)) = (self.verifier, self.identifier) else {
-            return Ok(());
+            return Ok(None);
         };
         let purpose = self.requester.purpose();
         let offered = self.code.trim();
         // Twilio's codes are 4 to 10 digits; anything else is wrong without
         // asking.
         if !(4..=10).contains(&offered.len()) || !offered.bytes().all(|b| b.is_ascii_digit()) {
-            return Ok(());
+            return Ok(None);
         }
-        let _turn = verifier_turn(purpose, self.identifier).await;
+        let turn = verifier_turn(purpose, self.identifier).await;
         let (by_owner, owner_limit) = self.owner_count();
 
         let mut tx = db.begin().await?;
         lock_codes(&mut tx, self.identifier, purpose).await?;
         if by_owner.hold(&mut tx).await? >= owner_limit {
-            return Ok(());
+            return Ok(Some(turn));
         }
         let live = self.live(&mut tx).await?;
         let unapproved: Vec<Uuid> = live
@@ -1244,7 +1250,7 @@ impl OfferedCode<'_> {
             .map(|(id, _)| *id)
             .collect();
         if unapproved.is_empty() || self.matches(&live) {
-            return Ok(());
+            return Ok(Some(turn));
         }
         let reserved = by_owner.take(&mut tx).await?;
         tx.commit().await?;
@@ -1266,9 +1272,9 @@ impl OfferedCode<'_> {
                     .bind(code_hash(self.secret, purpose, self.identifier, offered).as_slice())
                     .execute(&mut *conn)
                     .await?;
-                Ok(())
+                Ok(Some(turn))
             }
-            Ok(false) => Ok(()),
+            Ok(false) => Ok(Some(turn)),
             Err(error) => {
                 // The error names no number and quotes no provider's text.
                 tracing::error!(%error, "a one-time code could not be checked");

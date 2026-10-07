@@ -226,7 +226,7 @@ pub async fn delete_account_with_code(
     account: Uuid,
     code: &OfferedCode<'_>,
 ) -> Result<(), ApiError> {
-    code.consult_verifier(db).await?;
+    let _turn = code.consult_verifier(db).await?;
     retry(db, rules, account, Request::Code(code)).await?;
     Ok(())
 }

@@ -318,11 +318,18 @@ async fn hashed_assets_are_cached_for_a_year_and_pages_are_not() {
             "{path}"
         );
     }
-    // A missing asset is the app's page, which must not be cached as the
-    // asset: a later build may have it.
-    let missing = get(&app, "/assets/gone-00000000.js").await;
-    assert_eq!(missing.body, HOME);
-    assert_eq!(missing.header(CACHE_CONTROL), "no-cache");
+    // A missing asset, a source map included, is not found rather than the
+    // app's page, and is not cached: a later build may have it.
+    for path in [
+        "/assets/gone-00000000.js",
+        "/assets/index-DCaXBRW7.js.map",
+        "/assets/nested/missing.css",
+    ] {
+        let missing = get(&app, path).await;
+        assert_eq!(missing.status, StatusCode::NOT_FOUND, "{path}");
+        assert_ne!(missing.body, HOME, "{path}");
+        assert_eq!(missing.header(CACHE_CONTROL), "", "{path}");
+    }
 }
 
 #[tokio::test]

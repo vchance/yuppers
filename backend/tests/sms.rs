@@ -30,6 +30,7 @@ use yuppers_backend::auth::{
 };
 use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::metrics::{self, Text};
+use yuppers_backend::nanp::Region;
 use yuppers_backend::notifications::sms::{
     CodeRouter, LogSmsSender, PhoneCodes, Sms, SmsSender, TwilioCredential, TwilioSmsSender,
 };
@@ -49,7 +50,7 @@ fn number() -> String {
 
 /// The same, beginning `+1888`: another area code.
 fn number_elsewhere() -> String {
-    format!("+1888{:07}", Uuid::new_v4().as_u128() % 10_000_000)
+    format!("+1202{:07}", Uuid::new_v4().as_u128() % 10_000_000)
 }
 
 /// Rules with the per-address limit out of the way (every test request
@@ -408,6 +409,49 @@ async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_
     ask(&app, &number(), "en")
         .await
         .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+    assert_eq!(phone.sent().len(), 1);
+}
+
+#[tokio::test]
+async fn a_plus_one_number_outside_the_us_is_refused_unless_its_region_is_served() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    // The default: of +1, the US alone.
+    let (app, _turn) = start(50, router(&phone, &mailbox)).await;
+    let before = all_counts(&app).await;
+    // Jamaica, the Dominican Republic, Toronto, and a toll-free number.
+    let (jamaica, dominican, toronto, toll_free) = (
+        "+18765550100",
+        "+18095550100",
+        "+14165550100",
+        "+18885550100",
+    );
+    for number in [jamaica, dominican, toronto, toll_free] {
+        ask(&app, number, "en")
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+        assert_eq!(codes_for(&app, number).await, 0, "{number}");
+    }
+    assert!(phone.sent().is_empty());
+    assert_eq!(all_counts(&app).await, before);
+
+    // A deployment may add Canada; the rest of the plan stays out.
+    let app = open_with(
+        AuthRules {
+            phone_regions: vec![Region::Us, Region::Canada],
+            ..rules(50)
+        },
+        router(&phone, &mailbox),
+    )
+    .await;
+    assert_eq!(
+        ask(&app, toronto, "en").await.status,
+        StatusCode::NO_CONTENT
+    );
+    for number in [jamaica, dominican, toll_free] {
+        ask(&app, number, "en")
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+    }
     assert_eq!(phone.sent().len(), 1);
 }
 

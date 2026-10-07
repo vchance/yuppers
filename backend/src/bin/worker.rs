@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow::Context;
 use time::OffsetDateTime;
 use tokio::sync::watch;
-use yuppers_backend::auth::purge_sign_in_limits;
+use yuppers_backend::auth::{purge_one_time_codes, purge_sign_in_limits};
 use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::WorkerConfig;
 use yuppers_backend::domain::Rules;
@@ -164,6 +164,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(removed) => tracing::info!(removed, "text update consent records past retention removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "consent record purge failed"),
                 }
+                match sms_updates::purge_inbound_seen(&db, OffsetDateTime::now_utc()).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "message IDs of texts received past retention removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "received text ID purge failed"),
+                }
                 match code_consent::purge(&db, &rules, OffsetDateTime::now_utc()).await {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "code consent records past retention removed"),
@@ -173,6 +178,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "old sign-in limit counts removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "sign-in limit purge failed"),
+                }
+                match purge_one_time_codes(&db).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "one-time codes past use removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "one-time code purge failed"),
                 }
                 // After both, so what they just caused goes out in the same
                 // pass.

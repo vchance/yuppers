@@ -15,6 +15,7 @@ use super::dto::{
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
+use crate::contact::{self, Field};
 use crate::domain::Rules;
 use crate::domain::canonical::content_hash;
 use crate::domain::contribution::{Action, Status};
@@ -273,11 +274,18 @@ async fn view(
     // Someone who has since left is not there to be confirmed.
     let claimant = match (you, aggregate.exchange.counterparty, aggregate.accounts[1]) {
         (Slot::A, Counterparty::Claimed, Some(other)) if !other_party_left => {
-            let (display_name, email, phone): (String, Option<String>, Option<String>) =
-                sqlx::query_as("SELECT display_name, email, phone FROM account WHERE id = $1")
-                    .bind(other)
-                    .fetch_one(&mut *conn)
-                    .await?;
+            type ClaimantRow = (String, Option<Vec<u8>>, Option<Vec<u8>>);
+            let (display_name, email_encrypted, phone_encrypted): ClaimantRow = sqlx::query_as(
+                "SELECT display_name, email_encrypted, phone_encrypted FROM account WHERE id = $1",
+            )
+            .bind(other)
+            .fetch_one(&mut *conn)
+            .await?;
+            // Decrypted to be shown masked, and only to the initiator, who
+            // must tell whether this is the person they invited.
+            let keys = contact::keys();
+            let email = keys.reveal(Field::ACCOUNT_EMAIL, email_encrypted.as_deref())?;
+            let phone = keys.reveal(Field::ACCOUNT_PHONE, phone_encrypted.as_deref())?;
             let identifier = email
                 .map(Identifier::Email)
                 .or(phone.map(Identifier::Phone))
@@ -597,21 +605,27 @@ async fn issue_invitation(
         Some(text) => Some(Identifier::parse(&text)?),
         None => None,
     };
+    // Only the blind index of whom it names is kept: a claim is compared
+    // with it, and nothing reads it back (`crate::contact`).
+    let index = bound
+        .as_ref()
+        .map(|identifier| contact::keys().index_of(identifier));
     let (email, phone) = match &bound {
-        Some(Identifier::Email(email)) => (Some(email.as_str()), None),
-        Some(Identifier::Phone(phone)) => (None, Some(phone.as_str())),
+        Some(Identifier::Email(_)) => (index.as_ref(), None),
+        Some(Identifier::Phone(_)) => (None, index.as_ref()),
         None => (None, None),
     };
 
     let token = auth::generate_token();
     sqlx::query(
-        "INSERT INTO invitation (exchange_id, token_hash, bound_email, bound_phone, expires_at)
+        "INSERT INTO invitation
+             (exchange_id, token_hash, bound_email_index, bound_phone_index, expires_at)
          VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(exchange)
     .bind(auth::token_hash(&token).as_slice())
-    .bind(email)
-    .bind(phone)
+    .bind(email.map(<[u8; 32]>::as_slice))
+    .bind(phone.map(<[u8; 32]>::as_slice))
     .bind(at + rules.invitation_ttl)
     .execute(&mut *conn)
     .await?;
@@ -1038,42 +1052,51 @@ struct Gate {
     initiator: Option<Uuid>,
     initiator_active: bool,
     blocked: bool,
-    viewer_email: Option<String>,
-    viewer_phone: Option<String>,
+    /// The blind indexes of the viewer's email address and phone number.
+    viewer_email: Option<[u8; 32]>,
+    viewer_phone: Option<[u8; 32]>,
 }
 
-type GateRow = (
-    Option<Uuid>,
-    Option<Uuid>,
-    Option<String>,
-    Option<String>,
-    Option<OffsetDateTime>,
-    Option<Uuid>,
-    Option<OffsetDateTime>,
-    bool,
-    Option<Uuid>,
-    bool,
-    bool,
-    Option<String>,
-    Option<String>,
-);
+/// What [`gate`] reads. Each address or number comes as its blind index.
+#[derive(sqlx::FromRow)]
+struct GateRow {
+    id: Option<Uuid>,
+    exchange_id: Option<Uuid>,
+    bound_email_index: Option<Vec<u8>>,
+    bound_phone_index: Option<Vec<u8>>,
+    expires_at: Option<OffsetDateTime>,
+    claimed_by: Option<Uuid>,
+    revoked_at: Option<OffsetDateTime>,
+    offer_open: bool,
+    initiator: Option<Uuid>,
+    initiator_active: bool,
+    blocked: bool,
+    viewer_email_index: Option<Vec<u8>>,
+    viewer_phone_index: Option<Vec<u8>>,
+}
+
+/// A blind index as stored.
+fn index_of(stored: Option<Vec<u8>>) -> Option<[u8; 32]> {
+    stored.and_then(|index| index.try_into().ok())
+}
 
 /// Reads the [`Gate`] for `viewer` and `token`: one query, whatever the
 /// token. The row is the viewer's account, so there is always one, with
 /// nothing found where the token names no link.
 async fn gate(conn: &mut PgConnection, viewer: Uuid, token: &str) -> Result<Gate, ApiError> {
     let row: Option<GateRow> = sqlx::query_as(
-        "SELECT i.id, i.exchange_id, i.bound_email, i.bound_phone, i.expires_at,
+        "SELECT i.id, i.exchange_id, i.bound_email_index, i.bound_phone_index, i.expires_at,
                 i.claimed_by, i.revoked_at,
-                coalesce(e.state = 'NEGOTIATING' AND e.open_revision_id IS NOT NULL, false),
-                initiator.account_id,
-                coalesce(ia.status = 'ACTIVE', false),
+                coalesce(e.state = 'NEGOTIATING' AND e.open_revision_id IS NOT NULL, false)
+                    AS offer_open,
+                initiator.account_id AS initiator,
+                coalesce(ia.status = 'ACTIVE', false) AS initiator_active,
                 EXISTS (SELECT 1 FROM account_block b
                         WHERE (b.blocker_account_id = v.id
                                AND b.blocked_account_id = initiator.account_id)
                            OR (b.blocker_account_id = initiator.account_id
-                               AND b.blocked_account_id = v.id)),
-                v.email, v.phone
+                               AND b.blocked_account_id = v.id)) AS blocked,
+                v.email_index AS viewer_email_index, v.phone_index AS viewer_phone_index
          FROM account v
          LEFT JOIN invitation i ON i.token_hash = $1
          LEFT JOIN exchange e ON e.id = i.exchange_id
@@ -1087,32 +1110,21 @@ async fn gate(conn: &mut PgConnection, viewer: Uuid, token: &str) -> Result<Gate
     .fetch_optional(&mut *conn)
     .await?;
     // The viewer's account is gone: deleted a moment ago by another request.
-    let (
-        id,
-        exchange,
-        email,
-        phone,
-        expires_at,
-        claimed_by,
-        revoked_at,
-        offer_open,
-        initiator,
-        initiator_active,
-        blocked,
-        viewer_email,
-        viewer_phone,
-    ) = row.ok_or(ErrorCode::Unauthenticated)?;
-    let invitation = match (id, exchange, expires_at) {
+    let row = row.ok_or(ErrorCode::Unauthenticated)?;
+    // Compared by blind index (`crate::contact`): nothing is decrypted.
+    let bound_to = index_of(row.bound_email_index)
+        .map(invitation::Binding::Email)
+        .or(index_of(row.bound_phone_index).map(invitation::Binding::Phone));
+    let claimed_by = row.claimed_by;
+    let invitation = match (row.id, row.exchange_id, row.expires_at) {
         (Some(id), Some(exchange), Some(expires_at)) => Some(InvitationRow {
             id,
             exchange,
             record: invitation::Invitation {
                 expires_at,
                 claimed: claimed_by.is_some(),
-                revoked: revoked_at.is_some(),
-                bound_to: email
-                    .map(Identifier::Email)
-                    .or(phone.map(Identifier::Phone)),
+                revoked: row.revoked_at.is_some(),
+                bound_to,
             },
             claimed_by,
         }),
@@ -1120,12 +1132,12 @@ async fn gate(conn: &mut PgConnection, viewer: Uuid, token: &str) -> Result<Gate
     };
     Ok(Gate {
         invitation,
-        offer_open,
-        initiator,
-        initiator_active,
-        blocked,
-        viewer_email,
-        viewer_phone,
+        offer_open: row.offer_open,
+        initiator: row.initiator,
+        initiator_active: row.initiator_active,
+        blocked: row.blocked,
+        viewer_email: index_of(row.viewer_email_index),
+        viewer_phone: index_of(row.viewer_phone_index),
     })
 }
 
@@ -1242,8 +1254,8 @@ fn claim_gate(
         return Err(unavailable());
     }
     let claimant = invitation::Claimant {
-        email: gate.viewer_email.clone(),
-        phone: gate.viewer_phone.clone(),
+        email: gate.viewer_email,
+        phone: gate.viewer_phone,
         is_initiator: gate.initiator == Some(account),
         blocked: gate.blocked,
     };

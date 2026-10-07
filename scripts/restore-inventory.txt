@@ -26,6 +26,7 @@
 0001 grant relation attachment INSERT
 0001 grant relation attachment SELECT
 0001 grant relation attachment UPDATE
+0025 grant relation contact_key SELECT
 0001 grant relation contribution INSERT
 0001 grant relation contribution SELECT
 0001 grant relation contribution UPDATE
@@ -91,12 +92,14 @@
 0021 grant relation sms_code_consent DELETE
 0021 grant relation sms_code_consent INSERT
 0021 grant relation sms_code_consent SELECT
+0025 grant relation sms_code_consent_id_seq USAGE
 0021 grant relation sms_code_consent_network DELETE
 0021 grant relation sms_code_consent_network INSERT
 0021 grant relation sms_code_consent_network SELECT
 0020 grant relation sms_consent DELETE
 0020 grant relation sms_consent INSERT
 0020 grant relation sms_consent SELECT
+0025 grant relation sms_consent_id_seq USAGE
 0020 grant relation sms_consent_network DELETE
 0020 grant relation sms_consent_network INSERT
 0020 grant relation sms_consent_network SELECT

@@ -5,7 +5,8 @@
 //!
 //! Connects with `DATABASE_URL` (or `DATABASE_HOST`, `DATABASE_NAME` and
 //! `APP_DB_PASSWORD`; `.env.example`), as the application role, so that it can do
-//! nothing a person deleting their own account could not. Each account in
+//! nothing a person deleting their own account could not, and needs
+//! `CONTACT_DATA_KEY`, the key the backup's contact details are under. Each account in
 //! the log is deleted again through the service's own deletion
 //! (`yuppers_backend::deletion::replay`); one already deleted, or one the
 //! database never held, is reported and skipped, so replaying a file twice
@@ -24,6 +25,8 @@
 
 use std::process::ExitCode;
 
+use anyhow::Context;
+use yuppers_backend::contact::{self, store};
 use yuppers_backend::domain::Rules;
 use yuppers_backend::{db, deletion_log, telemetry};
 
@@ -58,6 +61,15 @@ async fn main() -> anyhow::Result<ExitCode> {
     // DATABASE_URL, or the parts a platform gives (`config::database_url_from_env`).
     let url = yuppers_backend::config::database_url_from_env()?;
     let pool = db::pool(&url)?;
+    // A deletion finds what named the account's address by its blind index
+    // (yuppers_backend::contact), so the copy's CONTACT_DATA_KEY is needed:
+    // the one the backup was made under.
+    let keys = yuppers_backend::config::contact_keys_from_env()?;
+    contact::install(
+        store::open(&pool, &keys)
+            .await
+            .context("CONTACT_DATA_KEY")?,
+    );
     println!("replaying {} deletions from {file}", entries.len());
     let summary = deletion_log::replay(&pool, &Rules::default(), &entries, |line| {
         println!("{line}")

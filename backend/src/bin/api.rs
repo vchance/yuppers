@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::ApiConfig;
+use yuppers_backend::contact::{self, store};
 use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, WebApp};
 use yuppers_backend::metrics::{self, HttpMetrics, Text};
@@ -64,8 +65,17 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!(platforms = ?wallet.platforms(), "issuing Wallet passes");
     }
 
+    // Every email address and phone number is stored encrypted under
+    // CONTACT_DATA_KEY (yuppers_backend::contact). Nothing is served until
+    // the database shows that the key is its own.
+    let pool = db::pool(&config.database_url)?;
+    let keys = store::open_when_reachable(&pool, &config.contact)
+        .await
+        .context("CONTACT_DATA_KEY")?;
+    contact::install(keys);
+
     let state = AppState {
-        db: db::pool(&config.database_url)?,
+        db: pool,
         settings: Arc::new(Settings {
             app_secret: config.app_secret,
             web_origin: config.web_origin,

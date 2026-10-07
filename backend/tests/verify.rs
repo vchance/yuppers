@@ -398,12 +398,7 @@ async fn delete_with(app: &App, user: &User, code: &str) -> common::Reply {
 /// A signed-in account whose number is `phone`.
 async fn user_with_phone(app: &App, phone: &str) -> User {
     let user = app.user("Ana").await;
-    sqlx::query("UPDATE account SET phone = $2 WHERE id = $1")
-        .bind(user.id)
-        .bind(phone)
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    common::set_phone(&app.owner, user.id, phone, false).await;
     user
 }
 
@@ -425,9 +420,9 @@ async fn rows(app: &App, identifier: &str) -> Vec<(String, bool, String, i16, bo
     sqlx::query_as(
         "SELECT purpose, code_hash IS NOT NULL, checked_by, failed_attempts,
                 consumed_at IS NOT NULL
-         FROM one_time_code WHERE identifier = $1 ORDER BY created_at",
+         FROM one_time_code WHERE identifier_index = $1 ORDER BY created_at",
     )
-    .bind(identifier)
+    .bind(common::index(identifier))
     .fetch_all(&app.owner)
     .await
     .unwrap()
@@ -738,9 +733,9 @@ async fn an_expired_code_is_refused_whichever_side_it_expired_on() {
     ask(&app, &phone, "en").await;
     let code = twilio.code(SIGN_IN, &phone);
     sqlx::query(
-        "UPDATE one_time_code SET expires_at = now() - interval '1 second' WHERE identifier = $1",
+        "UPDATE one_time_code SET expires_at = now() - interval '1 second' WHERE identifier_index = $1",
     )
-    .bind(&phone)
+    .bind(common::index(&phone))
     .execute(&app.owner)
     .await
     .unwrap();
@@ -922,18 +917,18 @@ async fn a_code_resent_works_only_until_the_first_one_expires() {
     sqlx::query(
         "UPDATE one_time_code SET created_at = created_at - interval '4 minutes',
                                   expires_at = expires_at - interval '4 minutes'
-         WHERE identifier = $1",
+         WHERE identifier_index = $1",
     )
-    .bind(&phone)
+    .bind(common::index(&phone))
     .execute(&app.owner)
     .await
     .unwrap();
     ask(&app, &phone, "en").await;
     let expiries = || async {
         sqlx::query_scalar::<_, OffsetDateTime>(
-            "SELECT expires_at FROM one_time_code WHERE identifier = $1 ORDER BY created_at",
+            "SELECT expires_at FROM one_time_code WHERE identifier_index = $1 ORDER BY created_at",
         )
-        .bind(&phone)
+        .bind(common::index(&phone))
         .fetch_all(&app.owner)
         .await
         .unwrap()
@@ -949,8 +944,8 @@ async fn a_code_resent_works_only_until_the_first_one_expires() {
 
     // Once they have expired, here and at Twilio, the next is a new code
     // with ten minutes of its own.
-    sqlx::query("UPDATE one_time_code SET expires_at = now() WHERE identifier = $1")
-        .bind(&phone)
+    sqlx::query("UPDATE one_time_code SET expires_at = now() WHERE identifier_index = $1")
+        .bind(common::index(&phone))
         .execute(&app.owner)
         .await
         .unwrap();
@@ -973,8 +968,8 @@ async fn asking_for_a_code_for_a_number_that_replied_stop_is_counted() {
     .await;
     let stopped: Vec<String> = (0..4).map(|_| number()).collect();
     for phone in &stopped {
-        sqlx::query("INSERT INTO sms_opt_out (phone) VALUES ($1)")
-            .bind(phone)
+        sqlx::query("INSERT INTO sms_opt_out (phone_index) VALUES ($1)")
+            .bind(common::index(phone))
             .execute(&app.owner)
             .await
             .unwrap();
@@ -1027,8 +1022,8 @@ async fn the_box_and_the_stop_refusal_still_come_before_anything_is_sent() {
 
     // A number that replied STOP to the agreement updates' number: refused
     // codes too, with an answer pointing to email.
-    sqlx::query("INSERT INTO sms_opt_out (phone) VALUES ($1)")
-        .bind(&phone)
+    sqlx::query("INSERT INTO sms_opt_out (phone_index) VALUES ($1)")
+        .bind(common::index(&phone))
         .execute(&app.owner)
         .await
         .unwrap();

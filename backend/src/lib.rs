@@ -8,6 +8,7 @@ pub mod build_info;
 pub mod client_version;
 pub mod code_consent;
 pub mod config;
+pub mod contact;
 pub mod db;
 pub mod deletion;
 pub mod deletion_log;

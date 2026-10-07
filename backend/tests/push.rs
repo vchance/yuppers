@@ -528,12 +528,8 @@ async fn each_notice_goes_once_per_channel_the_person_can_be_reached_on() {
 async fn a_phone_only_account_is_told_by_push_or_not_at_all() {
     let (app, _turn) = app().await;
     let deal = active(&app).await;
-    sqlx::query("UPDATE account SET email = NULL, phone = $2 WHERE id = $1")
-        .bind(deal.ben.id)
-        .bind(format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000))
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    let phone = format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000);
+    common::set_phone(&app.owner, deal.ben.id, &phone, true).await;
 
     claim(&app, &deal).await;
     assert!(

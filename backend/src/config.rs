@@ -17,6 +17,7 @@ use axum::http::HeaderName;
 use crate::app_role::{APP_ROLE, AppRolePassword};
 use crate::auth::{AuthRules, CodeSender, LogSender};
 use crate::client_version::{MinimumClientVersions, parse_version};
+use crate::contact::{Key, KeyConfig};
 use crate::domain::identity::Identifier;
 use crate::http::web::DEFAULT_ANDROID_PACKAGE;
 use crate::http::{AppLinks, TrustedProxies};
@@ -672,6 +673,10 @@ pub struct MigrateConfig {
     /// this password if it does not exist, before migrating
     /// (`crate::app_role`).
     pub create_app_role: Option<AppRolePassword>,
+    /// `CONTACT_DATA_KEY`: `migrate` stores the blind-index key under it the
+    /// first time, and checks it against that every time after
+    /// (`crate::contact`).
+    pub contact: KeyConfig,
 }
 
 impl MigrateConfig {
@@ -693,6 +698,7 @@ impl MigrateConfig {
             Some(other) => bail!("MIGRATE_CREATE_APP_ROLE={other} is not `true` or `false`"),
         };
         Ok(Self {
+            contact: contact_keys_for(get, Some(&database_url))?,
             database_url,
             create_app_role,
         })
@@ -716,6 +722,8 @@ pub struct WorkerConfig {
     pub sms: Option<WorkerSms>,
     /// Update texts one person may be queued a day.
     pub sms_updates_per_day: i64,
+    /// `CONTACT_DATA_KEY`, which decrypts the addresses and numbers sent to.
+    pub contact: KeyConfig,
 }
 
 /// What the worker needs to send agreement updates by text.
@@ -751,6 +759,7 @@ impl WorkerConfig {
                 None => None,
             },
             sms_updates_per_day: sms_updates_per_day(get)?,
+            contact: contact_keys(get)?,
         })
     }
 }
@@ -762,6 +771,61 @@ fn app_secret(get: Lookup<'_>) -> anyhow::Result<Vec<u8>> {
         bail!("APP_SECRET must be at least 32 bytes");
     }
     Ok(secret)
+}
+
+/// `CONTACT_DATA_KEY`, which encrypts every email address and phone number
+/// stored (`crate::contact`), and `CONTACT_DATA_KEY_PREVIOUS`, which only
+/// decrypts, while what it encrypted is re-encrypted. Each is 32 bytes in
+/// base64. Required by every process that reads or writes contact details:
+/// there is no state of the database in which they can do without it.
+/// Neither is ever written to a log or an error.
+fn contact_keys(get: Lookup<'_>) -> anyhow::Result<KeyConfig> {
+    contact_keys_for(get, None)
+}
+
+/// [`contact_keys`], for a process that also says which database it works
+/// on (`migrate`, `contact-data`): the published keys are refused too when
+/// that database is not on this machine, whatever `WEB_ORIGIN` says.
+fn contact_keys_for(get: Lookup<'_>, database_url: Option<&str>) -> anyhow::Result<KeyConfig> {
+    let current = required(get, "CONTACT_DATA_KEY").context(
+        "every email address and phone number is stored encrypted under it; generate one \
+         with `openssl rand -base64 32` and keep a copy outside the platform \
+         (docs/operations.md, \"Contact data key\")",
+    )?;
+    // The keys published in the repository, for development, the tests and
+    // CI, are refused wherever the service is reached from elsewhere, by
+    // every process, migrate included.
+    let web_origin = optional(get, "WEB_ORIGIN");
+    let current = Key::parse("CONTACT_DATA_KEY", &current)?;
+    current.refuse_published("CONTACT_DATA_KEY", web_origin.as_deref())?;
+    if let Some(url) = database_url {
+        current.refuse_published_for_database("CONTACT_DATA_KEY", url)?;
+    }
+    let previous = optional(get, "CONTACT_DATA_KEY_PREVIOUS")
+        .map(|text| Key::parse("CONTACT_DATA_KEY_PREVIOUS", &text))
+        .transpose()?;
+    if let Some(previous) = &previous {
+        previous.refuse_published("CONTACT_DATA_KEY_PREVIOUS", web_origin.as_deref())?;
+        if let Some(url) = database_url {
+            previous.refuse_published_for_database("CONTACT_DATA_KEY_PREVIOUS", url)?;
+        }
+    }
+    Ok(KeyConfig::new(current, previous)?)
+}
+
+/// The contact data keys from the environment: see [`contact_keys`]. For
+/// the commands (`staff`, `contact-data`, `replay-deletions`).
+pub fn contact_keys_from_env() -> anyhow::Result<KeyConfig> {
+    load_env();
+    contact_keys(&environment)
+}
+
+/// [`contact_keys_from_env`] for a command that works on the database
+/// `database_url` names (`contact-data`): the published keys are refused
+/// unless it is on this machine.
+pub fn contact_keys_for_database(database_url: &str) -> anyhow::Result<KeyConfig> {
+    load_env();
+    contact_keys_for(&environment, Some(database_url))
 }
 
 /// An optional `MIN_CLIENT_VERSION_*` value: unset or empty means no minimum,
@@ -855,6 +919,8 @@ pub struct ApiConfig {
     pub sms_webhook_token: Option<Secret>,
     /// Wallet passes, for the platforms configured (`crate::wallet::config`).
     pub wallet: crate::wallet::WalletConfig,
+    /// `CONTACT_DATA_KEY`, and `CONTACT_DATA_KEY_PREVIOUS` if set.
+    pub contact: KeyConfig,
 }
 
 impl ApiConfig {
@@ -892,6 +958,7 @@ impl ApiConfig {
             sms_updates_per_day: sms_updates_per_day(get)?,
             sms_webhook_token: sms_webhook_token(get)?,
             wallet: crate::wallet::WalletConfig::from_lookup(get)?,
+            contact: contact_keys(get)?,
         })
     }
 }
@@ -1034,12 +1101,18 @@ mod tests {
 
     #[test]
     fn migrate_creates_the_application_role_only_when_asked() {
-        let owner = table(&[("MIGRATION_DATABASE_URL", "postgres://o:p@h/d")]);
+        let owner = table(&[
+            ("MIGRATION_DATABASE_URL", "postgres://o:p@h/d"),
+            ("CONTACT_DATA_KEY", CONTACT_KEY),
+        ]);
         let config = MigrateConfig::from_lookup(&lookup(&owner)).unwrap();
         assert_eq!(config.database_url, "postgres://o:p@h/d");
         assert!(config.create_app_role.is_none(), "off by default");
 
-        let development = table(&[("DATABASE_URL", "postgres://a:b@h/d")]);
+        let development = table(&[
+            ("DATABASE_URL", "postgres://a:b@h/d"),
+            ("CONTACT_DATA_KEY", CONTACT_KEY),
+        ]);
         let config = MigrateConfig::from_lookup(&lookup(&development)).unwrap();
         assert_eq!(config.database_url, "postgres://a:b@h/d", "the fallback");
         assert!(MigrateConfig::from_lookup(&lookup(&table(&[]))).is_err());
@@ -1073,6 +1146,104 @@ mod tests {
         let mut wrong = asked;
         wrong.insert("MIGRATE_CREATE_APP_ROLE".to_owned(), "yes".to_owned());
         assert!(MigrateConfig::from_lookup(&lookup(&wrong)).is_err());
+    }
+
+    /// A key for these tests alone.
+    const CONTACT_KEY: &str = "q83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJA=";
+
+    #[test]
+    fn nothing_starts_without_a_contact_data_key_of_32_bytes_and_none_is_ever_quoted() {
+        let base = [("MIGRATION_DATABASE_URL", "postgres://o:p@h/d")];
+        let missing = MigrateConfig::from_lookup(&lookup(&table(&base)));
+        let error = format!("{:#}", missing.err().expect("refused without a key"));
+        assert!(error.contains("CONTACT_DATA_KEY is not set"), "{error}");
+        assert!(error.contains("openssl rand -base64 32"), "{error}");
+
+        for bad in [
+            "not base64 at all!",
+            // 16 bytes, and 33.
+            "AAECAwQFBgcICQoLDA0ODw==",
+            "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g",
+            // Hex, as `openssl rand -hex 32` writes it: 48 bytes once read as base64.
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        ] {
+            let malformed = table(&[base[0], ("CONTACT_DATA_KEY", bad)]);
+            let error = match MigrateConfig::from_lookup(&lookup(&malformed)) {
+                Ok(_) => panic!("{bad} was taken as a key"),
+                Err(error) => format!("{error:#}"),
+            };
+            assert!(error.starts_with("CONTACT_DATA_KEY is not"), "{error}");
+            assert!(!error.contains(bad), "never quoted: {error}");
+        }
+
+        let given = table(&[base[0], ("CONTACT_DATA_KEY", CONTACT_KEY)]);
+        let config = MigrateConfig::from_lookup(&lookup(&given)).unwrap();
+        assert!(config.contact.previous.is_none());
+
+        let mut rotating = given.clone();
+        rotating.insert(
+            "CONTACT_DATA_KEY_PREVIOUS".to_owned(),
+            "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=".to_owned(),
+        );
+        let config = MigrateConfig::from_lookup(&lookup(&rotating)).unwrap();
+        assert!(config.contact.previous.is_some());
+        rotating.insert("CONTACT_DATA_KEY_PREVIOUS".to_owned(), "short".to_owned());
+        assert!(MigrateConfig::from_lookup(&lookup(&rotating)).is_err());
+        rotating.insert(
+            "CONTACT_DATA_KEY_PREVIOUS".to_owned(),
+            CONTACT_KEY.to_owned(),
+        );
+        let error = MigrateConfig::from_lookup(&lookup(&rotating))
+            .err()
+            .expect("the same key twice is refused")
+            .to_string();
+        assert!(error.contains("the same as CONTACT_DATA_KEY"), "{error}");
+    }
+
+    #[test]
+    fn a_published_contact_data_key_is_refused_unless_the_origin_is_this_machine() {
+        use crate::contact::PUBLISHED_KEYS;
+        for published in PUBLISHED_KEYS {
+            let mut settings = table(&[
+                ("MIGRATION_DATABASE_URL", "postgres://o:p@h/d"),
+                ("CONTACT_DATA_KEY", published),
+            ]);
+            // Migrate refuses it for a database elsewhere, without WEB_ORIGIN.
+            let error = format!(
+                "{:#}",
+                MigrateConfig::from_lookup(&lookup(&settings))
+                    .err()
+                    .expect("refused")
+            );
+            assert!(
+                error.contains("the database is not on this machine"),
+                "{error}"
+            );
+            assert!(!error.contains(published), "never quoted: {error}");
+            settings.insert(
+                "MIGRATION_DATABASE_URL".to_owned(),
+                "postgres://o:p@127.0.0.1:5432/d".to_owned(),
+            );
+            // Without WEB_ORIGIN, as a developer runs migrate, and on this
+            // machine.
+            assert!(MigrateConfig::from_lookup(&lookup(&settings)).is_ok());
+            settings.insert("WEB_ORIGIN".to_owned(), "http://localhost:8080".to_owned());
+            assert!(MigrateConfig::from_lookup(&lookup(&settings)).is_ok());
+            // Anywhere else, every process refuses it, migrate included.
+            settings.insert("WEB_ORIGIN".to_owned(), "https://yuppers.app".to_owned());
+            let error = format!(
+                "{:#}",
+                MigrateConfig::from_lookup(&lookup(&settings))
+                    .err()
+                    .expect("refused")
+            );
+            assert!(error.contains("published in the repository"), "{error}");
+            assert!(!error.contains(published), "never quoted: {error}");
+            // As the previous key too.
+            settings.insert("CONTACT_DATA_KEY".to_owned(), CONTACT_KEY.to_owned());
+            settings.insert("CONTACT_DATA_KEY_PREVIOUS".to_owned(), published.to_owned());
+            assert!(MigrateConfig::from_lookup(&lookup(&settings)).is_err());
+        }
     }
 
     #[test]

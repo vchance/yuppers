@@ -95,6 +95,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::auth::{CodeCheck, OfferedCode};
+use crate::contact::{self, Field, Kind};
 use crate::domain::Rules;
 use crate::domain::exchange::{Actor, Command, Counterparty, State, decide};
 use crate::domain::identity::Identifier;
@@ -132,21 +133,30 @@ pub async fn identifier(
     account: Uuid,
     channel: CodeChannel,
 ) -> Result<Identifier, ApiError> {
-    let found: Option<(String, Option<String>, Option<String>)> =
-        sqlx::query_as("SELECT status, email, phone FROM account WHERE id = $1")
-            .bind(account)
-            .fetch_optional(db)
-            .await?;
-    let (email, phone) = match found {
-        Some((status, email, phone)) if status == "ACTIVE" => (email, phone),
+    let kind = match channel {
+        CodeChannel::Email => Kind::Email,
+        CodeChannel::Phone => Kind::Phone,
+    };
+    let (encrypted, _) = kind.account_columns();
+    let found: Option<(String, Option<Vec<u8>>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT status, {encrypted} FROM account WHERE id = $1"
+    )))
+    .bind(account)
+    .fetch_optional(db)
+    .await?;
+    let sealed = match found {
+        Some((status, sealed)) if status == "ACTIVE" => sealed,
         // Deleted a moment ago by another request.
         _ => return Err(ErrorCode::Unauthenticated.into()),
     };
-    match channel {
-        CodeChannel::Email => email.map(Identifier::Email),
-        CodeChannel::Phone => phone.map(Identifier::Phone),
-    }
-    .ok_or_else(|| ErrorCode::InvalidRequest.into())
+    // Decrypted to send the code to (`crate::contact`).
+    let value = contact::keys()
+        .reveal(Field::account(kind), sealed.as_deref())?
+        .ok_or(ErrorCode::InvalidRequest)?;
+    Ok(match kind {
+        Kind::Email => Identifier::Email(value),
+        Kind::Phone => Identifier::Phone(value),
+    })
 }
 
 pub async fn preview(db: &PgPool, account: Uuid) -> Result<DeletionPreview, ApiError> {
@@ -386,11 +396,14 @@ async fn attempt(
     // acting in a shared exchange and queueing a message for it. Those may be
     // holding the lock on an exchange this transaction needs next, so making
     // them wait here would be a deadlock.
-    let held: Option<(String, Option<String>, Option<String>)> =
-        sqlx::query_as("SELECT status, email, phone FROM account WHERE id = $1 FOR NO KEY UPDATE")
-            .bind(account)
-            .fetch_optional(&mut *tx)
-            .await?;
+    // The account's own addresses are found elsewhere by their blind
+    // indexes; nothing here is decrypted.
+    let held: Option<HeldAccount> = sqlx::query_as(
+        "SELECT status, email_index, phone_index FROM account WHERE id = $1 FOR NO KEY UPDATE",
+    )
+    .bind(account)
+    .fetch_optional(&mut *tx)
+    .await?;
     let mut done = Done::Deleted;
     let (email, phone) = match held {
         Some((status, email, phone)) if status == "ACTIVE" => (email, phone),
@@ -454,7 +467,8 @@ async fn attempt(
     // account supplied about someone else.
     sqlx::query(
         "UPDATE invitation i
-         SET revoked_at = coalesce(i.revoked_at, now()), bound_email = NULL, bound_phone = NULL
+         SET revoked_at = coalesce(i.revoked_at, now()),
+             bound_email_index = NULL, bound_phone_index = NULL
          FROM participant p
          WHERE p.exchange_id = i.exchange_id AND p.slot = 'A' AND p.account_id = $1
            AND i.claimed_by IS NULL",
@@ -466,7 +480,8 @@ async fn attempt(
     // That it was named is in the history already (the claim was recorded as
     // confirmed); the address itself is not needed again.
     sqlx::query(
-        "UPDATE invitation SET bound_email = NULL, bound_phone = NULL WHERE claimed_by = $1",
+        "UPDATE invitation SET bound_email_index = NULL, bound_phone_index = NULL
+         WHERE claimed_by = $1",
     )
     .bind(account)
     .execute(&mut *tx)
@@ -477,10 +492,11 @@ async fn attempt(
     // issue a new one.
     sqlx::query(
         "UPDATE invitation
-         SET revoked_at = coalesce(revoked_at, now()), bound_email = NULL, bound_phone = NULL
+         SET revoked_at = coalesce(revoked_at, now()),
+             bound_email_index = NULL, bound_phone_index = NULL
          WHERE claimed_by IS NULL
-           AND ((bound_email IS NOT NULL AND bound_email = $1)
-             OR (bound_phone IS NOT NULL AND bound_phone = $2))",
+           AND ((bound_email_index IS NOT NULL AND bound_email_index = $1)
+             OR (bound_phone_index IS NOT NULL AND bound_phone_index = $2))",
     )
     .bind(email.as_deref())
     .bind(phone.as_deref())
@@ -503,10 +519,11 @@ async fn attempt(
         .bind(account)
         .execute(&mut *tx)
         .await?;
-    // Codes are stored under the address they were sent to.
-    let identifiers: Vec<String> = [email, phone].into_iter().flatten().collect();
-    sqlx::query("DELETE FROM one_time_code WHERE identifier = ANY($1)")
-        .bind(&identifiers)
+    // Codes are stored under the blind index of the address they were sent
+    // to.
+    let indexes: Vec<Vec<u8>> = [email, phone].into_iter().flatten().collect();
+    sqlx::query("DELETE FROM one_time_code WHERE identifier_index = ANY($1)")
+        .bind(&indexes)
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM idempotency_key WHERE account_id = $1")
@@ -550,7 +567,10 @@ async fn attempt(
     }
     sqlx::query(
         "UPDATE account
-         SET status = 'DELETED', email = NULL, phone = NULL, display_name = '', language = $2
+         SET status = 'DELETED',
+             email_encrypted = NULL, email_index = NULL,
+             phone_encrypted = NULL, phone_index = NULL,
+             display_name = '', language = $2
          WHERE id = $1",
     )
     .bind(account)
@@ -568,6 +588,10 @@ async fn attempt(
     tx.commit().await?;
     Ok(Attempt::Done(done))
 }
+
+/// The account as a deletion reads it: its status, and the blind indexes
+/// of its email address and phone number.
+type HeldAccount = (String, Option<Vec<u8>>, Option<Vec<u8>>);
 
 fn is_lock_not_available(error: &sqlx::Error) -> bool {
     error

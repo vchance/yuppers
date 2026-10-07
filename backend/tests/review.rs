@@ -14,6 +14,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 use yuppers_backend::auth::{CodeMessage, CodeSender, SendFuture};
 use yuppers_backend::domain::Rules;
+use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::error::ErrorCode;
 use yuppers_backend::metrics::{self, Text};
 use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
@@ -117,6 +118,7 @@ async fn reviewers_are_named_only_by_the_owner_from_the_command_line() {
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_staff"))
             .args(args)
             .env("MIGRATION_DATABASE_URL", &app.owner_url)
+            .env("CONTACT_DATA_KEY", common::CONTACT_DATA_KEY)
             .output()
             .unwrap();
         (
@@ -131,12 +133,15 @@ async fn reviewers_are_named_only_by_the_owner_from_the_command_line() {
     let (ok, out, _) = staff(&["grant", &rita.email]);
     assert!(ok);
     assert!(out.contains("already reviews reports"), "{out}");
+    // Her address is shown masked, enough to tell who she is.
     let (ok, out, _) = staff(&["list"]);
     assert!(ok);
+    let masked = Identifier::parse(&rita.email).unwrap().masked();
     assert!(
-        out.contains(&rita.email) && out.contains(&rita.id.to_string()),
+        out.contains(&masked) && out.contains(&rita.id.to_string()),
         "{out}"
     );
+    assert!(!out.contains(&rita.email), "{out}");
     assert!(review::is_staff(&app.db, rita.id).await.unwrap());
 
     let (ok, _, err) = staff(&["grant", "nobody-at-all@example.test"]);
@@ -1069,11 +1074,7 @@ async fn a_new_report_tells_every_reviewer_without_saying_what_it_is() {
     // A reviewer with only a phone number cannot be emailed.
     let phone_only = app.user("Pat").await;
     make_staff(&app, &phone_only).await;
-    sqlx::query("UPDATE account SET email = NULL, phone = '+15555550123' WHERE id = $1")
-        .bind(phone_only.id)
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    common::set_phone(&app.owner, phone_only.id, "+15555550123", true).await;
 
     let queued = |account: Uuid| {
         let owner = app.owner.clone();

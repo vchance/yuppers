@@ -18,6 +18,7 @@ use tokio::sync::MutexGuard;
 use uuid::Uuid;
 use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
 use yuppers_backend::code_consent::CODE_CONSENT_VERSION;
+use yuppers_backend::contact::Field;
 use yuppers_backend::deletion;
 use yuppers_backend::deletion_log;
 use yuppers_backend::domain::Rules;
@@ -663,9 +664,9 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
     let deal = app.active().await;
     let (ana, ben) = (&deal.ana, &deal.ben);
     let phone = format!("+1555{:07}", Uuid::new_v4().as_u128() % 10_000_000);
-    sqlx::query("UPDATE account SET phone = $2, language = 'es' WHERE id = $1")
+    common::set_phone(&app.owner, ana.id, &phone, false).await;
+    sqlx::query("UPDATE account SET language = 'es' WHERE id = $1")
         .bind(ana.id)
-        .bind(&phone)
         .execute(&app.owner)
         .await
         .unwrap();
@@ -822,17 +823,19 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
         .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
 
     // The row stays, with nothing on it that says who it was.
+    // No address or number in any form, encrypted or indexed.
     type Row = (
         String,
-        Option<String>,
-        Option<String>,
+        i32,
         String,
         String,
         OffsetDateTime,
         Option<OffsetDateTime>,
     );
     let row: Row = sqlx::query_as(
-        "SELECT status, email, phone, display_name, language, created_at, adult_confirmed_at
+        "SELECT status,
+                num_nonnulls(email_encrypted, email_index, phone_encrypted, phone_index),
+                display_name, language, created_at, adult_confirmed_at
          FROM account WHERE id = $1",
     )
     .bind(ana.id)
@@ -843,8 +846,7 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
         row,
         (
             "DELETED".to_owned(),
-            None,
-            None,
+            0,
             String::new(),
             "en".to_owned(),
             created_at,
@@ -882,8 +884,8 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
         assert_eq!(count(app, query, ana.id).await, 0, "{what}");
     }
     let codes_left: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM one_time_code WHERE identifier = ANY($1)")
-            .bind(vec![ana.email.clone(), phone.clone()])
+        sqlx::query_scalar("SELECT count(*) FROM one_time_code WHERE identifier_index = ANY($1)")
+            .bind(vec![common::index(&ana.email), common::index(&phone)])
             .fetch_one(&app.owner)
             .await
             .unwrap();
@@ -1072,14 +1074,16 @@ async fn an_invitation_someone_else_bound_to_the_address_forgets_it_and_dies() {
 
     test.delete(&ben).await;
 
-    let (bound, revoked): (Option<String>, bool) = sqlx::query_as(
-        "SELECT bound_email, revoked_at IS NOT NULL FROM invitation WHERE exchange_id = $1",
+    let (bound, revoked): (i32, bool) = sqlx::query_as(
+        "SELECT num_nonnulls(bound_email_index, bound_phone_index),
+                revoked_at IS NOT NULL
+         FROM invitation WHERE exchange_id = $1",
     )
     .bind(exchange.parse::<Uuid>().unwrap())
     .fetch_one(&app.owner)
     .await
     .unwrap();
-    assert_eq!((bound, revoked), (None, true));
+    assert_eq!((bound, revoked), (0, true));
     // A dead link like any other; Ana can issue a new one.
     let dee = app.user("Dee").await;
     app.post(&dee, "/v1/invitations/preview", json!({ "token": token }))
@@ -1179,14 +1183,16 @@ async fn an_offer_the_departing_party_sent_is_withdrawn() {
     app.post(&cal, "/v1/invitations/claim", json!({ "token": token }))
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
-    let (revoked, bound): (bool, Option<String>) = sqlx::query_as(
-        "SELECT revoked_at IS NOT NULL, bound_email FROM invitation WHERE exchange_id = $1",
+    let (revoked, bound): (bool, i32) = sqlx::query_as(
+        "SELECT revoked_at IS NOT NULL,
+                num_nonnulls(bound_email_index, bound_phone_index)
+         FROM invitation WHERE exchange_id = $1",
     )
     .bind(id(&unopened))
     .fetch_one(&app.owner)
     .await
     .unwrap();
-    assert_eq!((revoked, bound), (true, None));
+    assert_eq!((revoked, bound), (true, 0));
 }
 
 #[tokio::test]
@@ -1694,12 +1700,7 @@ async fn deletions_at_the_same_moment_happen_once() {
         let (ana, ben) = (&deal.ana, &deal.ben);
         let (offer, _) = negotiation(app, ana, ben).await;
         let phone = format!("+1555{:07}", Uuid::new_v4().as_u128() % 10_000_000);
-        sqlx::query("UPDATE account SET phone = $2 WHERE id = $1")
-            .bind(ben.id)
-            .bind(&phone)
-            .execute(&app.owner)
-            .await
-            .unwrap();
+        common::set_phone(&app.owner, ben.id, &phone, false).await;
 
         // Ben confirms on two devices at once, each with a code of its own,
         // while Ana, who shares both exchanges with him, deletes hers.
@@ -1879,7 +1880,7 @@ async fn a_deletion_that_found_the_account_busy_leaves_the_code_for_another_try(
     let ben = &deal.ben;
     let recorded = events(app, &deal.exchange).await;
     let failed_guesses = "SELECT coalesce(sum(failed_attempts), 0)::bigint FROM one_time_code
-                          WHERE identifier = (SELECT email FROM account WHERE id = $1)";
+                          WHERE identifier_index = (SELECT email_index FROM account WHERE id = $1)";
 
     // Another transaction refers to Ben's account and stays open, so the
     // deletion keeps finding it busy and gives up.
@@ -2014,13 +2015,14 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
         .await,
         0
     );
-    let (status, email): (String, Option<String>) =
-        sqlx::query_as("SELECT status, email FROM account WHERE id = $1")
-            .bind(ben.id)
-            .fetch_one(&app.owner)
-            .await
-            .unwrap();
-    assert_eq!((status.as_str(), email), ("DELETED", None));
+    let (status, email): (String, i32) = sqlx::query_as(
+        "SELECT status, num_nonnulls(email_encrypted, email_index) FROM account WHERE id = $1",
+    )
+    .bind(ben.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), email), ("DELETED", 0));
     let (_, account) = test.sign_in(&ben.email).await;
     assert_ne!(account["id"], json!(ben.id));
     let view = app.view(ana, &deal.exchange).await;
@@ -2192,13 +2194,14 @@ async fn replaying_deletes_an_account_suspended_in_the_copy_after_lifting_the_su
     );
 
     // Deleted through every rule, as when he deleted it himself.
-    let (status, email): (String, Option<String>) =
-        sqlx::query_as("SELECT status, email FROM account WHERE id = $1")
-            .bind(ben.id)
-            .fetch_one(&app.owner)
-            .await
-            .unwrap();
-    assert_eq!((status.as_str(), email), ("DELETED", None));
+    let (status, email): (String, i32) = sqlx::query_as(
+        "SELECT status, num_nonnulls(email_encrypted, email_index) FROM account WHERE id = $1",
+    )
+    .bind(ben.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), email), ("DELETED", 0));
     let view = app.view(ana, &deal.exchange).await;
     assert_eq!(view["close_requested_by"], "B");
     assert_eq!(view["other_party_left"], true);
@@ -2300,6 +2303,7 @@ fn run_process(binary: &str, app: &App, args: &[&str]) -> (bool, String) {
         .env("BIND_ADDR", "127.0.0.1:0")
         .env("WEB_ORIGIN", "http://127.0.0.1")
         .env("APP_SECRET", "replay-mark-test-secret-0123456789abcdef")
+        .env("CONTACT_DATA_KEY", common::CONTACT_DATA_KEY)
         .env("CODE_DELIVERY", "log")
         .env("NOTIFICATION_DELIVERY", "log")
         .env("METRICS_ADDR", "")
@@ -2377,12 +2381,7 @@ async fn a_deletion_code_by_text_needs_the_box_ticked_and_is_recorded_with_it() 
     let app = &test.app;
     let ana = app.user("Ana").await;
     let phone = format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000);
-    sqlx::query("UPDATE account SET phone = $1 WHERE id = $2")
-        .bind(&phone)
-        .bind(ana.id)
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    common::set_phone(&app.owner, ana.id, &phone, false).await;
     let sent = || test.codes.0.lock().unwrap().len();
     let before = sent();
 
@@ -2403,16 +2402,25 @@ async fn a_deletion_code_by_text_needs_the_box_ticked_and_is_recorded_with_it() 
 
     // Ticked: sent, and recorded with the account and its number.
     let code = test.deletion_code(&ana, "PHONE", &phone).await;
-    /// Why, whose, the number, and the wording's version and language.
-    type Record = (String, Option<Uuid>, Option<String>, String, String);
+    /// Why, whose, the number (encrypted), and the wording's version and
+    /// language.
+    type Record = (i64, String, Option<Uuid>, Option<Vec<u8>>, String, String);
     let records: Vec<Record> = sqlx::query_as(
-        "SELECT purpose, account_id, phone, consent_version, consent_language
+        "SELECT id, purpose, account_id, phone_encrypted, consent_version, consent_language
          FROM sms_code_consent WHERE account_id = $1",
     )
     .bind(ana.id)
     .fetch_all(&app.owner)
     .await
     .unwrap();
+    let records: Vec<_> = records
+        .into_iter()
+        .map(|(id, purpose, account, sealed, version, language)| {
+            let field = Field::SMS_CODE_CONSENT_PHONE.row(id);
+            let phone = sealed.map(|sealed| common::open(field, &sealed));
+            (purpose, account, phone, version, language)
+        })
+        .collect();
     assert_eq!(
         records,
         [(

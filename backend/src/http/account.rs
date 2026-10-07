@@ -11,6 +11,7 @@ use uuid::Uuid;
 use super::extract::{ApiJson, Session};
 use super::{AppState, ClientAddress};
 use crate::auth::{self, Requester};
+use crate::contact::{self, Field, Kind};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
@@ -31,24 +32,29 @@ pub struct Account {
 
 type AccountRow = (
     Uuid,
-    Option<String>,
-    Option<String>,
+    Option<Vec<u8>>,
+    Option<Vec<u8>>,
     String,
     String,
     Option<OffsetDateTime>,
 );
 
-const ACCOUNT_COLUMNS: &str = "id, email, phone, display_name, language, adult_confirmed_at";
+const ACCOUNT_COLUMNS: &str =
+    "id, email_encrypted, phone_encrypted, display_name, language, adult_confirmed_at";
 
-fn from_row((id, email, phone, display_name, language, adult_confirmed_at): AccountRow) -> Account {
-    Account {
+/// The account as its owner sees it: one of the few places its address and
+/// number are decrypted (`crate::contact`).
+fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
+    let (id, email_encrypted, phone_encrypted, display_name, language, adult) = row;
+    let keys = contact::keys();
+    Ok(Account {
         id: id.to_string(),
-        email,
-        phone,
+        email: keys.reveal(Field::ACCOUNT_EMAIL, email_encrypted.as_deref())?,
+        phone: keys.reveal(Field::ACCOUNT_PHONE, phone_encrypted.as_deref())?,
         display_name,
         language,
-        adult_confirmed: adult_confirmed_at.is_some(),
-    }
+        adult_confirmed: adult.is_some(),
+    })
 }
 
 pub async fn load(db: impl PgExecutor<'_>, id: Uuid) -> Result<Account, ApiError> {
@@ -58,7 +64,7 @@ pub async fn load(db: impl PgExecutor<'_>, id: Uuid) -> Result<Account, ApiError
     .bind(id)
     .fetch_one(db)
     .await?;
-    Ok(from_row(row))
+    Ok(from_row(row)?)
 }
 
 /// The signed-in account.
@@ -186,29 +192,33 @@ pub async fn add_identifier(
     )
     .await?;
 
+    // Stored encrypted, with its blind index, which the unique constraint
+    // is on (`crate::contact`).
+    let (encrypted, index) = Kind::of(&identifier).account_columns();
+    let sealed = contact::keys().sealed(&identifier);
     // Only while the account is active: an identifier written onto an
     // account deleted at the same moment could never be used again.
-    let update = match identifier {
-        Identifier::Email(_) => "UPDATE account SET email = $2 WHERE id = $1 AND status = 'ACTIVE'",
-        Identifier::Phone(_) => "UPDATE account SET phone = $2 WHERE id = $1 AND status = 'ACTIVE'",
-    };
-    let result = sqlx::query(update)
-        .bind(session.account_id)
-        .bind(identifier.as_str())
-        .execute(&state.db)
-        .await;
+    let result = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "UPDATE account SET {encrypted} = $2, {index} = $3
+         WHERE id = $1 AND status = 'ACTIVE'"
+    )))
+    .bind(session.account_id)
+    .bind(&sealed.encrypted)
+    .bind(sealed.index.as_slice())
+    .execute(&state.db)
+    .await;
 
     match result {
         Ok(done) if done.rows_affected() == 0 => Err(ErrorCode::Unauthenticated.into()),
         Ok(_) => {
             // Text updates were turned on for a number; a new one has not
             // agreed to them, so those for the old number end.
-            if let Identifier::Phone(phone) = &identifier {
+            if let Identifier::Phone(_) = &identifier {
                 let mut conn = state.db.acquire().await?;
                 sms_updates::forget_numbers(
                     &mut conn,
                     session.account_id,
-                    Some(phone),
+                    Some(&sealed.index),
                     sms_updates::Source::PhoneChanged,
                 )
                 .await?;

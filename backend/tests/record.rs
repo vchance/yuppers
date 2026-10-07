@@ -179,11 +179,7 @@ async fn the_record_of_a_whole_exchange_tells_all_of_it() {
     let ana = app.user("Ana").await;
     let ben = app.user("Ben").await;
     // Something else of Ben's that must never be in anyone's copy.
-    sqlx::query("UPDATE account SET phone = '+15555550123' WHERE id = $1")
-        .bind(ben.id)
-        .execute(&app.db)
-        .await
-        .unwrap();
+    common::set_phone(&app.db, ben.id, "+15555550123", false).await;
     let exchange = app.draft(&ana).await;
     let (repair, payment, cleanup) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
 

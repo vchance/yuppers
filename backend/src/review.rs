@@ -80,6 +80,7 @@ use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::contact::{self, Field, Kind};
 use crate::domain::Rules;
 use crate::domain::exchange::{Actor, Command, Counterparty, decide};
 use crate::domain::identity::Identifier;
@@ -1426,7 +1427,7 @@ pub async fn alert_staff(conn: &mut PgConnection) -> Result<(), sqlx::Error> {
          SELECT 'EMAIL', a.id, jsonb_build_object('staff', $1::text)
          FROM staff_member s
          JOIN account a ON a.id = s.account_id
-         WHERE a.status = 'ACTIVE' AND a.email IS NOT NULL
+         WHERE a.status = 'ACTIVE' AND a.email_index IS NOT NULL
            AND NOT EXISTS (
                SELECT 1 FROM outbox o
                WHERE o.recipient_account_id = a.id AND o.kind = 'EMAIL'
@@ -1456,7 +1457,9 @@ pub enum StaffCommandError {
 #[derive(Debug)]
 pub struct Reviewer {
     pub account_id: Uuid,
+    /// The account's email address, masked.
     pub email: Option<String>,
+    /// The account's phone number, masked.
     pub phone: Option<String>,
     pub name: String,
     pub status: String,
@@ -1478,14 +1481,12 @@ async fn named_account(
         let Ok(identifier) = Identifier::parse(who) else {
             return Ok(Err(StaffCommandError::Unreadable));
         };
-        let column = match identifier {
-            Identifier::Email(_) => "email",
-            Identifier::Phone(_) => "phone",
-        };
+        // Found by its blind index (`crate::contact`).
+        let (_, index) = Kind::of(&identifier).account_columns();
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT id, status FROM account WHERE {column} = $1 FOR UPDATE"
+            "SELECT id, status FROM account WHERE {index} = $1 FOR UPDATE"
         )))
-        .bind(identifier.as_str())
+        .bind(contact::keys().index_of(&identifier).as_slice())
         .fetch_optional(&mut *conn)
         .await?
     };
@@ -1549,38 +1550,51 @@ pub async fn revoke(db: &PgPool, who: &str) -> anyhow::Result<bool> {
     Ok(removed)
 }
 
-/// A reviewer's account: ID, email, phone, name, status, and since when.
+/// A reviewer's account: ID, email and phone (encrypted), name, status,
+/// and since when.
 type ReviewerRow = (
     Uuid,
-    Option<String>,
-    Option<String>,
+    Option<Vec<u8>>,
+    Option<Vec<u8>>,
     String,
     String,
     OffsetDateTime,
 );
 
-/// The reviewers, longest-serving first.
+/// The reviewers, longest-serving first, for the owner's `staff list`. Each
+/// address and number is decrypted to be shown masked (`a•••@example.com`),
+/// as the initiator of an exchange is shown a claimant's: enough to tell
+/// who a reviewer is, never the address itself (`crate::contact`).
 pub async fn reviewers(db: &PgPool) -> Result<Vec<Reviewer>, sqlx::Error> {
     let rows: Vec<ReviewerRow> = sqlx::query_as(
-        "SELECT a.id, a.email, a.phone, a.display_name, a.status, s.granted_at
+        "SELECT a.id, a.email_encrypted, a.phone_encrypted, a.display_name, a.status,
+                s.granted_at
              FROM staff_member s JOIN account a ON a.id = s.account_id
              ORDER BY s.granted_at, a.id",
     )
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(
-            |(account_id, email, phone, name, status, granted_at)| Reviewer {
+    let keys = contact::keys();
+    let masked = |field: Field, sealed: Option<Vec<u8>>| {
+        let value = keys.reveal(field, sealed.as_deref())?;
+        Ok::<_, contact::Unreadable>(
+            value
+                .and_then(|value| Identifier::parse(&value).ok())
+                .map(|identifier| identifier.masked()),
+        )
+    };
+    rows.into_iter()
+        .map(|(account_id, email, phone, name, status, granted_at)| {
+            Ok(Reviewer {
                 account_id,
-                email,
-                phone,
+                email: masked(Field::ACCOUNT_EMAIL, email)?,
+                phone: masked(Field::ACCOUNT_PHONE, phone)?,
                 name,
                 status,
                 granted_at,
-            },
-        )
-        .collect())
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

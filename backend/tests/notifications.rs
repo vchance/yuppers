@@ -428,12 +428,8 @@ async fn an_account_that_cannot_be_emailed_is_not_emailed() {
     app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
         .await
         .ok();
-    sqlx::query("UPDATE account SET email = NULL, phone = $2 WHERE id = $1")
-        .bind(deal.ben.id)
-        .bind(format!("+1555{:07}", Uuid::new_v4().as_u128() % 10_000_000))
-        .execute(&app.db)
-        .await
-        .unwrap();
+    let phone = format!("+1555{:07}", Uuid::new_v4().as_u128() % 10_000_000);
+    common::set_phone(&app.db, deal.ben.id, &phone, true).await;
 
     let (delivered, emails) = deliver(&app).await;
     assert_eq!((delivered.sent, delivered.dropped), (0, 1));

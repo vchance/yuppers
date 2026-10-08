@@ -6,6 +6,7 @@ import { paths } from '../app/routes'
 import { Appearance } from '../components/Appearance'
 import { BuildVersion } from '../components/BuildVersion'
 import { LegalLink } from '../components/LegalLink'
+import { PaymentHandles } from '../components/PaymentHandles'
 import { PageHeading } from '../components/ui'
 import { api } from '../lib/api'
 import { BlockedPeople } from './BlockedPeople'
@@ -13,8 +14,8 @@ import DeleteAccount from './DeleteAccount'
 import { ProfileForm } from './ProfileForm'
 
 /**
- * The account: what it is verified with, its name and language, this
- * device's appearance, and signing out.
+ * The account: what it is verified with, its name and language, its
+ * payment options, this device's appearance, and signing out.
  */
 export default function AccountPage() {
   const { wording } = useI18n()
@@ -54,6 +55,7 @@ export default function AccountPage() {
         )}
       </dl>
       <ProfileForm account={account} first={false} />
+      <PaymentHandles />
       <Appearance />
       <BlockedPeople />
       <hr />

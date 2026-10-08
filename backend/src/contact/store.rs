@@ -15,11 +15,17 @@ use super::{Field, IndexKey, KeyConfig, Keys};
 use crate::error::Redacted;
 
 /// The columns that hold encrypted contact details, as `(table, column)`.
-pub const ENCRYPTED_COLUMNS: [(&str, &str); 4] = [
+/// The payment options (`crate::payments`) are encrypted the same way, under
+/// the same key.
+pub const ENCRYPTED_COLUMNS: [(&str, &str); 8] = [
     ("account", "email_encrypted"),
     ("account", "phone_encrypted"),
     ("sms_consent", "phone_encrypted"),
     ("sms_code_consent", "phone_encrypted"),
+    ("payment_handle", "venmo_encrypted"),
+    ("payment_handle", "cash_app_encrypted"),
+    ("payment_handle", "paypal_encrypted"),
+    ("payment_handle", "zelle_encrypted"),
 ];
 
 /// Why the keys could not be opened against the database. Names no key and

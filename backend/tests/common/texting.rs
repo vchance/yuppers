@@ -300,6 +300,48 @@ impl Texting {
             .await;
         reply.refused(StatusCode::CONFLICT, "PHONE_OPTED_OUT");
 
+        // Payment options: Ana saves hers and shows them on the agreement,
+        // where Ben, who owes her the payment, reads them; Ben saves his own.
+        let tag = |prefix: &str| format!("{prefix}{}", &Uuid::new_v4().simple().to_string()[..14]);
+        let (ana_venmo, ana_cash, ana_paypal, ana_zelle) =
+            (tag("venmo"), tag("cash"), tag("paypal"), address());
+        let saved = app
+            .call(
+                Some(&ana),
+                Method::PUT,
+                "/v1/me/payment-handles",
+                Some(
+                    json!({ "venmo": format!("@{ana_venmo}"), "cash_app": format!("${ana_cash}"),
+                             "paypal": ana_paypal, "zelle": ana_zelle.to_uppercase() }),
+                ),
+                &[],
+            )
+            .await
+            .ok();
+        assert_eq!(saved["zelle"], ana_zelle);
+        app.call(
+            Some(&ana),
+            Method::PUT,
+            &format!("/v1/exchanges/{exchange}/payment-options"),
+            Some(json!({ "on": true })),
+            &[],
+        )
+        .await
+        .ok();
+        let seen = app.view(&ben, &exchange).await;
+        assert_eq!(seen["payment_options"]["theirs"]["venmo"], ana_venmo);
+        let ben_zelle = format!("+12025{:06}", Uuid::new_v4().as_u128() % 1_000_000);
+        let ben_venmo = tag("venmo");
+        app.call(
+            Some(&ben),
+            Method::PUT,
+            "/v1/me/payment-handles",
+            Some(json!({ "venmo": ben_venmo, "zelle": ben_zelle })),
+            &[],
+        )
+        .await
+        .ok();
+
         // Ben deletes his account with a code by text.
         let reply = app
             .post(
@@ -343,10 +385,21 @@ impl Texting {
         assert!(listed);
         assert!(records >= 6, "{records}");
 
+        let ben_handles: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM payment_handle WHERE account_id = $1")
+                .bind(ben.id)
+                .fetch_one(&app.owner)
+                .await
+                .unwrap();
+        assert_eq!(ben_handles, 0, "a deleted account keeps no payment options");
+
         [&ana_email, &ben_email, &cleo_email, &ana_phone, &ben_phone]
             .into_iter()
             .cloned()
-            .chain([&ana_phone, &ben_phone].map(|phone| phone[1..].to_owned()))
+            .chain([&ana_phone, &ben_phone, &ben_zelle].map(|phone| phone[1..].to_owned()))
+            .chain([
+                ana_venmo, ana_cash, ana_paypal, ana_zelle, ben_venmo, ben_zelle,
+            ])
             .collect()
     }
 }

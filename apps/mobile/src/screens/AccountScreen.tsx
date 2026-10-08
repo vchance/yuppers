@@ -6,6 +6,7 @@ import { Appearance } from '../components/Appearance';
 import { BuildVersion } from '../components/BuildVersion';
 import { NotificationsSetting } from '../components/Notifications';
 import { LegalLinks } from '../components/LegalLinks';
+import { PaymentHandles } from '../components/PaymentHandles';
 import { Actions, Button, Heading, Label, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { openHelp } from '../lib/help';
@@ -16,8 +17,8 @@ import { BlockedPeople } from './BlockedPeople';
 import { DeleteAccount } from './DeleteAccount';
 
 /**
- * The account: what it is verified with, its name and language,
- * notifications, this device's appearance, and signing out.
+ * The account: what it is verified with, its name and language, its
+ * payment options, notifications, this device's appearance, and signing out.
  */
 export function AccountScreen() {
   const { wording, language } = useI18n();
@@ -58,6 +59,7 @@ export function AccountScreen() {
         </View>
       ) : null}
       <ProfileForm account={account} first={false} />
+      <PaymentHandles />
       <NotificationsSetting account={account} />
       <Appearance />
       <BlockedPeople />

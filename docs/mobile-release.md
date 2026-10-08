@@ -84,6 +84,7 @@ For the App Store privacy label ("App Privacy" in App Store Connect) and the Goo
 | Push token | Once the person turns notifications on: the Expo push token the system gives the app, with the platform, the app's version and its language, kept on the service under the account and the session until notifications are turned off, the device signs out, the account is deleted or the token stops working. It is how a notification reaches that installed app, and is sent to Expo's push service with each one. | Yes | App functionality (notifications about their yups) |
 | Name | The display name a person gives their profile; it appears on their agreements and in the other party's copy of the record. | Yes | App functionality |
 | User ID | The account's identifier, made by the service. | Yes | App functionality |
+| Payment options | Optional, saved on the account by the person: a Venmo username, a Cash App $Cashtag, a PayPal.Me name, or the email address or US number they use for Zelle. Stored encrypted; shown only to the other party of a yup where the person turns them on, while that party owes them money there; never sent to those apps (README, "Payment options"). | Yes | App functionality |
 | Other user content | The agreement's text (what each party will give, when, and how they will know it is done), each revision, delivery claims and confirmations, and the reason given in a report. | Yes | App functionality; reports are kept for moderation |
 
 Also true, and relevant to how the owner answers some questions:
@@ -97,7 +98,7 @@ Also true, and relevant to how the owner answers some questions:
 - **Shared with others.** The other party to a yup sees what the agreement and its record contain, including the person's name. Emails go through the email provider a deployment configures (Resend, for yuppers.app: the address and the message), text messages with codes and agreement updates through its SMS provider (the phone number and the message), and push notifications through Expo's push service and then Apple's or Google's (the push token and the generic text, "Your yup has an update", with the exchange's ID). Nothing is sold or sent to advertisers or data brokers.
 - **In transit.** The app talks to the service over whatever `EXPO_PUBLIC_API_URL` names; iOS refuses plain HTTP except to the local network, so a production build must use HTTPS.
 - **Deletion.** A person can delete their account inside the app (account screen) and on the web (README, "Deleting an account"; `backend/src/deletion.rs` says exactly what goes and what stays).
-- **Payments:** none. The app never handles money; any payment between the parties happens outside it.
+- **Payments:** none. The app never handles money; any payment between the parties happens outside it. A payer may open the payee's payment app from a link (README, "Payment options"); the app sends that app nothing and learns nothing back. Whether the payment options above belong under "Other user contact info" or "Other financial info" on the forms (and in `NSPrivacyCollectedDataTypes`, which does not list them yet) is the owner's judgement.
 
 The privacy policy (README, "Privacy policy and terms") tells people the same facts; a change here is a change there.
 

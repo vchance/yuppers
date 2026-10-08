@@ -9,6 +9,7 @@ import {
   moneyIds,
   NAMED_INVITATION,
   otherPartyName,
+  paymentOptionsKey,
   remainingRequired,
   statusesOf,
   troublePanel,
@@ -36,6 +37,7 @@ import { paths } from '../app/routes'
 import { Consent } from '../components/Consent'
 import { InvitationFor, InvitationLink } from '../components/InvitationLink'
 import { Mark } from '../components/Mark'
+import { ShowWhenSigning } from '../components/ShowWhenSigning'
 import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
@@ -44,6 +46,7 @@ import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { restoreFocus, useActions, type Actions } from '../lib/actions'
 import { useAnnouncement } from '../lib/announce'
 import { focusLost } from '../lib/focus'
+import { showAfterSigning } from '../lib/payments'
 import { api, failureCode, type RevisionView } from '../lib/api'
 import { ClaimantWaiting, ConfirmClaimant } from './Claimant'
 import { Ending } from './Ending'
@@ -57,6 +60,12 @@ import { Trouble } from './Trouble'
 // invitation page, which has a size budget (`scripts/check-budget.mjs`).
 const SmsUpdates = lazy(() =>
   import('../components/SmsUpdates').then((module) => ({ default: module.SmsUpdates })),
+)
+// Likewise payment options, for a party who receives money.
+const ShowPaymentOptions = lazy(() =>
+  import('../components/ShowPaymentOptions').then((module) => ({
+    default: module.ShowPaymentOptions,
+  })),
 )
 
 /** How often an open exchange is checked for what the other party has done. */
@@ -117,7 +126,14 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       } catch {
         return
       }
-      if (cancelled || found.version === current.current.exchange.version) return
+      // Payment options change no version: a payee who stops showing them
+      // is noticed too (`paymentOptionsKey`).
+      if (
+        cancelled ||
+        (found.version === current.current.exchange.version &&
+          paymentOptionsKey(found) === paymentOptionsKey(current.current.exchange))
+      )
+        return
       if (current.current.engaged) setNewer(found)
       else {
         onChange(found)
@@ -216,7 +232,13 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       />
 
       {open && (
-        <OpenRevision exchange={exchange} revision={open} otherName={otherName} actions={actions} />
+        <OpenRevision
+          exchange={exchange}
+          revision={open}
+          otherName={otherName}
+          actions={actions}
+          reload={reload}
+        />
       )}
 
       {inForce && (
@@ -245,6 +267,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
                 otherName={otherName}
                 active={active}
                 actions={actions}
+                exchange={exchange}
+                onChange={onChange}
               />
             )}
           />
@@ -281,6 +305,10 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <Suspense fallback={null}>
+        <ShowPaymentOptions exchange={exchange} otherName={otherName} reload={reload} />
+      </Suspense>
 
       <Suspense fallback={null}>
         <SmsUpdates exchange={exchange} />
@@ -462,6 +490,7 @@ interface OpenRevisionProps {
   revision: RevisionView
   otherName: string
   actions: Actions
+  reload(): Promise<Exchange | null>
 }
 
 /**
@@ -469,7 +498,7 @@ interface OpenRevisionProps {
  * or an amendment to the agreement in force. Its author signed it by sending
  * it; the other party can sign it, decline it, or answer with their own.
  */
-function OpenRevision({ exchange, revision, otherName, actions }: OpenRevisionProps) {
+function OpenRevision({ exchange, revision, otherName, actions, reload }: OpenRevisionProps) {
   const { wording, fmt, moment, language } = useI18n()
   const w = wording.exchange
   const you = exchange.you
@@ -482,6 +511,8 @@ function OpenRevision({ exchange, revision, otherName, actions }: OpenRevisionPr
   // Nor can someone they have not confirmed decline or answer with terms of
   // their own: they can sign, or leave.
   const signOnly = isUnconfirmedClaimant(exchange)
+  // Showing payment options too, once signed: not part of what is signed.
+  const [alsoShow, setAlsoShow] = useState(false)
 
   return (
     <section className="card" aria-labelledby="open-heading">
@@ -576,19 +607,32 @@ function OpenRevision({ exchange, revision, otherName, actions }: OpenRevisionPr
       {actions.panel === 'accept' && (
         <Panel title={w.signHeading}>
           <p>{w.signIntro}</p>
+          <ShowWhenSigning
+            terms={revision.terms}
+            you={you}
+            shown={Boolean(exchange.payment_options?.shown)}
+            checked={alsoShow}
+            onChange={setAlsoShow}
+          />
           <Consent
             signLabel={w.accept}
             busy={actions.busy}
             failure={actions.failure}
             onCancel={actions.close}
             onSign={() =>
-              // Acceptance names the revision: if the terms have changed since
-              // this page showed them, the service refuses (DESIGN.md §6).
-              void actions.run({
-                type: 'ACCEPT',
-                revision: revision.id,
-                consent: consentShown(language),
-              })
+              void (async () => {
+                // Acceptance names the revision: if the terms have changed
+                // since this page showed them, the service refuses (DESIGN.md §6).
+                const signed = await actions.run({
+                  type: 'ACCEPT',
+                  revision: revision.id,
+                  consent: consentShown(language),
+                })
+                if (signed && alsoShow) {
+                  await showAfterSigning(exchange.id, true)
+                  await reload()
+                }
+              })()
             }
           />
         </Panel>

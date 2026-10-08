@@ -92,6 +92,12 @@
           "p": "Si agregas un yup a Apple Wallet o a Google Wallet, guardamos un registro del pase: a qué yup y a qué cuenta pertenece, y cómo se actualizó por última vez. Para Apple Wallet también guardamos los identificadores y los tokens de notificaciones que Apple nos da para los dispositivos que tienen el pase, para poder mantenerlo al día. Un pase muestra el código de referencia del yup, su estado, cuántos elementos faltan y un enlace al yup. Nunca muestra los términos, los nombres ni las cantidades."
         },
         {
+          "h": "Opciones de pago, si las agregas"
+        },
+        {
+          "p": "Si decides guardar opciones de pago en tu cuenta (un usuario de Venmo, un $Cashtag de Cash App, un nombre de PayPal.Me, o el correo electrónico o número de teléfono de EE. UU. que usas para Zelle), las guardamos cifradas, como los correos electrónicos y los números de teléfono. Guardarlas no se las muestra a nadie. Si las activas en un yup, la otra persona de ese yup las ve mientras te deba dinero en él, como botones que abren esas apps con el monto y una nota (el elemento y la referencia del yup) ya escritos donde la app lo permite. Nunca enviamos tus opciones de pago a esas apps ni a nadie más, no las ponemos en correos, mensajes de texto, notificaciones ni pases de Wallet, y no movemos ni recibimos dinero. Cualquier pago ocurre en la app, entre ustedes dos, según los términos de esa app; solo registramos lo que cada parte dice sobre él."
+        },
+        {
           "h": "Registros técnicos"
         },
         {
@@ -132,7 +138,7 @@
           "h": "La otra persona de un yup"
         },
         {
-          "p": "La otra persona ve lo que muestra el yup: sus términos, cada versión, los mensajes y notas, su historial, las firmas y cuándo se hicieron, y tu nombre tal como lo da el acuerdo. No ve tu correo electrónico, tu número de teléfono, tu dirección IP ni tu dispositivo. Cada persona puede descargar o imprimir el registro del yup, y lo que cada una haga con esa copia depende de ella."
+          "p": "La otra persona ve lo que muestra el yup: sus términos, cada versión, los mensajes y notas, su historial, las firmas y cuándo se hicieron, y tu nombre tal como lo da el acuerdo. No ve tu correo electrónico, tu número de teléfono, tu dirección IP ni tu dispositivo. Cada persona puede descargar o imprimir el registro del yup, y lo que cada una haga con esa copia depende de ella. Si activas tus opciones de pago en un yup, también las ve, mientras te deba dinero en él, hasta que las desactives."
         },
         {
           "h": "Quienes revisan las denuncias"
@@ -200,6 +206,7 @@
             "Tu correo electrónico, tu número de teléfono, tu nombre y tu idioma: mientras tengas una cuenta. Al eliminar tu cuenta se borran de ella de inmediato. Después, tu número de teléfono queda solo donde dice “Qué se conserva, y por qué” más abajo: en el registro de las actualizaciones por mensaje que activaste y de los códigos que pediste por mensaje de texto, como prueba de lo que aceptaste, y, si respondió STOP, en nuestra lista de números a los que no debemos enviar mensajes.",
             "Los yups que se enviaron, con todo lo que contienen y su historial: los guardamos como el registro compartido de lo que se propuso y se acordó. No los borramos cuando una de las personas, o las dos, eliminan sus cuentas, y no hemos fijado un plazo después del cual se borren.",
             "Los borradores que no has enviado: hasta que los envíes, los descartes o elimines tu cuenta.",
+            "Las opciones de pago que guardes: hasta que las quites o elimines tu cuenta. Al desactivarlas en un yup, dejan de mostrarse ahí de inmediato.",
             "La dirección IP y el agente de usuario registrados con una firma: {networkDays} días.",
             "El registro de las actualizaciones por mensaje que activaste para un acuerdo, y de su fin: mientras estén activadas y, después, durante {smsConsentYears} años desde que terminan, como prueba de que pediste los mensajes que te enviamos. La dirección IP y el agente de usuario registrados con él: {networkDays} días. Un número de teléfono que respondió STOP: mientras siga dado de baja, para no volver a enviarle mensajes.",
             "El registro de cada código que pediste por mensaje de texto: {smsConsentYears} años, como prueba de que lo pediste. La dirección IP y el agente de usuario registrados con él: {networkDays} días.",
@@ -232,7 +239,8 @@
             "Tus códigos de un solo uso, los dispositivos registrados para tus notificaciones, los borradores que no has enviado, las notificaciones que esperaban enviarse y tu lista de personas bloqueadas.",
             "Las actualizaciones por mensaje que activaste para tus acuerdos se detienen.",
             "Los enlaces de invitación que creaste y que nadie usó dejan de funcionar, y olvidan la dirección a la que iban dirigidos.",
-            "Tus pases de Wallet se anulan."
+            "Tus pases de Wallet se anulan.",
+            "Tus opciones de pago, y que se muestren en cualquier yup."
           ]
         },
         {
@@ -301,6 +309,7 @@
             "Las conexiones con Yuppers están cifradas (HTTPS), y los navegadores reciben la instrucción de no usar otra cosa.",
             "Guardamos los códigos de un solo uso, los tokens de sesión, los códigos de los enlaces de invitación y los tokens de Wallet solo como hashes, nunca tal cual. Los códigos por mensaje de texto los crea y comprueba Twilio Verify, y de uno guardamos como mucho un hash, una vez que Twilio Verify lo aceptó.",
             "Guardamos los correos electrónicos y los números de teléfono cifrados, con una clave que guardamos aparte de la base de datos, así que la base de datos o una copia de ella no los muestra. Donde solo necesitamos encontrar o comparar uno (para que entres, para comprobar para quién es una invitación o para respetar un STOP), usamos en su lugar un hash con clave. Los desciframos para enviarte un correo, un código o un mensaje de texto, para mostrarte los tuyos, para cifrarlos de nuevo con una clave nueva cuando reemplazamos la nuestra y para mostrarlos en parte ocultos donde alguien necesita saber de quién es una cuenta: a quien envió una invitación, que ve quién la abrió, y a nosotros, en nuestra lista de quienes revisan denuncias.",
+            "Guardamos cifradas de la misma manera las opciones de pago que decidas guardar, y solo las desciframos para mostrártelas a ti y a la otra persona de un yup donde las actives.",
             "El servicio usa una cuenta restringida de la base de datos que puede agregar al historial de un acuerdo pero no cambiarlo ni borrarlo, y la propia base de datos rechaza cambios en ese historial.",
             "Solo las personas que designamos para revisar denuncias pueden ver los yups denunciados, solo mientras la denuncia está abierta y después de haber entrado en las últimas 12 horas, y queda registrada cada denuncia que abren.",
             "Nuestros registros dejan fuera la información personal, como correos electrónicos, números de teléfono, códigos y tokens."

@@ -92,6 +92,18 @@ async fn rotating_re_encrypts_everything_and_leaves_every_index_as_it_was() {
     .execute(&app.owner)
     .await
     .unwrap();
+    // Payment options, encrypted under the same key (`payments`).
+    sqlx::query(
+        "INSERT INTO payment_handle (account_id, venmo_encrypted, zelle_encrypted,
+                                     venmo_changed_at, zelle_changed_at)
+         VALUES ($1, $2, $3, now(), now())",
+    )
+    .bind(ana.id)
+    .bind(old.seal(Field::PAYMENT_VENMO.owned_by(ana.id), "ana-pays"))
+    .bind(old.seal(Field::PAYMENT_ZELLE.owned_by(ana.id), &phone))
+    .execute(&app.owner)
+    .await
+    .unwrap();
     let index_before: Vec<u8> = sqlx::query_scalar("SELECT email_index FROM account WHERE id = $1")
         .bind(ana.id)
         .fetch_one(&app.owner)
@@ -163,6 +175,26 @@ async fn rotating_re_encrypts_everything_and_leaves_every_index_as_it_was() {
         phone
     );
     assert!(old.open(Field::ACCOUNT_EMAIL, &email).is_err());
+    let (venmo, zelle): (Vec<u8>, Vec<u8>) = sqlx::query_as(
+        "SELECT venmo_encrypted, zelle_encrypted FROM payment_handle WHERE account_id = $1",
+    )
+    .bind(ana.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    // Still bound to Ana's account.
+    assert_eq!(
+        new.open(Field::PAYMENT_VENMO.owned_by(ana.id), &venmo)
+            .unwrap(),
+        "ana-pays"
+    );
+    assert_eq!(
+        new.open(Field::PAYMENT_ZELLE.owned_by(ana.id), &zelle)
+            .unwrap(),
+        phone
+    );
+    assert!(new.open(Field::PAYMENT_VENMO, &venmo).is_err());
+    assert!(said.contains("payment_handle.venmo_encrypted"), "{said}");
 
     // No index moved: what was found before is found the same way.
     let index_after: Vec<u8> = sqlx::query_scalar("SELECT email_index FROM account WHERE id = $1")

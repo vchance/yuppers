@@ -92,6 +92,12 @@
           "p": "If you add a yup to Apple Wallet or Google Wallet, we keep a record of the pass: which yup and account it belongs to, and how it was last updated. For Apple Wallet we also keep the identifiers and push tokens that Apple gives us for the devices that hold the pass, so that we can keep it up to date. A pass shows the yup’s reference code, its status, how many items are still to do, and a link back to the yup. It never shows the terms, names or amounts."
         },
         {
+          "h": "Payment options, if you add them"
+        },
+        {
+          "p": "If you choose to save payment options on your account (a Venmo username, a Cash App $Cashtag, a PayPal.Me name, or the email address or US phone number you use for Zelle), we keep them encrypted, as we do email addresses and phone numbers. Saving them shows them to nobody. If you turn them on for a yup, the other person in it sees them while they owe you money there, as buttons that open those apps with the amount and a note (the yup’s item and reference) filled in where the app allows. We never send your payment options to those apps or to anyone else, we don’t put them in emails, texts, notifications or Wallet passes, and we don’t move or receive money. Any payment happens in the app, between the two of you, under that app’s own terms; we only record what each of you says about it."
+        },
+        {
           "h": "Technical records"
         },
         {
@@ -132,7 +138,7 @@
           "h": "The other person in a yup"
         },
         {
-          "p": "The other person sees what the yup shows: its terms, every version, the messages and notes, its history, the signatures and when they were made, and your name as the agreement gives it. They don’t see your email address, phone number, IP address or device. Each of you can download or print the yup’s record, and what each of you does with that copy is up to you."
+          "p": "The other person sees what the yup shows: its terms, every version, the messages and notes, its history, the signatures and when they were made, and your name as the agreement gives it. They don’t see your email address, phone number, IP address or device. Each of you can download or print the yup’s record, and what each of you does with that copy is up to you. If you turn on your payment options for a yup, they also see those, while they owe you money in it, until you turn them off."
         },
         {
           "h": "People who review reports"
@@ -200,6 +206,7 @@
             "Your email address, phone number, name and language: while you have an account. Deleting your account removes them from it at once. Your phone number then stays only where “What stays, and why” below says: in the record of text updates you turned on and of codes you asked for by text, as proof of what you agreed to, and, if it replied STOP, on our list of numbers we must not text.",
             "Yups that were sent, with everything in them and their history: we keep them as the shared record of what was proposed and agreed. We don’t delete them when one or both people delete their accounts, and we have not set a time after which they are deleted.",
             "Drafts you haven’t sent: until you send them, discard them or delete your account.",
+            "Payment options you save: until you remove them or delete your account. Turning them off for a yup stops showing them there at once.",
             "The IP address and user agent recorded with a signature: {networkDays} days.",
             "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years after they end, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
             "The record of each code you asked for by text: {smsConsentYears} years, as proof that you asked for it. The IP address and user agent recorded with it: {networkDays} days.",
@@ -232,7 +239,8 @@
             "Your one-time codes, the devices registered for your notifications, drafts you haven’t sent, notifications waiting to be sent to you, and your list of people you’ve blocked.",
             "Text updates you turned on for your agreements stop.",
             "Invitation links you made that nobody used stop working, and forget the address they were for.",
-            "Your Wallet passes are voided."
+            "Your Wallet passes are voided.",
+            "Your payment options, and their being shown on any yup."
           ]
         },
         {
@@ -301,6 +309,7 @@
             "Connections to Yuppers are encrypted (HTTPS), and browsers are told to use nothing else.",
             "We store one-time codes, sign-in tokens, the codes in invitation links and Wallet tokens only as hashes, never as they are. Codes by text are made and checked by Twilio Verify, and we keep at most a hash of one, once Twilio Verify has accepted it.",
             "We store email addresses and phone numbers encrypted, under a key we keep apart from the database, so the database or a copy of it doesn’t show them. Where we only need to find or compare one (to sign you in, to check who an invitation is for, or to keep to a STOP), we use a keyed hash of it instead. We decrypt them to send you an email, a code or a text, to show you your own, to encrypt them again under a new key when we replace ours, and to show them partly hidden where someone must tell who an account is: to the person who sent an invitation, who sees who opened it, and to us, in our list of who reviews reports.",
+            "We store payment options you choose to save encrypted in the same way, and decrypt them only to show them to you and to the other person in a yup where you turn them on.",
             "The service uses a restricted database account that can add to an agreement’s history but can’t change or delete it, and the database itself refuses changes to that history.",
             "Only reviewers we name can see reported yups, only while the report is open and after signing in within the last 12 hours, and every report they open is recorded.",
             "Our logs leave out personal information such as email addresses, phone numbers, codes and tokens."

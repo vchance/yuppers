@@ -1,5 +1,11 @@
 import type { Account, ErrorCode, ExchangeSummary, ExchangeView } from '@yuppers/api-client'
-import type { HistoryPage, RecordDocument, RevisionView } from '@yuppers/shared'
+import type {
+  HistoryPage,
+  PaymentHandleChanges,
+  PaymentHandles,
+  RecordDocument,
+  RevisionView,
+} from '@yuppers/shared'
 
 /*
  * A stand-in for the service, for rendering the web app's screens in a test
@@ -529,6 +535,17 @@ export interface FakeService {
   textUpdates: Set<string>
   /** Whether the account's number replied STOP. */
   optedOut: boolean
+  /** The account's own payment options. */
+  handles: PaymentHandles
+  /** The yups the account shows its payment options on. */
+  shown: Set<string>
+  /**
+   * The other party's payment options, where they show them: on every
+   * agreement in force where the reader owes money still to be paid.
+   */
+  theirs: PaymentHandles | null
+  /** When each of `theirs` changed, where recent enough to warn about. */
+  theirsChanged: PaymentHandleChanges
   fetch: typeof fetch
 }
 
@@ -543,6 +560,10 @@ export function fakeService(account: Account | null): FakeService {
     texting: true,
     textUpdates: new Set(),
     optedOut: false,
+    handles: { venmo: null, cash_app: null, paypal: null, zelle: null },
+    shown: new Set(),
+    theirs: null,
+    theirsChanged: { venmo: null, cash_app: null, paypal: null, zelle: null },
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -694,6 +715,28 @@ function textUpdates(service: FakeService, exchange: ExchangeView) {
   }
 }
 
+/** An exchange with its payment options as the reader sees them (`ExchangeView.payment_options`). */
+function withPayments(service: FakeService, exchange: ExchangeView): ExchangeView {
+  const statuses = new Map(exchange.contributions.map((item) => [item.id, item.status]))
+  const owes = exchange.state === 'ACTIVE' &&
+    (exchange.in_force_revision?.terms.contributions ?? []).some(
+      (item) =>
+        item.type === 'MONEY' &&
+        item.from === exchange.you &&
+        ['PENDING', 'DISPUTED'].includes(statuses.get(item.id) ?? ''),
+    )
+  return {
+    ...exchange,
+    payment_options: {
+      shown: service.shown.has(exchange.id),
+      theirs: owes ? service.theirs : null,
+      theirs_changed: owes
+        ? service.theirsChanged
+        : { venmo: null, cash_app: null, paypal: null, zelle: null },
+    },
+  }
+}
+
 function respond(service: FakeService, call: string, body: unknown): [number, unknown] {
   if (call === 'GET /v1/meta') {
     return [
@@ -752,6 +795,23 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return onlyIfYours ? [404, { code: 'INVITATION_UNAVAILABLE' }] : [200, offerExchange()]
   }
   if (call === 'GET /v1/me') return [200, service.account]
+  if (call === 'GET /v1/me/payment-handles') return [200, service.handles]
+  if (call === 'PUT /v1/me/payment-handles') {
+    const given = body as PaymentHandles
+    service.handles = {
+      venmo: given.venmo?.replace(/^@/, '') || null,
+      cash_app: given.cash_app?.replace(/^\$/, '') || null,
+      paypal: given.paypal || null,
+      zelle: given.zelle || null,
+    }
+    if (!Object.values(service.handles).some(Boolean)) service.shown.clear()
+    return [200, service.handles]
+  }
+  if (call === 'DELETE /v1/me/payment-handles') {
+    service.handles = { venmo: null, cash_app: null, paypal: null, zelle: null }
+    service.shown.clear()
+    return [204, null]
+  }
   if (call === 'GET /v1/me/deletion') {
     return [200, { drafts: 0, open_proposals: 0, agreements_in_force: 0 }]
   }
@@ -786,7 +846,15 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   if (service.proposed && call === `GET /v1/exchanges/${DRAFT}`) return [200, sentExchange()]
   for (const exchange of [...exchanges(), ...others()]) {
     const at = `/v1/exchanges/${exchange.id}`
-    if (call === `GET ${at}`) return [200, exchange]
+    if (call === `GET ${at}`) return [200, withPayments(service, exchange)]
+    if (call === `PUT ${at}/payment-options`) {
+      const { on } = body as { on: boolean }
+      const any = Object.values(service.handles).some(Boolean)
+      if (on && !any) return [409, { code: 'ACTION_NOT_ALLOWED' }]
+      if (on) service.shown.add(exchange.id)
+      else service.shown.delete(exchange.id)
+      return [200, { on }]
+    }
     if (call === `PUT ${at}/draft`) return [204, null]
     if (call === `GET ${at}/history`) return [200, history(exchange)]
     if (call === `GET ${at}/record`) return [200, record(exchange)]

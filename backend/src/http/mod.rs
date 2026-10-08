@@ -32,6 +32,7 @@ pub mod devices;
 pub mod exchanges;
 pub mod extract;
 pub mod health;
+pub mod payments;
 pub mod record;
 pub mod safety;
 pub mod sms;
@@ -268,6 +269,10 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         deletion::delete_account,
         devices::register_device,
         devices::remove_device,
+        payments::payment_handles,
+        payments::set_payment_handles,
+        payments::remove_payment_handles,
+        payments::set_payment_options,
         sms::sms_updates,
         sms::set_sms_updates,
         sms::inbound,

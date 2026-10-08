@@ -49,6 +49,7 @@ import { Consent } from '../components/Consent';
 import { DateField } from '../components/DateField';
 import { HelpLink } from '../components/HelpLink';
 import { InvitationFor } from '../components/InvitationLink';
+import { ShowWhenSigning } from '../components/ShowPaymentOptions';
 import { TermsView } from '../components/TermsView';
 import {
   Actions,
@@ -71,6 +72,7 @@ import {
 import { useReduceMotion } from '../lib/accessibility';
 import { useI18n, useSession } from '../lib/context';
 import { deviceTimezone } from '../lib/time-zone';
+import { showAfterSigning } from '../lib/payments';
 import { api } from '../lib/session';
 
 type ContributionType = components['schemas']['ContributionType'];
@@ -136,6 +138,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [discarding, setDiscarding] = useState(false);
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null);
+  // Showing payment options on this yup too, once the terms are sent.
+  const [alsoShow, setAlsoShow] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const reduceMotion = useReduceMotion();
   // Who a first proposal's invitation is for is asked for beside their
@@ -237,6 +241,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
         revisionToSend(exchange, built, language, invitationBoundTo(invitee) ?? ''),
       );
       saver.sent();
+      await showAfterSigning(exchange.id, alsoShow);
       onSent(result);
     } catch (error) {
       const code = failureCode(error);
@@ -307,6 +312,13 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
               : fmt(wording.invitationLink.boundSummary, { identifier: invitee.to.trim() })}
           </P>
         ) : null}
+        <ShowWhenSigning
+          terms={built.terms}
+          you={you}
+          shown={Boolean(exchange.payment_options?.shown)}
+          value={alsoShow}
+          onChange={setAlsoShow}
+        />
         <Consent
           signLabel={w.signAndSend}
           busy={busy}

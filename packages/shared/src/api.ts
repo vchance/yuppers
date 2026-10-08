@@ -31,6 +31,10 @@ export type SmsUpdates = Schemas['SmsUpdates']
 export type SmsCodeConsent = Schemas['SmsCodeConsent']
 export type SetSmsUpdates = Schemas['SetSmsUpdates']
 export type WalletPlatform = Schemas['WalletPlatform']
+export type PaymentHandles = Schemas['PaymentHandles']
+export type PaymentHandleChanges = Schemas['PaymentHandleChanges']
+export type PaymentOptionsShown = Schemas['PaymentOptionsShown']
+export type PaymentOptionsView = Schemas['PaymentOptionsView']
 
 /**
  * A refusal from the service, or no answer from it. Screens show
@@ -488,6 +492,36 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
           headers: headers(),
           params: { path: { id } },
           body,
+        }),
+      )
+    },
+
+    // Payment options (`payments.ts`). Yuppers never moves money.
+
+    /** The account's own payment options; each one not saved is null. */
+    paymentHandles(): Promise<PaymentHandles> {
+      return send(() => client.GET('/v1/me/payment-handles', { headers: headers() }))
+    },
+
+    /** Saves the account's payment options, replacing what was saved: one left null is removed. */
+    setPaymentHandles(handles: PaymentHandles): Promise<PaymentHandles> {
+      return send(() =>
+        client.PUT('/v1/me/payment-handles', { headers: headers(), body: handles }),
+      )
+    },
+
+    /** Removes all of the account's payment options, and stops showing them on every yup. */
+    removePaymentHandles(): Promise<void> {
+      return send(() => client.DELETE('/v1/me/payment-handles', { headers: headers() }))
+    },
+
+    /** Shows the account's payment options to the other party of a yup, or stops. */
+    setPaymentOptions(id: string, on: boolean): Promise<PaymentOptionsShown> {
+      return send(() =>
+        client.PUT('/v1/exchanges/{id}/payment-options', {
+          headers: headers(),
+          params: { path: { id } },
+          body: { on },
         }),
       )
     },

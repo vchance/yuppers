@@ -21,6 +21,7 @@ pub mod metrics;
 pub mod nanp;
 pub mod notifications;
 pub mod outbound;
+pub mod payments;
 pub mod review;
 pub mod safety;
 pub mod shutdown;

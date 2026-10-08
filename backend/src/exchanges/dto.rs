@@ -421,6 +421,32 @@ pub struct ExchangeView {
     /// `false`.
     #[schema(required = false)]
     pub content_hidden: bool,
+    /// Payment options on this agreement (`crate::payments`): whether the
+    /// viewer shows theirs, and the other party's where the viewer may see
+    /// them. Not part of the terms. Always sent; a client may read its
+    /// absence as nothing shown either way.
+    #[schema(required = false)]
+    pub payment_options: PaymentOptionsView,
+}
+
+/// Payment options on one agreement, as one party sees them. Yuppers never
+/// moves money: these open someone else's app, and a payment is recorded
+/// only when the payer says so and the payee confirms it.
+#[derive(Clone, Debug, Default, Serialize, ToSchema)]
+pub struct PaymentOptionsView {
+    /// Whether the viewer shows their own payment options to the other
+    /// party on this agreement.
+    pub shown: bool,
+    /// The other party's payment options, only while they show them on
+    /// this agreement, it is in force, and the viewer owes them money on it
+    /// that is neither marked paid, accepted nor waived. Null otherwise.
+    pub theirs: Option<crate::payments::PaymentHandles>,
+    /// When each of `theirs` changed, for those that changed after the
+    /// agreement came into force, however long ago: the payer is warned
+    /// beside them to check with the payee another way. Never the old value.
+    /// All null when `theirs` is.
+    #[schema(required = false)]
+    pub theirs_changed: crate::payments::PaymentHandleChanges,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -511,6 +537,7 @@ pub struct ViewContext {
     pub draft: Option<serde_json::Value>,
     /// When each contribution came to its current status.
     pub status_since: BTreeMap<ContributionId, OffsetDateTime>,
+    pub payment_options: PaymentOptionsView,
 }
 
 impl ExchangeView {
@@ -539,6 +566,7 @@ impl ExchangeView {
             invitation_open,
             other_party_left,
             draft,
+            payment_options,
             ..
         } = context;
 
@@ -577,6 +605,7 @@ impl ExchangeView {
                 .map(rfc3339),
             draft,
             content_hidden: false,
+            payment_options,
         }
     }
 }

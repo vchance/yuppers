@@ -933,3 +933,120 @@ async fn a_retry_waits_from_when_the_send_failed_not_from_when_the_pass_began() 
         "{wait}"
     );
 }
+
+/// Ended sessions go 30 days after they ended, idempotency keys 30 days
+/// after their request, and finished notifications 90 days after they were
+/// queued; anything younger, and any notification still waiting, stays.
+#[tokio::test]
+async fn old_sessions_keys_and_finished_notifications_are_swept() {
+    use yuppers_backend::sweep;
+
+    let (app, _turn) = app().await;
+    let ana = app.user("Ana").await;
+    let days = |n: i64| OffsetDateTime::now_utc() - Duration::days(n);
+
+    // Sessions: (expires, revoked, kept?).
+    let sessions = [
+        (days(31), None, false),
+        (days(-10), Some(days(31)), false),
+        (days(29), None, true),
+        (days(-10), Some(days(29)), true),
+        (days(-10), None, true),
+    ];
+    let mut session_ids = Vec::new();
+    for (expires, revoked, _) in &sessions {
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO account_session
+                 (account_id, token_hash, auth_method, authenticated_at, expires_at, revoked_at)
+             VALUES ($1, sha256(gen_random_uuid()::text::bytea), 'EMAIL_OTP', $2, $2, $3)
+             RETURNING id",
+        )
+        .bind(ana.id)
+        .bind(expires)
+        .bind(revoked)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+        session_ids.push(id);
+    }
+    sqlx::query("UPDATE account_session SET authenticated_at = created_at WHERE id = ANY($1)")
+        .bind(&session_ids)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+
+    // Idempotency keys: (age in days, kept?).
+    let keys = [(31, false), (29, true)];
+    for (age, _) in keys {
+        sqlx::query(
+            "INSERT INTO idempotency_key (account_id, key, request_hash, response_status, created_at)
+             VALUES ($1, $2, sha256('x'), 200, $3)",
+        )
+        .bind(ana.id)
+        .bind(format!("sweep-{age}"))
+        .bind(days(age))
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+
+    // Notifications: (age in days, completed, attempts, kept?).
+    let rows = [
+        (91, true, 1, false),
+        (91, false, 8, false),
+        (91, false, 2, true),
+        (89, true, 1, true),
+        (89, false, 8, true),
+    ];
+    let mut outbox_ids = Vec::new();
+    for (age, completed, attempts, _) in rows {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO outbox (kind, recipient_account_id, payload, attempts, created_at,
+                                 completed_at)
+             VALUES ('EMAIL', $1, '{\"notice\":\"invited\"}', $2, $3,
+                     CASE WHEN $4 THEN $3 END)
+             RETURNING id",
+        )
+        .bind(ana.id)
+        .bind(attempts)
+        .bind(days(age))
+        .bind(completed)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+        outbox_ids.push(id);
+    }
+
+    // As the service, which the worker is.
+    let swept = sweep::sweep(&app.db, OffsetDateTime::now_utc(), 8)
+        .await
+        .unwrap();
+    assert!(swept.sessions >= 2 && swept.idempotency_keys >= 1 && swept.notifications >= 2);
+
+    let left: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM account_session WHERE id = ANY($1)")
+        .bind(&session_ids)
+        .fetch_all(&app.owner)
+        .await
+        .unwrap();
+    for (id, (_, _, kept)) in session_ids.iter().zip(sessions) {
+        assert_eq!(left.contains(id), kept, "session {id}");
+    }
+    let left: Vec<String> =
+        sqlx::query_scalar("SELECT key FROM idempotency_key WHERE account_id = $1")
+            .bind(ana.id)
+            .fetch_all(&app.owner)
+            .await
+            .unwrap();
+    for (age, kept) in keys {
+        assert_eq!(left.contains(&format!("sweep-{age}")), kept, "key {age}");
+    }
+    let left: Vec<i64> = sqlx::query_scalar("SELECT id FROM outbox WHERE id = ANY($1)")
+        .bind(&outbox_ids)
+        .fetch_all(&app.owner)
+        .await
+        .unwrap();
+    for (id, row) in outbox_ids.iter().zip(rows) {
+        assert_eq!(left.contains(id), row.3, "outbox {row:?}");
+    }
+    clear_outbox(&app).await;
+}

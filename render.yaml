@@ -70,19 +70,33 @@ envVarGroups:
       # the same as EMAIL_FROM.
       - key: SMTP_FROM
         value: Yuppers <no-reply@yuppers.app>
+      # Texting is on (docs/deploy-render.md, "Text messages"). Twilio
+      # approved the A2P 10DLC campaign (use case STARTER) on 2026-10-08;
+      # the two Verify services exist and their SIDs are in yuppers-secrets;
+      # the inbound-message webhook is set on the Messaging Service. Both
+      # settings below need SMS_ACCOUNT_SID, SMS_API_KEY_SID and
+      # SMS_API_KEY_SECRET in yuppers-secrets: without them the api and the
+      # worker refuse to start (the pre-deploy migrate does not read them),
+      # so the deploy fails and the previous one keeps serving.
+      #
       # Agreement updates by text ("Yuppers.app agreement updates"), through
-      # Twilio's Messages API. Off until Twilio approves the A2P 10DLC
-      # campaign; then `twilio`, with SMS_FROM set here or in the dashboard
-      # (docs/deploy-render.md, "Text messages"). It sends no codes.
+      # Twilio's Messages API. It sends no codes.
       - key: SMS_DELIVERY
-        value: "off"
+        value: twilio
+      # The sender of agreement updates: the campaign's Messaging Service,
+      # whose one number is +1 856 548 8780. An MG... SID is sent to Twilio
+      # as MessagingServiceSid, a +1... number as From
+      # (backend/src/notifications/sms.rs); the campaign is registered on
+      # the service, so the service is the sender. Not a secret.
+      - key: SMS_FROM
+        value: MG5919e956a24e0e7a4cd2fa8037ef1457
       # One-time codes for phone numbers, made, sent and checked by Twilio
-      # Verify, which needs no campaign. Off until the two Verify services
-      # exist and their SIDs are in yuppers-secrets; then `verify`
-      # (docs/deploy-render.md, "One-time codes by Twilio Verify"). While
-      # off, phone numbers cannot sign in: CODE_DELIVERY sends email only.
+      # Verify, which needs no campaign (docs/deploy-render.md, "One-time
+      # codes by Twilio Verify"). With it on, GET /v1/meta lists `phone` in
+      # sign_in_channels and both apps offer signing in with a number; off,
+      # CODE_DELIVERY sends email only.
       - key: SMS_CODE_DELIVERY
-        value: "off"
+        value: verify
       - key: SMS_ALLOWED_COUNTRY_CODES
         value: "+1"
       # Of +1, the US alone (the 50 states and DC, by area code): never
@@ -115,8 +129,9 @@ envVarGroups:
         sync: false
       # Twilio, for agreement updates (Messages API) and one-time codes
       # (Verify) alike (docs/deploy-render.md, "Text messages"): the account
-      # SID (AC...) and a standard API key (SK...) with its secret. Unused
-      # while SMS_DELIVERY and SMS_CODE_DELIVERY are both off. Render neither
+      # SID (AC...) and a standard API key (SK...) with its secret. Needed
+      # while SMS_DELIVERY or SMS_CODE_DELIVERY is on, as both are: the api
+      # and the worker refuse to start without them. Render neither
       # prompts for a `sync: false` value in an environment group nor for one
       # added to a Blueprint already applied, so these are listed to say what
       # the group holds, and are entered by hand in the dashboard
@@ -132,15 +147,16 @@ envVarGroups:
       # deleting an account (Twilio refused the dot in "Yuppers.app"), so
       # that a code sent for one never works for the other and a deletion
       # code's text says what it is for ("Your Yuppers account deletion
-      # verification code is: ..."). Unused
-      # while SMS_CODE_DELIVERY is off; entered by hand.
+      # verification code is: ..."). Needed while SMS_CODE_DELIVERY is
+      # `verify`; entered by hand.
       - key: TWILIO_VERIFY_SERVICE_SID
         sync: false
       - key: TWILIO_VERIFY_DELETION_SERVICE_SID
         sync: false
       # The account's auth token, which checks Twilio's signature on texts
       # people send back (STOP, START) at /v1/sms/inbound. Twilio signs with
-      # it whatever the service sends with; nothing is sent with it.
+      # it whatever the service sends with; nothing is sent with it. Without
+      # it the api starts but warns, and refuses every STOP and START (403).
       - key: SMS_WEBHOOK_AUTH_TOKEN
         sync: false
       # The application role's password, generated once by Render. migrate

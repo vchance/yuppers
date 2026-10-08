@@ -276,12 +276,17 @@ fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
         "log" => Ok(Some(Arc::new(LogSmsSender))),
         "twilio" => {
             let (account_sid, credential) = twilio_account(get)?;
+            // A number is sent as `From`; a Messaging Service SID, the
+            // sender of an A2P 10DLC campaign, as `MessagingServiceSid`
+            // (`TwilioSmsSender::form`), so that Twilio picks the
+            // campaign's number from the service's pool.
             let from = required(get, "SMS_FROM")?.trim().to_owned();
             let number = matches!(Identifier::parse(&from), Ok(Identifier::Phone(_)));
-            if !number && !from.starts_with("MG") {
+            if !number && !is_twilio_sid(&from, "MG") {
                 bail!(
                     "SMS_FROM={from} is neither a phone number in international form \
-                     (+15551234567) nor a Messaging Service SID (MG...)"
+                     (+15551234567) nor a Messaging Service SID (MG followed by 32 \
+                     hexadecimal digits)"
                 );
             }
             Ok(Some(Arc::new(TwilioSmsSender::new(
@@ -1362,19 +1367,29 @@ mod tests {
             let error = read(&pairs).err().expect("refused");
             assert!(error.to_string().contains(twilio[missing].0), "{error}");
         }
-        let service = [&twilio[..3], &[("SMS_FROM", "MG0123")]].concat();
+        let service = [&twilio[..3], &[("SMS_FROM", MESSAGING_SERVICE_SID)]].concat();
         assert!(read(&service).unwrap().is_some());
-        let wrong = [&twilio[..3], &[("SMS_FROM", "Yuppers")]].concat();
-        let error = format!("{:#}", read(&wrong).err().expect("refused"));
-        assert!(
-            error.contains("SMS_FROM") && !error.contains("hunter2-sms"),
-            "{error}"
-        );
+        // A Messaging Service SID is MG and 32 hexadecimal digits, so a
+        // mistyped one stops the start, not every send.
+        for wrong in [
+            "Yuppers",
+            "MG0123",
+            "MG0000000000000000000000000000000g",
+            "+1555",
+        ] {
+            let wrong = [&twilio[..3], &[("SMS_FROM", wrong)]].concat();
+            let error = format!("{:#}", read(&wrong).err().expect("refused"));
+            assert!(
+                error.contains("SMS_FROM") && !error.contains("hunter2-sms"),
+                "{error}"
+            );
+        }
     }
 
     /// Obviously fake SIDs of the right shape.
     const ACCOUNT_SID: &str = "AC00000000000000000000000000000000";
     const KEY_SID: &str = "SK00000000000000000000000000000000";
+    const MESSAGING_SERVICE_SID: &str = "MG00000000000000000000000000000000";
 
     #[test]
     fn twilio_takes_exactly_one_credential_an_api_key_or_the_auth_token() {
@@ -1631,6 +1646,58 @@ mod tests {
             assert_eq!(channels("smtp", sms), [Email, Phone]);
             assert_eq!(channels("log", sms), [Email, Phone]);
         }
+    }
+
+    /// Texting as `render.yaml` turns it on: email by Resend, codes by
+    /// Verify, agreement updates from the campaign's Messaging Service.
+    /// Until the API key is in Render, the api (which reads both settings)
+    /// and the worker (which reads `SMS_DELIVERY`) refuse to start, naming
+    /// the missing credential, while `migrate`, the pre-deploy step, reads
+    /// neither and passes, so a deploy without the key fails at the start,
+    /// never half-working.
+    #[test]
+    fn render_yaml_s_texting_needs_the_api_key_before_the_api_or_worker_will_start() {
+        let without_key = [
+            ("CODE_DELIVERY", "resend"),
+            ("RESEND_API_KEY", "re_hunter2"),
+            ("EMAIL_FROM", "Yuppers <no-reply@example.test>"),
+            ("SMS_DELIVERY", "twilio"),
+            ("SMS_CODE_DELIVERY", "verify"),
+            ("SMS_FROM", MESSAGING_SERVICE_SID),
+            ("SMS_ACCOUNT_SID", ACCOUNT_SID),
+            ("TWILIO_VERIFY_SERVICE_SID", SIGN_IN_SERVICE),
+            ("TWILIO_VERIFY_DELETION_SERVICE_SID", DELETION_SERVICE),
+            ("MIGRATION_DATABASE_URL", "postgres://o:p@h/d"),
+            ("CONTACT_DATA_KEY", CONTACT_KEY),
+        ];
+        let refused = |error: anyhow::Error| {
+            let error = format!("{error:#}");
+            assert!(error.contains("needs a credential"), "{error}");
+            assert!(!error.contains("hunter2"), "{error}");
+        };
+        let env = table(&without_key);
+        refused(code_sender(&lookup(&env)).err().expect("the api refuses"));
+        refused(sms_sender(&lookup(&env)).err().expect("the worker refuses"));
+        assert!(MigrateConfig::from_lookup(&lookup(&env)).is_ok());
+
+        let with_key = [
+            &without_key[..],
+            &[
+                ("SMS_API_KEY_SID", KEY_SID),
+                ("SMS_API_KEY_SECRET", "hunter2-key"),
+            ],
+        ]
+        .concat();
+        let env = table(&with_key);
+        let codes = code_sender(&lookup(&env)).unwrap();
+        assert_eq!(
+            crate::auth::sign_in_channels(codes.as_ref()),
+            [
+                crate::auth::SignInChannel::Email,
+                crate::auth::SignInChannel::Phone
+            ]
+        );
+        assert!(sms_sender(&lookup(&env)).unwrap().is_some());
     }
 
     #[test]

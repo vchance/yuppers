@@ -174,7 +174,8 @@ impl Key {
         name: &'static str,
         database_url: &str,
     ) -> Result<(), BadKey> {
-        if self.is_published() && !is_local_database(database_url) {
+        let env = |name: &str| std::env::var(name).ok();
+        if self.is_published() && !is_local_database(database_url, &env) {
             return Err(BadKey::PublishedDatabase(name));
         }
         Ok(())
@@ -227,9 +228,14 @@ fn is_local_origin(origin: &str) -> bool {
 }
 
 /// Whether every host a PostgreSQL connection string names is this machine:
-/// `localhost`, a loopback address, or a Unix socket (no host, or a path).
-/// Anything it cannot read, such as the keyword form, is not.
-fn is_local_database(url: &str) -> bool {
+/// `localhost`, a loopback address, or a Unix socket (a path). Anything it
+/// cannot read, such as the keyword form, is not.
+///
+/// A string that names no host at all connects where `PGHOSTADDR` or
+/// `PGHOST` says, as libpq and sqlx both read them (`env`), and only
+/// without either to the default socket or `localhost`; so those are what
+/// is checked then.
+fn is_local_database(url: &str, env: &dyn Fn(&str) -> Option<String>) -> bool {
     let Some((_, rest)) = url.split_once("://") else {
         return false;
     };
@@ -248,6 +254,18 @@ fn is_local_database(url: &str) -> bool {
             .or_else(|| pair.strip_prefix("hostaddr="))
         {
             named = value.split(',').map(str::to_owned).collect();
+        }
+    }
+    if named.iter().all(String::is_empty) {
+        let from_env = ["PGHOSTADDR", "PGHOST"]
+            .into_iter()
+            .filter_map(env)
+            .find(|value| !value.trim().is_empty());
+        if let Some(value) = from_env {
+            named = value
+                .split(',')
+                .map(|host| host.trim().to_owned())
+                .collect();
         }
     }
     named.iter().all(|host| {
@@ -840,6 +858,7 @@ mod tests {
     #[test]
     fn a_published_key_is_refused_for_a_database_elsewhere() {
         let key = Key::parse("CONTACT_DATA_KEY", PUBLISHED_KEYS[0]).unwrap();
+        let no_env = |_: &str| None;
         for local in [
             "postgres://exchange:exchange@127.0.0.1:5432/yuppers",
             "postgres://exchange:exchange@localhost/yuppers",
@@ -848,11 +867,7 @@ mod tests {
             "postgres://u@/yuppers?host=/var/run/postgresql",
             "postgres://u:p@127.0.0.1,localhost:5433/d",
         ] {
-            assert_eq!(
-                key.refuse_published_for_database("CONTACT_DATA_KEY", local),
-                Ok(()),
-                "{local}"
-            );
+            assert!(is_local_database(local, &no_env), "{local}");
         }
         for remote in [
             "postgres://exchange:exchange@postgres:5432/yuppers",
@@ -863,16 +878,70 @@ mod tests {
             "postgres://u:p@10.0.0.2/d",
             "host=127.0.0.1 dbname=d",
         ] {
-            assert_eq!(
-                key.refuse_published_for_database("CONTACT_DATA_KEY", remote),
-                Err(BadKey::PublishedDatabase("CONTACT_DATA_KEY")),
-                "{remote}"
-            );
+            assert!(!is_local_database(remote, &no_env), "{remote}");
         }
+        // Wherever this runs, a database elsewhere is refused.
+        assert_eq!(
+            key.refuse_published_for_database("CONTACT_DATA_KEY", "postgres://u:p@10.0.0.2/d"),
+            Err(BadKey::PublishedDatabase("CONTACT_DATA_KEY"))
+        );
         let own = Key::from_bytes([0xa5; 32]);
         assert_eq!(
             own.refuse_published_for_database("CONTACT_DATA_KEY", "postgres://u:p@postgres/d"),
             Ok(())
         );
+    }
+
+    #[test]
+    fn a_string_without_a_host_is_where_pghost_says() {
+        fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| (*value).to_owned())
+            }
+        }
+        for url in [
+            "postgres:///yuppers",
+            "postgres://u:p@/yuppers",
+            "postgres://u@:5432/d",
+        ] {
+            assert!(
+                !is_local_database(url, &env(&[("PGHOST", "db.example.com")])),
+                "{url}"
+            );
+            assert!(
+                !is_local_database(url, &env(&[("PGHOSTADDR", "10.0.0.2")])),
+                "{url}"
+            );
+            assert!(
+                !is_local_database(
+                    url,
+                    &env(&[("PGHOST", "localhost"), ("PGHOSTADDR", "10.0.0.2")])
+                ),
+                "{url}: PGHOSTADDR is used before PGHOST"
+            );
+            assert!(
+                !is_local_database(url, &env(&[("PGHOST", "localhost,db.example.com")])),
+                "{url}"
+            );
+            assert!(
+                is_local_database(url, &env(&[("PGHOST", "localhost")])),
+                "{url}"
+            );
+            assert!(
+                is_local_database(url, &env(&[("PGHOST", "/var/run/postgresql")])),
+                "{url}"
+            );
+            assert!(is_local_database(url, &env(&[("PGHOST", "")])), "{url}");
+        }
+        // A host in the string is used whatever PGHOST says, as sqlx does.
+        let remote = env(&[("PGHOST", "db.example.com")]);
+        assert!(is_local_database("postgres://u:p@127.0.0.1/d", &remote));
+        assert!(is_local_database(
+            "postgres://u@/d?host=/var/run/postgresql",
+            &remote
+        ));
     }
 }

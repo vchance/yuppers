@@ -107,17 +107,18 @@
       "title": "Cookies and storage on your device",
       "blocks": [
         {
-          "p": "The website uses one cookie and two pieces of browser storage, all to make the product work. There are no analytics, advertising or tracking cookies, and no scripts from anyone else."
+          "p": "The website uses one cookie and three pieces of browser storage, all to make the product work. There are no analytics, advertising or tracking cookies, and no scripts from anyone else."
         },
         {
           "ul": [
             "yuppers_session (a cookie): keeps you signed in. It holds a random token, lasts as long as you use the site at least once every {sessionIdleDays} days, up to {sessionMaxDays} days, or until you sign out, and the page’s scripts can’t read it.",
             "yuppers.language (local storage): the language you picked, so that the website opens in it next time.",
+            "yuppers.theme (local storage): your appearance choice (System, Light or Dark), if you picked one, so that the website opens in it next time.",
             "yuppers.invitation (session storage): the code from an invitation link while you sign in to read it, so that reloading the page doesn’t lose it. It is removed once the invitation is opened or turns out to be no longer valid, and when you close the tab."
           ]
         },
         {
-          "p": "In the Yuppers app, your sign-in is kept in your device’s secure storage (the iOS Keychain or the Android Keystore), with your notification setting for that device. A copy of a record that you choose to share is kept in the app’s cache only until you make the next copy or sign out."
+          "p": "In the Yuppers app, your sign-in is kept in your device’s secure storage (the iOS Keychain or the Android Keystore), with your notification setting for that device. Your appearance choice (System, Light or Dark) is kept in the app’s own storage on the device. A copy of a record that you choose to share is kept in the app’s cache only until you make the next copy or sign out."
         }
       ]
     },

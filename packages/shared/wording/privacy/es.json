@@ -107,17 +107,18 @@
       "title": "Cookies y almacenamiento en tu dispositivo",
       "blocks": [
         {
-          "p": "El sitio web usa una cookie y dos datos guardados en el navegador, todos para que el producto funcione. No hay cookies de analítica, publicidad ni rastreo, ni scripts de nadie más."
+          "p": "El sitio web usa una cookie y tres datos guardados en el navegador, todos para que el producto funcione. No hay cookies de analítica, publicidad ni rastreo, ni scripts de nadie más."
         },
         {
           "ul": [
             "yuppers_session (una cookie): mantiene tu sesión abierta. Contiene un token aleatorio, dura mientras uses el sitio al menos una vez cada {sessionIdleDays} días, hasta {sessionMaxDays} días, o hasta que cierres la sesión, y los scripts de la página no pueden leerla.",
             "yuppers.language (almacenamiento local): el idioma que elegiste, para que el sitio web se abra en él la próxima vez.",
+            "yuppers.theme (almacenamiento local): la apariencia que elegiste (Sistema, Claro u Oscuro), si elegiste una, para que el sitio web se abra con ella la próxima vez.",
             "yuppers.invitation (almacenamiento de sesión): el código de un enlace de invitación mientras entras para leerla, para que no se pierda si la página se vuelve a cargar. Se borra en cuanto se abre la invitación o resulta que ya no es válida, y al cerrar la pestaña."
           ]
         },
         {
-          "p": "En la app de Yuppers, tu sesión se guarda en el almacenamiento seguro de tu dispositivo (el llavero de iOS o el Keystore de Android), junto con tu ajuste de notificaciones para ese dispositivo. Una copia de un registro que decides compartir se guarda en la caché de la app solo hasta que hagas la siguiente copia o cierres la sesión."
+          "p": "En la app de Yuppers, tu sesión se guarda en el almacenamiento seguro de tu dispositivo (el llavero de iOS o el Keystore de Android), junto con tu ajuste de notificaciones para ese dispositivo. La apariencia que elegiste (Sistema, Claro u Oscuro) se guarda en el almacenamiento propio de la app en el dispositivo. Una copia de un registro que decides compartir se guarda en la caché de la app solo hasta que hagas la siguiente copia o cierres la sesión."
         }
       ]
     },

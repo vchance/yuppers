@@ -48,14 +48,15 @@ envVarGroups:
         value: smtp
       - key: NOTIFICATION_DELIVERY
         value: smtp
-      # Postmark's SMTP server: STARTTLS on 587 (it does not offer 465).
+      # Resend's SMTP server: STARTTLS on 587, user `resend`, the API key
+      # as the password (yuppers-secrets).
       - key: SMTP_HOST
-        value: smtp.postmarkapp.com
+        value: smtp.resend.com
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_TLS
         value: starttls
-      # A sender on a domain verified in Postmark.
+      # A sender on a domain verified in Resend.
       - key: SMTP_FROM
         value: Yuppers <no-reply@yuppers.app>
       # Agreement updates by text ("Yuppers.app agreement updates"), through
@@ -86,7 +87,7 @@ envVarGroups:
   # Secrets shared by the api and the worker.
   - name: yuppers-secrets
     envVars:
-      # Postmark's Server API token, which is both the SMTP username and
+      # Resend's SMTP login: the username `resend` and the API key as the
       # password. Entered in the dashboard.
       - key: SMTP_USERNAME
         sync: false

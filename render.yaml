@@ -44,19 +44,30 @@ envVarGroups:
         value: CF-Connecting-IP
       - key: TRUSTED_PROXIES
         value: "1"
+      # Email (codes and notifications) goes through Resend's HTTP API, with
+      # RESEND_API_KEY from yuppers-secrets (docs/deploy-render.md, "Email").
+      # `smtp` is the other option: any provider's SMTP server, below.
       - key: CODE_DELIVERY
-        value: smtp
+        value: resend
       - key: NOTIFICATION_DELIVERY
-        value: smtp
-      # Resend's SMTP server: STARTTLS on 587, user `resend`, the API key
-      # as the password (yuppers-secrets).
+        value: resend
+      # The sender, on yuppers.app, which is verified in Resend. Used by
+      # Resend and SMTP alike.
+      - key: EMAIL_FROM
+        value: Yuppers <no-reply@yuppers.app>
+      # For the SMTP option only (CODE_DELIVERY or NOTIFICATION_DELIVERY
+      # `smtp`); unused while both are `resend`. Any provider's SMTP server
+      # works. These are Resend's own: STARTTLS on 587, username `resend`
+      # and the API key as the password (SMTP_USERNAME and SMTP_PASSWORD in
+      # yuppers-secrets).
       - key: SMTP_HOST
         value: smtp.resend.com
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_TLS
         value: starttls
-      # A sender on a domain verified in Resend.
+      # The sender's older name, read only where EMAIL_FROM is unset. Kept
+      # the same as EMAIL_FROM.
       - key: SMTP_FROM
         value: Yuppers <no-reply@yuppers.app>
       # Agreement updates by text ("Yuppers.app agreement updates"), through
@@ -69,7 +80,7 @@ envVarGroups:
       # Verify, which needs no campaign. Off until the two Verify services
       # exist and their SIDs are in yuppers-secrets; then `verify`
       # (docs/deploy-render.md, "One-time codes by Twilio Verify"). While
-      # off, phone numbers cannot sign in: CODE_DELIVERY=smtp sends email.
+      # off, phone numbers cannot sign in: CODE_DELIVERY sends email only.
       - key: SMS_CODE_DELIVERY
         value: "off"
       - key: SMS_ALLOWED_COUNTRY_CODES
@@ -87,8 +98,17 @@ envVarGroups:
   # Secrets shared by the api and the worker.
   - name: yuppers-secrets
     envVars:
-      # Resend's SMTP login: the username `resend` and the API key as the
-      # password. Entered in the dashboard.
+      # Resend's API key (re_...), with sending access restricted to the
+      # yuppers.app domain. The api and the worker refuse to start without
+      # it while CODE_DELIVERY or NOTIFICATION_DELIVERY is `resend`, so it
+      # is entered by hand in the dashboard before the deploy that first
+      # needs it (docs/deploy-render.md, "Email"). Never logged.
+      - key: RESEND_API_KEY
+        sync: false
+      # For the SMTP option only: the SMTP server's username and password.
+      # Unused while email goes by Resend's API. For Resend's SMTP server,
+      # `resend` and the API key; for another provider, what it gives.
+      # Entered in the dashboard.
       - key: SMTP_USERNAME
         sync: false
       - key: SMTP_PASSWORD

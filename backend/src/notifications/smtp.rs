@@ -104,10 +104,12 @@ pub struct SmtpSender {
 
 impl SmtpSender {
     pub fn new(settings: SmtpSettings, wording: Wording) -> anyhow::Result<Self> {
-        let from: Mailbox = settings
-            .from
-            .parse()
-            .with_context(|| format!("SMTP_FROM {:?} is not a mailbox", settings.from))?;
+        let from: Mailbox = settings.from.parse().with_context(|| {
+            format!(
+                "EMAIL_FROM (or SMTP_FROM) {:?} is not a mailbox",
+                settings.from
+            )
+        })?;
         let tls = match settings.tls {
             TlsMode::None => Tls::None,
             mode => {

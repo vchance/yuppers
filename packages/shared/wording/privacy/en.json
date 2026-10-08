@@ -152,7 +152,7 @@
           "ul": [
             "Render hosts our service, our database, our server logs and the database’s backups, in the United States.",
             "Cloudflare runs our domain’s DNS and carries every request to yuppers.app over its network before it reaches Render, so it handles your IP address and the request. It may ask your browser to report connection errors to it. It also forwards email sent to our addresses, such as {privacyEmail}.",
-            "Postmark sends our emails, so it receives your email address and the email: a one-time code, or a notice that something happened in one of your yups (which never includes the terms).",
+            "Resend sends our emails, from the United States, so it receives your email address and the email: a one-time code, or a notice that something happened in one of your yups (which never includes the terms).",
             "Twilio, when we send text messages, receives your phone number and the message: an agreement update, if you turned them on; and, through its verification service, Twilio Verify, for each one-time code by text, your number, the code it makes and sends you, the code you enter, and the language to write it in.",
             "Expo, Apple and Google, if you turn on notifications in the app: Expo receives your device’s push token and the notification and passes them to Apple’s or Google’s push service, which delivers it. A notification only says “Your yup has an update.”, with the yup’s internal ID so that the app can open it.",
             "Apple and Google, if you add a Wallet pass: Apple delivers the pass’s updates to your devices, and Google keeps the pass (its status, reference code and number of items) to show it in Google Wallet."

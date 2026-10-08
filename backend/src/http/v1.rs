@@ -90,8 +90,9 @@ pub struct Meta {
     /// when `sign_in_channels` has no `phone`.
     pub sms_country_codes: Vec<String>,
     /// The email address sign-in codes come from, such as
-    /// `no-reply@yuppers.app`: the address part of `SMTP_FROM`, without its
-    /// display name. A client tells someone waiting for a code to look for
+    /// `no-reply@yuppers.app`: the address part of `EMAIL_FROM` (or
+    /// `SMTP_FROM`), without its display name, whether codes go by Resend or
+    /// SMTP. A client tells someone waiting for a code to look for
     /// it, in their spam folder too. Absent where codes are not sent by
     /// email from an address of the service's own (the development log).
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -184,7 +184,46 @@ export type {
   Slot,
   WalletLink,
   WalletPlatform,
+  PaymentHandles,
+  PaymentOptionsShown,
+  PaymentOptionsView,
 } from './api'
+export {
+  cashAppUrl,
+  cashtag,
+  handleInputs,
+  hasAnyHandle,
+  linkAmount,
+  NO_HANDLE_INPUTS,
+  normalizeHandle,
+  PAYMENT_APPS,
+  paymentNote,
+  paymentOptionsKey,
+  payOffered,
+  payOptions,
+  paypalName,
+  paypalUrl,
+  readHandles,
+  receivesMoney,
+  showOffered,
+  useHasPaymentHandles,
+  usePaymentHandles,
+  useShowPaymentOptions,
+  venmoUrl,
+  venmoUsername,
+  zelleRecipient,
+  zelleShown,
+} from './payments'
+export type {
+  HandleInputs,
+  LinkedApp,
+  PaymentApp,
+  PaymentHandlesApi,
+  PaymentHandlesForm,
+  PaymentOptionsApi,
+  PayOption,
+  ShowPaymentOptions,
+} from './payments'
 export { idempotencyKeys } from './idempotency'
 export type { IdempotencyKeys } from './idempotency'
 export {

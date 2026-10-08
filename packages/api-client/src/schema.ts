@@ -274,6 +274,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges/{id}/payment-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Shows the signed-in party's payment options to the other party of this
+         *     agreement, or stops. Not part of the terms: it changes no version, is
+         *     not signed and is not in the history. The other party sees them only
+         *     while they owe money on the agreement in force that is still to be paid.
+         */
+        put: operations["set_payment_options"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges/{id}/record": {
         parameters: {
             query?: never;
@@ -628,6 +650,32 @@ export interface paths {
          */
         post: operations["add_identifier"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/payment-handles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in account's payment options. */
+        get: operations["payment_handles"];
+        /**
+         * Saves the account's payment options, replacing what was saved: one left
+         *     out or empty is removed. With none left, they stop being shown on every
+         *     agreement.
+         */
+        put: operations["set_payment_handles"];
+        post?: never;
+        /**
+         * Removes all of the account's payment options, and stops showing them on
+         *     every agreement.
+         */
+        delete: operations["remove_payment_handles"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1183,6 +1231,13 @@ export interface components {
              *     absence as `false`.
              */
             other_party_left?: boolean;
+            /**
+             * @description Payment options on this agreement (`crate::payments`): whether the
+             *     viewer shows theirs, and the other party's where the viewer may see
+             *     them. Not part of the terms. Always sent; a client may read its
+             *     absence as nothing shown either way.
+             */
+            payment_options?: components["schemas"]["PaymentOptionsView"];
             state: components["schemas"]["StateDto"];
             timezone: string;
             /**
@@ -1399,6 +1454,48 @@ export interface components {
         Parties: {
             A: string;
             B: string;
+        };
+        /**
+         * @description A person's payment options, each optional. In a request, what to save;
+         *     in a reply, what is saved, as stored: a Venmo username without its `@`,
+         *     a $Cashtag without its `$`, a PayPal.Me name, and for Zelle a lower-case
+         *     email address or a US number in international form (`+12025550142`).
+         */
+        PaymentHandles: {
+            /**
+             * @description A Cash App $Cashtag: 1 to 20 letters, digits or `_`, with at least
+             *     one letter. A leading `$` is dropped.
+             */
+            cash_app?: string | null;
+            /** @description A PayPal.Me name: 1 to 20 letters or digits. */
+            paypal?: string | null;
+            /**
+             * @description A Venmo username: 5 to 30 letters, digits, `-` or `_`. A leading `@`
+             *     is dropped.
+             */
+            venmo?: string | null;
+            /**
+             * @description The email address or US phone number Zelle pays this person at.
+             *     Shown, never linked: Zelle has no links.
+             */
+            zelle?: string | null;
+        };
+        /** @description Whether the signed-in party shows their payment options on an agreement. */
+        PaymentOptionsShown: {
+            on: boolean;
+        };
+        /**
+         * @description Payment options on one agreement, as one party sees them. Yuppers never
+         *     moves money: these open someone else's app, and a payment is recorded
+         *     only when the payer says so and the payee confirms it.
+         */
+        PaymentOptionsView: {
+            /**
+             * @description Whether the viewer shows their own payment options to the other
+             *     party on this agreement.
+             */
+            shown: boolean;
+            theirs?: components["schemas"]["PaymentHandles"] | null;
         };
         /**
          * Format: binary
@@ -2788,6 +2885,69 @@ export interface operations {
             };
         };
     };
+    set_payment_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The exchange */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentOptionsShown"];
+            };
+        };
+        responses: {
+            /** @description Whether they are now shown */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentOptionsShown"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange, or the caller is not a party to it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description To turn them on: the agreement is a draft or closed, or the account has no payment options saved (`ACTION_NOT_ALLOWED`). Turning them off always works */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many changes to payment options this hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     record: {
         parameters: {
             query?: {
@@ -3774,6 +3934,122 @@ export interface operations {
             };
             /** @description A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    payment_handles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What is saved; each absent one is null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentHandles"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_payment_handles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentHandles"];
+            };
+        };
+        responses: {
+            /** @description What is now saved, as stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentHandles"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description One of them is not a username, $Cashtag, PayPal.Me name, or email address or US phone number for Zelle */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many changes to payment options this hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_payment_handles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many changes to payment options this hour */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

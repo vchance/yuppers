@@ -598,8 +598,8 @@ fn event_row(
 ///
 /// What does go is what was theirs alone and binds nobody: a working copy,
 /// messages still waiting to be sent to them about an exchange that is no
-/// longer theirs, and text updates they turned on for it, whose ending is
-/// recorded as any other's.
+/// longer theirs, text updates they turned on for it, whose ending is
+/// recorded as any other's, and showing their payment options on it.
 async fn vacate(
     conn: &mut PgConnection,
     exchange: Uuid,
@@ -638,6 +638,12 @@ async fn vacate(
     .await?;
 
     sms_updates::turn_off(conn, removed, exchange, sms_updates::Source::NoLongerAParty).await?;
+    // Nor does whoever takes the place next see their payment options.
+    sqlx::query("DELETE FROM payment_offer WHERE exchange_id = $1 AND account_id = $2")
+        .bind(exchange)
+        .bind(removed)
+        .execute(&mut *conn)
+        .await?;
     Ok(())
 }
 

@@ -7,7 +7,8 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::{
-    AppState, account, auth, deletion, devices, exchanges, record, safety, sms, staff, wallet,
+    AppState, account, auth, deletion, devices, exchanges, payments, record, safety, sms, staff,
+    wallet,
 };
 use crate::auth::{SignInChannel, sign_in_channels};
 use crate::client_version::MinimumClientVersions;
@@ -28,6 +29,12 @@ pub fn router() -> Router<AppState> {
         .route("/me/deletion/codes", post(deletion::request_deletion_code))
         .route("/me/devices", put(devices::register_device))
         .route("/me/devices/{id}", delete(devices::remove_device))
+        .route(
+            "/me/payment-handles",
+            get(payments::payment_handles)
+                .put(payments::set_payment_handles)
+                .delete(payments::remove_payment_handles),
+        )
         .route("/exchanges", get(exchanges::list).post(exchanges::create))
         .route("/exchanges/{id}", get(exchanges::get))
         .route("/exchanges/{id}/draft", put(exchanges::save_draft))
@@ -43,6 +50,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/exchanges/{id}/sms-updates",
             get(sms::sms_updates).put(sms::set_sms_updates),
+        )
+        .route(
+            "/exchanges/{id}/payment-options",
+            put(payments::set_payment_options),
         )
         // Twilio's few kilobytes, not the 2 MB every other route may take.
         .route(

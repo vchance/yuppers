@@ -10,6 +10,7 @@ import {
   moneyIds,
   NAMED_INVITATION,
   otherPartyName,
+  paymentOptionsKey,
   remainingRequired,
   statusesOf,
   troublePanel,
@@ -31,6 +32,7 @@ import { Consent } from '../components/Consent';
 import { InvitationFor, InvitationLink } from '../components/InvitationLink';
 import { ContentHidden, OtherPartyLeft } from '../components/OtherPartyLeft';
 import { TermsView } from '../components/TermsView';
+import { ShowPaymentOptions, ShowWhenSigning } from '../components/ShowPaymentOptions';
 import { SmsUpdates } from '../components/SmsUpdates';
 import { WalletButton } from '../components/WalletButton';
 import {
@@ -51,6 +53,7 @@ import {
 } from '../components/ui';
 import { focusKeeper, useReduceMotion } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
+import { showAfterSigning } from '../lib/payments';
 import { api } from '../lib/session';
 import { type, useColors } from '../lib/theme';
 import { ClaimantWaiting, ConfirmClaimant, NobodyYet } from './Claimant';
@@ -130,7 +133,14 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       } catch {
         return;
       }
-      if (cancelled || found.version === current.current.exchange.version) return;
+      // Payment options change no version: a payee who stops showing them
+      // is noticed too (`paymentOptionsKey`).
+      if (
+        cancelled ||
+        (found.version === current.current.exchange.version &&
+          paymentOptionsKey(found) === paymentOptionsKey(current.current.exchange))
+      )
+        return;
       if (current.current.engaged) setNewer(found);
       else {
         onChange(found);
@@ -223,6 +233,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
           otherName={otherName}
           actions={actions}
           onRevise={revise}
+          reload={reload}
         />
       )}
 
@@ -247,6 +258,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
                 otherName={otherName}
                 active={active}
                 actions={actions}
+                exchange={exchange}
+                onChange={onChange}
               />
             )}
           />
@@ -276,6 +289,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <ShowPaymentOptions exchange={exchange} otherName={otherName} reload={reload} />
 
       <SmsUpdates exchange={exchange} />
 
@@ -448,6 +463,7 @@ interface OpenRevisionProps {
   otherName: string;
   actions: ExchangeActions;
   onRevise(): void;
+  reload(): Promise<Exchange | null>;
 }
 
 /**
@@ -455,7 +471,14 @@ interface OpenRevisionProps {
  * or an amendment to the agreement in force. Its author signed it by sending
  * it; the other party can sign it, decline it, or answer with their own.
  */
-function OpenRevision({ exchange, revision, otherName, actions, onRevise }: OpenRevisionProps) {
+function OpenRevision({
+  exchange,
+  revision,
+  otherName,
+  actions,
+  onRevise,
+  reload,
+}: OpenRevisionProps) {
   const { wording, fmt, moment, language } = useI18n();
   const w = wording.exchange;
   const you = exchange.you;
@@ -465,6 +488,8 @@ function OpenRevision({ exchange, revision, otherName, actions, onRevise }: Open
   const amendment = exchange.state === 'ACTIVE';
   // The initiator is never bound to someone they have not confirmed.
   const blocked = you === 'A' && exchange.counterparty !== 'CONFIRMED';
+  // Showing payment options too, once signed: not part of what is signed.
+  const [alsoShow, setAlsoShow] = useState(false);
 
   return (
     <Card>
@@ -549,6 +574,13 @@ function OpenRevision({ exchange, revision, otherName, actions, onRevise }: Open
       {actions.panel === 'accept' && (
         <Panel title={w.signHeading}>
           <P>{w.signIntro}</P>
+          <ShowWhenSigning
+            terms={revision.terms}
+            you={you}
+            shown={Boolean(exchange.payment_options?.shown)}
+            value={alsoShow}
+            onChange={setAlsoShow}
+          />
           <Consent
             headingLevel={4}
             signLabel={w.accept}
@@ -556,13 +588,19 @@ function OpenRevision({ exchange, revision, otherName, actions, onRevise }: Open
             failure={actions.failure}
             onCancel={actions.close}
             onSign={() =>
-              // Acceptance names the revision: if the terms have changed since
-              // this screen showed them, the service refuses (DESIGN.md §6).
-              void actions.run({
-                type: 'ACCEPT',
-                revision: revision.id,
-                consent: consentShown(language),
-              })
+              void (async () => {
+                // Acceptance names the revision: if the terms have changed
+                // since this screen showed them, the service refuses (DESIGN.md §6).
+                const signed = await actions.run({
+                  type: 'ACCEPT',
+                  revision: revision.id,
+                  consent: consentShown(language),
+                });
+                if (signed && alsoShow) {
+                  await showAfterSigning(exchange.id, true);
+                  await reload();
+                }
+              })()
             }
           />
         </Panel>

@@ -70,6 +70,13 @@
 0001 grant relation participant INSERT
 0001 grant relation participant SELECT
 0001 grant relation participant UPDATE
+0026 grant relation payment_handle DELETE
+0026 grant relation payment_handle INSERT
+0026 grant relation payment_handle SELECT
+0026 grant relation payment_handle UPDATE
+0026 grant relation payment_offer DELETE
+0026 grant relation payment_offer INSERT
+0026 grant relation payment_offer SELECT
 0011 grant relation push_ticket DELETE
 0011 grant relation push_ticket INSERT
 0011 grant relation push_ticket SELECT

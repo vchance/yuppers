@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use super::dto::{
     Claimant, CommandDto, Consent, CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued,
-    InvitationOptions, InvitationPreview, RevisionSent, RevisionView, RunCommand, SendRevision,
-    ViewContext, rfc3339, state_dto,
+    InvitationOptions, InvitationPreview, PaymentOptionsView, RevisionSent, RevisionView,
+    RunCommand, SendRevision, ViewContext, rfc3339, state_dto,
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
@@ -22,12 +22,13 @@ use crate::domain::contribution::{Action, Status};
 use crate::domain::exchange::{self, Actor, Command, Counterparty, Decision, Event, State, decide};
 use crate::domain::identity::Identifier;
 use crate::domain::invitation;
-use crate::domain::revision::{ContributionId, Revision, RevisionId, Slot};
+use crate::domain::revision::{ContributionId, Kind, Revision, RevisionId, Settlement, Slot};
 use crate::domain::risk::{Tier, required_tier};
 use crate::error::{ApiError, ErrorCode, Redacted};
 use crate::http::Settings;
 use crate::http::extract::Session;
 use crate::languages;
+use crate::payments;
 
 /// A request body's digest together with the caller's idempotency key.
 pub struct Idempotency<'a> {
@@ -343,6 +344,21 @@ async fn view(
     .map(|(id, at)| (ContributionId(id), at))
     .collect();
 
+    // Payment options (`crate::payments`): whether the viewer shows theirs,
+    // and the other party's, decrypted only while the viewer owes them money
+    // on the agreement in force still to be paid, and only where the other
+    // party shows them here.
+    let theirs = match aggregate.account_of(you.other()) {
+        Some(payee) if !other_party_left && owes_unpaid_money(&aggregate, you) => {
+            payments::for_payer(conn, payee, id).await?
+        }
+        _ => None,
+    };
+    let payment_options = PaymentOptionsView {
+        shown: payments::shown(conn, account, id).await?,
+        theirs,
+    };
+
     let mut view = ExchangeView::build(
         &aggregate,
         you,
@@ -352,6 +368,7 @@ async fn view(
             other_party_left,
             draft,
             status_since,
+            payment_options,
         },
         rules,
     );
@@ -360,6 +377,33 @@ async fn view(
         crate::review::hide_in_view(&mut view, &placeholder);
     }
     Ok(view)
+}
+
+/// Whether `payer` owes the other party money on the agreement in force
+/// that is still to be paid: paid outside Yuppers, and neither marked paid,
+/// accepted nor waived. A dispute puts it back to be paid.
+fn owes_unpaid_money(aggregate: &Aggregate, payer: Slot) -> bool {
+    if aggregate.exchange.state != State::Active {
+        return false;
+    }
+    aggregate
+        .in_force
+        .iter()
+        .flat_map(|record| &record.revision.contributions)
+        .any(|contribution| {
+            contribution.from == payer
+                && matches!(
+                    contribution.kind,
+                    Kind::Money {
+                        settlement: Settlement::OffPlatform,
+                        ..
+                    }
+                )
+                && matches!(
+                    aggregate.exchange.statuses.get(&contribution.id),
+                    Some(Status::Pending | Status::Disputed)
+                )
+        })
 }
 
 /// Whether an account is active: neither suspended nor deleted.

@@ -1,4 +1,4 @@
-import type { components } from '@yuppers/api-client';
+import type { components, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
   moveCommand,
   movePanel,
@@ -7,6 +7,7 @@ import {
   moveWording,
   noteFor,
   NOTE_MAX_CHARS,
+  payOffered,
   statusWording,
   troublePanel,
   waitingLong,
@@ -15,6 +16,8 @@ import {
   type Slot,
 } from '@yuppers/shared';
 import { useState } from 'react';
+
+import { PaySheet } from '../components/PaySheet';
 
 import { StatusChip } from '../components/StatusChip';
 import { Actions, Button, Failure, Hint, Notice, P, Panel, TextField } from '../components/ui';
@@ -34,6 +37,13 @@ interface Props {
   /** Whether the agreement is still in force; a closed one is only read. */
   active: boolean;
   actions: ExchangeActions;
+  /**
+   * The exchange, where the reader may be offered "Pay" (`payOffered`): it
+   * carries the other party's payment options, when they show them.
+   */
+  exchange?: Exchange;
+  /** Brings the exchange up to date, once the pay sheet has read it again. */
+  onChange?(exchange: Exchange): void;
 }
 
 /**
@@ -44,8 +54,18 @@ interface Props {
  * outside the product and only recorded here, so for money the words are for
  * paying and receiving, never for delivering (DESIGN.md §11).
  */
-export function Fulfillment({ contribution, status, since, you, otherName, active, actions }: Props) {
-  const { wording, fmt, moment } = useI18n();
+export function Fulfillment({
+  contribution,
+  status,
+  since,
+  you,
+  otherName,
+  active,
+  actions,
+  exchange,
+  onChange,
+}: Props) {
+  const { wording, fmt, moment, money: formatMoney } = useI18n();
   const w = wording.exchange;
   const money = contribution.type === 'MONEY';
   const role = contribution.from === you ? 'PROVIDER' : 'RECIPIENT';
@@ -55,6 +75,11 @@ export function Fulfillment({ contribution, status, since, you, otherName, activ
   // A claim nobody answers stays a claim (DESIGN.md §5.2). After a while the
   // provider is pointed to the way out, rather than left waiting.
   const stuck = active && role === 'PROVIDER' && waitingLong(status, since);
+  // Paying in another app, where the payee shows their payment options. It
+  // records nothing: "I've paid" stays the payer's own move.
+  const pay = exchange && active && payOffered(exchange, contribution, status);
+  const [paying, setPaying] = useState(false);
+  const claim: Move = status === 'DISPUTED' ? 'RECLAIM' : 'CLAIM';
 
   return (
     <>
@@ -83,6 +108,37 @@ export function Fulfillment({ contribution, status, since, you, otherName, activ
           )}
         </>
       )}
+      {pay && exchange ? (
+        <Actions>
+          <Button
+            testID={`pay-${contribution.id}`}
+            variant="primary"
+            label={fmt(wording.payments.payButton, {
+              name: otherName,
+              amount: formatMoney(contribution.amount_minor ?? 0, exchange.currency),
+            })}
+            disabled={actions.busy}
+            onPress={() => setPaying(true)}
+          />
+        </Actions>
+      ) : null}
+      {paying && exchange ? (
+        <PaySheet
+          exchange={exchange}
+          contribution={contribution}
+          otherName={otherName}
+          onClose={(found) => {
+            setPaying(false);
+            if (found) onChange?.(found);
+          }}
+          onPaid={(found) => {
+            setPaying(false);
+            if (found) onChange?.(found);
+            // The claim the payer sends themselves, as without the sheet.
+            actions.open(panelOf(claim));
+          }}
+        />
+      ) : null}
       {moves.length > 0 && (
         <Actions>
           {moves.map((move) => (

@@ -945,6 +945,89 @@ export interface Wording {
    * Text updates for an agreement (DESIGN.md §12), on the exchange view:
    * adding a phone number, the consent box, and where things stand.
    */
+  /**
+   * Payment options (`payments.ts`; `backend/src/payments.rs`): the names a
+   * person may save for being paid in Venmo, Cash App, PayPal or Zelle, on
+   * the account screen; showing them on one yup; and what the person who
+   * owes money sees. Yuppers never moves money: none of this may say or
+   * suggest that a payment is protected, guaranteed, held or checked, nor
+   * advise which kind of payment to choose in an app. App names are plain
+   * text, never logos.
+   */
+  payments: {
+    /** The account screen's section. */
+    heading: string
+    intro: string
+    venmoLabel: string
+    venmoHint: string
+    venmoInvalid: string
+    cashAppLabel: string
+    cashAppHint: string
+    cashAppInvalid: string
+    paypalLabel: string
+    paypalHint: string
+    paypalInvalid: string
+    zelleLabel: string
+    zelleHint: string
+    zelleInvalid: string
+    save: string
+    saved: string
+    remove: string
+    removed: string
+    /** On a yup, for a party who receives money. */
+    showHeading: string
+    showLabel: string
+    /** Under the box. `{name}`: the other party. */
+    showHint: string
+    /** Once turned on or off. `{name}`. */
+    shownNow: string
+    hiddenNow: string
+    /** With nothing saved: the link to the account screen. */
+    noneSaved: string
+    addInAccount: string
+    /** In the panel where terms are signed or sent. */
+    showWhenSigning: string
+    /** For the payer. `{name}`, `{amount}`. */
+    payButton: string
+    sheetTitle: string
+    /** Who the options come from, and what we don't do. `{name}`. */
+    addedBy: string
+    /** Neutral: no advice on which kind of payment to pick in the app. */
+    appTerms: string
+    /** Each app's button: its name in plain text. */
+    open: {
+      venmo: string
+      cash_app: string
+      paypal: string
+    }
+    /** How the person is shown in each app, under its button. `{handle}`. */
+    handle: {
+      venmo: string
+      cash_app: string
+      paypal: string
+    }
+    /** What opening it does. `{amount}`. */
+    prefillsAmountAndNote: string
+    prefillsAmount: string
+    enterAmount: string
+    zelleHeading: string
+    zelleNoLinks: string
+    amountLabel: string
+    noteLabel: string
+    /** The note for the payment: `{title}` of the item, `{code}` of the yup. */
+    note: string
+    copy: string
+    /** Its accessible name: `{what}` is the label of what is copied. */
+    copyWhat: string
+    copied: string
+    copyFailed: string
+    /** After paying: the existing claim, which only the payer makes. `{name}`. */
+    afterHeading: string
+    afterText: string
+    close: string
+    /** The payee stopped showing them while the sheet was being opened. `{name}`. */
+    gone: string
+  }
   smsUpdates: {
     heading: string
     intro: string

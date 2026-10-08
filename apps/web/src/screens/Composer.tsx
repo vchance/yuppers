@@ -47,6 +47,7 @@ import { Consent } from '../components/Consent'
 import { HelpLink } from '../components/HelpLink'
 import { InvitationFor } from '../components/InvitationLink'
 import { Panel } from '../components/Panel'
+import { ShowWhenSigning } from '../components/ShowWhenSigning'
 import { TermsView } from '../components/TermsView'
 import {
   ErrorNote,
@@ -57,6 +58,7 @@ import {
   type ControlProps,
 } from '../components/ui'
 import { useAnnouncement } from '../lib/announce'
+import { showAfterSigning } from '../lib/payments'
 import { api, failureCode, type RevisionSent, type Slot } from '../lib/api'
 
 type ContributionType = components['schemas']['ContributionType']
@@ -127,6 +129,8 @@ function Editor({ exchange, reload, onSent }: Props) {
   const [added, setAdded] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null)
+  // Showing payment options on this yup too, once the terms are sent.
+  const [alsoShow, setAlsoShow] = useState(false)
   // Who a first proposal's invitation is for is asked for beside their
   // name, and checked with the rest before the signing step.
   const channels = useSignInChannels(api)
@@ -244,6 +248,7 @@ function Editor({ exchange, reload, onSent }: Props) {
         revisionToSend(exchange, built, language, invitationBoundTo(invitee) ?? ''),
       )
       saver.sent()
+      await showAfterSigning(exchange.id, alsoShow)
       onSent(result, kind === 'first' ? invitationBoundTo(invitee) : null)
     } catch (error) {
       const code = failureCode(error)
@@ -315,6 +320,13 @@ function Editor({ exchange, reload, onSent }: Props) {
               : fmt(wording.invitationLink.boundSummary, { identifier: invitee.to.trim() })}
           </p>
         )}
+        <ShowWhenSigning
+          terms={built.terms}
+          you={you}
+          shown={Boolean(exchange.payment_options?.shown)}
+          checked={alsoShow}
+          onChange={setAlsoShow}
+        />
         <Consent
           signLabel={w.signAndSend}
           busy={busy}

@@ -1,5 +1,6 @@
-//! No email address or phone number anywhere in the database (migration
-//! 0025; README, "Contact details at rest"), in a database of its own: the
+//! No email address, phone number or payment option anywhere in the
+//! database (migrations 0025 and 0026; README, "Contact details at rest"),
+//! in a database of its own: the
 //! whole life of two people through the API, then every column of every
 //! table searched for every address and number they used, as text and as
 //! raw bytes.
@@ -43,7 +44,7 @@ async fn no_email_address_or_phone_number_is_stored_anywhere() {
 
     // A whole life through the API, twice over: signing in by address and
     // by number, adding one, invitations bound to each, codes, text updates
-    // on and off, STOP and START, deletion.
+    // on and off, STOP and START, payment options saved and shown, deletion.
     let mut needles = test.whole_life().await;
     needles.extend(test.whole_life().await);
     assert_eq!(

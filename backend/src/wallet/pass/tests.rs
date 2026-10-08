@@ -105,6 +105,17 @@ fn view() -> ExchangeView {
         close_request_lapses_at: None,
         draft: None,
         content_hidden: false,
+        // Ben owes the payment, and Ana shows her payment options: none of
+        // them is ever on a pass.
+        payment_options: crate::exchanges::dto::PaymentOptionsView {
+            shown: false,
+            theirs: Some(crate::payments::PaymentHandles {
+                venmo: Some("ana-venmo".to_owned()),
+                cash_app: Some("AnaCash".to_owned()),
+                paypal: Some("AnaPayPal".to_owned()),
+                zelle: Some("ana@zelle.test".to_owned()),
+            }),
+        },
     }
 }
 
@@ -163,7 +174,20 @@ fn texts(model: &PassModel) -> Vec<String> {
 fn holds_nothing_from_the_agreement(model: &PassModel) {
     let all = texts(model).join("\n");
     for secret in [
-        "Ana", "Ben", "Ruiz", "Ortiz", "fence", "Fence", "Payment", "Gate", "400", "Saturday",
+        "Ana",
+        "Ben",
+        "Ruiz",
+        "Ortiz",
+        "fence",
+        "Fence",
+        "Payment",
+        "Gate",
+        "400",
+        "Saturday",
+        "ana-venmo",
+        "AnaCash",
+        "AnaPayPal",
+        "zelle",
     ] {
         assert!(!all.contains(secret), "{secret:?} is on the pass:\n{all}");
     }

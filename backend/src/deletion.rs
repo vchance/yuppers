@@ -19,7 +19,8 @@
 //! text updates on for (the record of that consent stays, with the turning
 //! off recorded beside it, `crate::notifications::sms_updates`); codes sent to its
 //! identifiers; unsent working copies of terms; idempotency keys; queued
-//! notifications to it; the blocks it made. Invitation links it issued
+//! notifications to it; the blocks it made; its payment options, and
+//! the agreements it showed them on. Invitation links it issued
 //! that nobody took are revoked, and forget whom they were for. A block
 //! someone else made against it stays theirs to remove. Reports stay, both
 //! those it made and those about it: leaving must not erase a complaint.
@@ -103,7 +104,7 @@ use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::exchanges::repo;
 use crate::notifications::sms_updates;
-use crate::{languages, wallet};
+use crate::{languages, payments, wallet};
 
 /// Which of the account's identifiers a code is sent to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ToSchema)]
@@ -549,6 +550,9 @@ async fn attempt(
         .bind(account)
         .execute(&mut *tx)
         .await?;
+    // Its payment options, and every agreement it showed them on
+    // (`crate::payments`).
+    payments::forget(&mut tx, account).await?;
 
     // Giving up the identifiers needs the row to itself, which a transaction
     // that merely refers to the account also prevents. Such a transaction

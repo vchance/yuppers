@@ -390,3 +390,64 @@ async fn requests_are_counted_by_route_template_not_by_path() {
         assert!(!page.contains(&raw), "{raw} in\n{page}");
     }
 }
+
+#[tokio::test]
+async fn payment_options_are_never_logged() {
+    let _turn = TURN.lock().await;
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber =
+        telemetry::subscriber(LogFormat::Json, EnvFilter::new("trace"), false, move || {
+            writer.clone()
+        });
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let app = App::start(DATABASE).await;
+    let deal = app.active().await;
+    let handles = json!({
+        "venmo": "logcheck-venmo",
+        "cash_app": "LogcheckCash",
+        "paypal": "LogcheckPayPal",
+        "zelle": "logcheck@zelle.test",
+    });
+    app.call(
+        Some(&deal.ana),
+        Method::PUT,
+        "/v1/me/payment-handles",
+        Some(handles),
+        &[],
+    )
+    .await
+    .ok();
+    // A refused one too: what was sent is not in the refusal's log either.
+    let refused = app
+        .call(
+            Some(&deal.ana),
+            Method::PUT,
+            "/v1/me/payment-handles",
+            Some(json!({ "venmo": "logcheck venmo!", "zelle": "logcheck@zelle.test" })),
+            &[],
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    app.call(
+        Some(&deal.ana),
+        Method::PUT,
+        &format!("/v1/exchanges/{}/payment-options", deal.exchange),
+        Some(json!({ "on": true })),
+        &[],
+    )
+    .await
+    .ok();
+    let seen = app.view(&deal.ben, &deal.exchange).await;
+    assert_eq!(seen["payment_options"]["theirs"]["venmo"], "logcheck-venmo");
+
+    let text = log.text();
+    assert!(text.contains("payment-handles"), "{text}");
+    for handle in ["logcheck", "Logcheck"] {
+        assert!(
+            !text.contains(handle),
+            "the log holds a payment option:\n{text}"
+        );
+    }
+}

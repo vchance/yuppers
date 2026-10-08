@@ -1351,6 +1351,8 @@ pub fn hide_in_view(view: &mut ExchangeView, placeholder: &str) {
     }
     view.draft = None;
     view.content_hidden = true;
+    // Nor are the other party's payment options shown beside it.
+    view.payment_options.theirs = None;
 }
 
 /// Events with every note and description in place of the placeholder.

@@ -1,4 +1,4 @@
-import type { components } from '@yuppers/api-client'
+import type { components, ExchangeView as Exchange } from '@yuppers/api-client'
 import {
   moveCommand,
   movePanel,
@@ -7,12 +7,13 @@ import {
   moveWording,
   noteFor,
   NOTE_MAX_CHARS,
+  payOffered,
   statusWording,
   troublePanel,
   waitingLong,
   type Move,
 } from '@yuppers/shared'
-import { useId, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Panel } from '../components/Panel'
@@ -20,6 +21,11 @@ import { StatusChip } from '../components/StatusChip'
 import { Failure, Field } from '../components/ui'
 import type { Actions } from '../lib/actions'
 import type { Slot } from '../lib/api'
+
+// Only a payer whose payee shows payment options ever opens it.
+const PaySheet = lazy(() =>
+  import('../components/PaySheet').then((module) => ({ default: module.PaySheet })),
+)
 
 type Contribution = components['schemas']['ContributionDto']
 type Status = components['schemas']['Status']
@@ -35,6 +41,13 @@ interface Props {
   /** Whether the agreement is still in force; a closed one is only read. */
   active: boolean
   actions: Actions
+  /**
+   * The exchange, where the reader may be offered "Pay" (`payOffered`): it
+   * carries the other party's payment options, when they show them.
+   */
+  exchange?: Exchange
+  /** Brings the exchange up to date, once the pay sheet has read it again. */
+  onChange?(exchange: Exchange): void
 }
 
 /**
@@ -53,8 +66,10 @@ export function Fulfillment({
   otherName,
   active,
   actions,
+  exchange,
+  onChange,
 }: Props) {
-  const { wording, fmt, moment } = useI18n()
+  const { wording, fmt, moment, money: formatMoney } = useI18n()
   const w = wording.exchange
   const money = contribution.type === 'MONEY'
   const role = contribution.from === you ? 'PROVIDER' : 'RECIPIENT'
@@ -64,6 +79,12 @@ export function Fulfillment({
   // A claim nobody answers stays a claim (DESIGN.md §5.2). After a while the
   // provider is pointed to the way out, rather than left waiting.
   const stuck = active && role === 'PROVIDER' && waitingLong(status, since)
+  // Paying in another app, where the payee shows their payment options. It
+  // records nothing: "I've paid" stays the payer's own move.
+  const pay = exchange && active && payOffered(exchange, contribution, status)
+  const [paying, setPaying] = useState(false)
+  const payButton = useRef<HTMLButtonElement>(null)
+  const claim: Move = status === 'DISPUTED' ? 'RECLAIM' : 'CLAIM'
 
   return (
     <>
@@ -98,6 +119,43 @@ export function Fulfillment({
             </>
           )}
         </div>
+      )}
+      {pay && exchange && (
+        <div className="actions">
+          <button
+            type="button"
+            className="primary"
+            ref={payButton}
+            aria-haspopup="dialog"
+            disabled={actions.busy}
+            onClick={() => setPaying(true)}
+          >
+            {fmt(wording.payments.payButton, {
+              name: otherName,
+              amount: formatMoney(contribution.amount_minor ?? 0, exchange.currency),
+            })}
+          </button>
+        </div>
+      )}
+      {paying && exchange && (
+        <Suspense fallback={null}>
+          <PaySheet
+            exchange={exchange}
+            contribution={contribution}
+            otherName={otherName}
+            onClose={(found) => {
+              setPaying(false)
+              if (found) onChange?.(found)
+              payButton.current?.focus()
+            }}
+            onPaid={(found) => {
+              setPaying(false)
+              if (found) onChange?.(found)
+              // The claim the payer sends themselves, as without the sheet.
+              actions.open(panelOf(claim))
+            }}
+          />
+        </Suspense>
       )}
       {moves.length > 0 && (
         <div className="actions">

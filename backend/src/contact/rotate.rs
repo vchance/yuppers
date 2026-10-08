@@ -30,8 +30,9 @@ impl Column {
     }
 }
 
-/// Every column that holds encrypted contact details.
-pub const COLUMNS: [Column; 4] = [
+/// Every column that holds encrypted contact details, and the payment
+/// options encrypted the same way (`crate::payments`).
+pub const COLUMNS: [Column; 8] = [
     Column {
         table: "account",
         column: "email_encrypted",
@@ -55,6 +56,30 @@ pub const COLUMNS: [Column; 4] = [
         column: "phone_encrypted",
         field: Field::SMS_CODE_CONSENT_PHONE,
         by_row: true,
+    },
+    Column {
+        table: "payment_handle",
+        column: "venmo_encrypted",
+        field: Field::PAYMENT_VENMO,
+        by_row: false,
+    },
+    Column {
+        table: "payment_handle",
+        column: "cash_app_encrypted",
+        field: Field::PAYMENT_CASH_APP,
+        by_row: false,
+    },
+    Column {
+        table: "payment_handle",
+        column: "paypal_encrypted",
+        field: Field::PAYMENT_PAYPAL,
+        by_row: false,
+    },
+    Column {
+        table: "payment_handle",
+        column: "zelle_encrypted",
+        field: Field::PAYMENT_ZELLE,
+        by_row: false,
     },
 ];
 

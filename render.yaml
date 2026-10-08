@@ -127,11 +127,12 @@ envVarGroups:
         sync: false
       - key: SMS_API_KEY_SECRET
         sync: false
-      # The two Twilio Verify services (VA...): "Yuppers.app", for signing in
-      # and confirming a number, and "Yuppers.app account deletion", for
-      # deleting an account, so that a code sent for one never works for the
-      # other and a deletion code's text says what it is for ("Your
-      # Yuppers.app account deletion verification code is: ..."). Unused
+      # The two Twilio Verify services (VA...): "Yuppers", for signing in
+      # and confirming a number, and "Yuppers account deletion", for
+      # deleting an account (Twilio refused the dot in "Yuppers.app"), so
+      # that a code sent for one never works for the other and a deletion
+      # code's text says what it is for ("Your Yuppers account deletion
+      # verification code is: ..."). Unused
       # while SMS_CODE_DELIVERY is off; entered by hand.
       - key: TWILIO_VERIFY_SERVICE_SID
         sync: false

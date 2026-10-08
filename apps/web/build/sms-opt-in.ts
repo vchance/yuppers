@@ -64,10 +64,12 @@ export const SAMPLE_CODE = '123456'
  * "One-time codes by Twilio Verify"), which Verify's template puts in its
  * message: one for signing in and confirming a number, and one for
  * deleting an account, so that a deletion code never reads like a sign-in
- * code.
+ * code. Twilio refused the dot in "Yuppers.app" as a friendly name (error
+ * 60200), so the services are named "Yuppers" and "Yuppers account
+ * deletion", and these are those names, exactly as created.
  */
-export const VERIFY_SERVICE_NAME = 'Yuppers.app'
-export const VERIFY_DELETION_SERVICE_NAME = 'Yuppers.app account deletion'
+export const VERIFY_SERVICE_NAME = 'Yuppers'
+export const VERIFY_DELETION_SERVICE_NAME = 'Yuppers account deletion'
 
 /**
  * The message Twilio Verify sends with a code, in English: its default SMS

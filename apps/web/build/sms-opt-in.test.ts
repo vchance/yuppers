@@ -87,10 +87,10 @@ describe('the page on how people opt in to texts', () => {
   })
 
   test('the message Twilio Verify sends is its default template, with the services’ names', () => {
-    expect(VERIFY_SAMPLE).toBe('Your Yuppers.app verification code is: 123456')
+    expect(VERIFY_SAMPLE).toBe('Your Yuppers verification code is: 123456')
     // A deletion code says what it is for.
     expect(VERIFY_DELETION_SAMPLE).toBe(
-      'Your Yuppers.app account deletion verification code is: 123456',
+      'Your Yuppers account deletion verification code is: 123456',
     )
     // The backend says the same of what it has Verify send.
     const verify = readFileSync(join(repoRoot, 'backend/src/notifications/verify.rs'), 'utf8')

@@ -10,7 +10,7 @@ import { en, fill } from './support/wording'
  * answering `GET /v1/meta` in the browser as such a service would.
  */
 
-test('the service offers phone numbers here, and the screen asks for them with the countries', async ({
+test('the service offers phone numbers here, and the screen asks for US numbers', async ({
   person,
 }) => {
   const ana = await person('Ana')
@@ -19,9 +19,8 @@ test('the service offers phone numbers here, and the screen asks for them with t
   await page.goto('/')
   await expect(title(page, en.signIn.title)).toBeVisible()
   await expect(page.getByLabel(en.signIn.identifierLabel)).toBeVisible()
-  await expect(
-    page.getByText(fill(en.signIn.identifierHintCountries, { codes: '+1' })),
-  ).toBeVisible()
+  // US numbers only, written as they are there: no country code asked for.
+  await expect(page.getByText(en.signIn.identifierHintUs)).toBeVisible()
   await signIn(ana)
   await expect(page.getByText(en.profile.firstIntro)).toBeVisible()
 })
@@ -34,6 +33,8 @@ test('a phone number gets its code by text only once the box beside it is ticked
   const digits = () => Math.floor(Math.random() * 10)
   const area = ['212', '415', '617', '713', '917'][Math.floor(Math.random() * 5)]
   const phone = `+1${area}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
+  // As people in the US write it, and as the screens show it, without +1.
+  const american = `(${phone.slice(2, 5)}) ${phone.slice(5, 8)}-${phone.slice(8)}`
   const asked: unknown[] = []
   page.on('request', (request) => {
     if (request.url().endsWith('/v1/auth/codes')) asked.push(request.postDataJSON())
@@ -48,8 +49,9 @@ test('a phone number gets its code by text only once the box beside it is ticked
   await identifier.fill(sam.email)
   await expect(box).toHaveCount(0)
 
-  // A number: the box, unticked, and the button waiting for it, saying why.
-  await identifier.fill(phone)
+  // A number, typed without +1: the box, unticked, and the button waiting
+  // for it, saying why.
+  await identifier.fill(american)
   await expect(box).toBeVisible()
   await expect(box).not.toBeChecked()
   await expect(send).toBeDisabled()
@@ -63,7 +65,8 @@ test('a phone number gets its code by text only once the box beside it is ticked
   await expect(send).toBeEnabled()
   // The log masks the number but for its last two digits.
   const code = await codeFrom(`+1••••••••${phone.slice(-2)}`, 'sign-in', () => send.click())
-  await expect(page.getByText(fill(en.signIn.codeSent, { identifier: phone }))).toBeVisible()
+  // Sent in E.164, and shown the American way.
+  await expect(page.getByText(fill(en.signIn.codeSent, { identifier: american }))).toBeVisible()
   expect(asked).toEqual([{ identifier: phone, sms_consent: { version: expect.any(String), language: 'en' } }])
   await page.getByLabel(en.signIn.codeLabel).fill(code)
   await button(page, en.signIn.submit).click()

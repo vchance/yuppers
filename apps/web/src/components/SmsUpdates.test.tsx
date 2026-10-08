@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { SMS_CODE_CONSENT_VERSION, SMS_CONSENT_VERSION } from '@yuppers/shared'
+import { act } from 'react'
 import { afterEach, expect, test } from 'vitest'
 
 import { ACTIVE, DRAFT, ENDED, GOOD_CODE, ana } from '../test/fake-service'
@@ -69,17 +70,30 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   expect(control.textContent).toContain(w.phoneInvalid)
   expect(lastSent(service, 'POST /v1/auth/codes')).toBeUndefined()
 
-  // Another number: the box is unticked again.
-  await type(field(w.phoneLabel), '(555) 234-5678')
+  // A phone field, with an example written as US numbers are.
+  const number = field(w.phoneLabel) as HTMLInputElement
+  expect(number.type).toBe('tel')
+  expect(number.inputMode).toBe('tel')
+  expect(number.autocomplete).toBe('tel-national')
+  expect(number.placeholder).toBe('(555) 123-4567')
+  expect(w.phoneHint).toBe('A US number, such as (555) 123-4567.')
+
+  // Another number, typed without +1: the box is unticked again.
+  await act(async () => number.focus())
+  await type(number, '555.234.5678')
   expect((field(wording.smsCode.verifyNumber) as HTMLInputElement).checked).toBe(false)
   expect(button(w.sendCode).disabled).toBe(true)
+  // Leaving the field writes the number the American way; the box, ticked
+  // for the same number, stays ticked.
   await press(field(wording.smsCode.verifyNumber))
+  expect(number.value).toBe('(555) 234-5678')
+  expect((field(wording.smsCode.verifyNumber) as HTMLInputElement).checked).toBe(true)
   await press(button(w.sendCode))
   expect(lastSent(service, 'POST /v1/auth/codes')).toEqual({
     identifier: '+15552345678',
     sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
   })
-  await until(() => control.textContent!.includes('We texted a code to +1 •••-•••-5678.'), 'the code step')
+  await until(() => control.textContent!.includes('We texted a code to (•••) •••-5678.'), 'the code step')
   expect(document.activeElement).toBe(field(w.codeLabel))
   expect(await violations()).toEqual([])
 
@@ -90,7 +104,7 @@ test('a party with no number adds one with a code, then ticks the box and saves'
     code: GOOD_CODE,
   })
   await until(() => control.querySelector('input[type="checkbox"]') !== null, 'the box')
-  expect(control.textContent).toContain('+1 •••-•••-5678 is now on your account.')
+  expect(control.textContent).toContain('(•••) •••-5678 is now on your account.')
 
   // The box's label is the consent wording, word for word, with its two
   // addresses as links that read as the addresses.
@@ -117,7 +131,7 @@ test('a party with no number adds one with a code, then ticks the box and saves'
     consent: { version: SMS_CONSENT_VERSION, language: 'en' },
   })
   const confirmation =
-    'Text updates are on for this agreement. You’ll get one text per status change at +1 •••-•••-5678. Reply STOP to opt out.'
+    'Text updates are on for this agreement. You’ll get one text per status change at (•••) •••-5678. Reply STOP to opt out.'
   await until(() => control.textContent!.includes(confirmation), 'the confirmation')
   await settle()
   expect(announced().polite).toBe(confirmation)
@@ -138,7 +152,7 @@ test('a party whose number is on the account sees the box, ticked while updates 
   await until(() => control.querySelector('input[type="checkbox"]') !== null, 'the box')
   expect(control.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true)
   expect(control.textContent).toContain(
-    'Text updates are on for this agreement. You’ll get one text per status change at +1 •••-•••-5678.',
+    'Text updates are on for this agreement. You’ll get one text per status change at (•••) •••-5678.',
   )
   // How it works, on the page the carriers review.
   const learn = [...control.querySelectorAll('a')].find((link) =>
@@ -154,7 +168,7 @@ test('a number that replied STOP is told how to get texts again, and offered no 
   const control = await shown()
   await until(() => control.textContent!.includes('replied STOP'), 'the opted-out notice')
   expect(control.textContent).toContain(
-    wording.smsUpdates.optedOut.replace('{phone}', '+1 •••-•••-5678'),
+    wording.smsUpdates.optedOut.replace('{phone}', '(•••) •••-5678'),
   )
   expect(control.querySelector('input[type="checkbox"]')).toBeNull()
   expect(await violations()).toEqual([])

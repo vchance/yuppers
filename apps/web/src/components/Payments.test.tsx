@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react'
 import { afterEach, expect, test } from 'vitest'
 
 import { ACTIVE, DISPUTED, ana } from '../test/fake-service'
@@ -50,8 +51,12 @@ test('the account saves payment options, says which entries are wrong, and remov
 
   await type(field(w.venmoLabel), '@ana-pays')
   await type(field(w.paypalLabel), 'paypal.me/AnaPays')
-  await type(field(w.zelleLabel), '(202) 555-0142')
+  // A US number typed any usual way, written the American way on leaving.
+  const zelle = field(w.zelleLabel) as HTMLInputElement
+  await act(async () => zelle.focus())
+  await type(zelle, '202.555.0142')
   await press(button(w.save))
+  expect(zelle.value).toBe('(202) 555-0142')
   await until(() => section.textContent!.includes(w.saved), 'saved')
   expect(lastSent(service, 'PUT /v1/me/payment-handles')).toEqual({
     venmo: 'ana-pays',

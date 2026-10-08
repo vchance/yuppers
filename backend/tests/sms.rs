@@ -452,6 +452,78 @@ async fn a_plus_one_number_outside_the_us_is_refused_unless_its_region_is_served
     assert_eq!(phone.sent().len(), 1);
 }
 
+/// A US number typed as people in the US write it, without +1, is the same
+/// number as in E.164: the code goes to E.164, and signing in with it typed
+/// any other way reaches one account. A number with another country code is
+/// still refused as not served.
+#[tokio::test]
+async fn a_us_number_typed_without_plus_one_is_the_same_number() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    let (app, _turn) = start(50, router(&phone, &mailbox)).await;
+    let e164 = format!("+1999555{:04}", Uuid::new_v4().as_u128() % 10_000);
+    let national = &e164[2..];
+    let american = format!(
+        "({}) {}-{}",
+        &national[..3],
+        &national[3..6],
+        &national[6..]
+    );
+
+    assert_eq!(
+        ask(&app, &american, "en").await.status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        phone.sent(),
+        [(e164.clone(), Purpose::SignIn, "en".to_owned())]
+    );
+
+    // A code is used once: each sign-in after the first asks again, typed
+    // another way.
+    let mut accounts = Vec::new();
+    for (round, typed) in [format!("1-{national}"), national.to_owned(), e164.clone()]
+        .into_iter()
+        .enumerate()
+    {
+        if round > 0 {
+            let again = if round == 1 {
+                e164.clone()
+            } else {
+                american.clone()
+            };
+            assert_eq!(ask(&app, &again, "en").await.status, StatusCode::NO_CONTENT);
+        }
+        let reply = app
+            .call(
+                None,
+                Method::POST,
+                "/v1/auth/sessions",
+                Some(json!({ "identifier": typed, "code": CODE, "delivery": "TOKEN" })),
+                &[],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::OK, "{typed}: {:?}", reply.body);
+        assert_eq!(reply.body["account"]["phone"], e164.as_str(), "{typed}");
+        accounts.push(reply.body["account"]["id"].as_str().unwrap().to_owned());
+    }
+    accounts.dedup();
+    assert_eq!(accounts.len(), 1, "one account: {accounts:?}");
+
+    ask(&app, "+44 7700 900123", "en")
+        .await
+        .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+    // Without a country code, only ten digits (or 1 and ten) whose area code
+    // and exchange begin with 2 to 9.
+    for bad in ["999 155 0100", "447700900123", "555 0100"] {
+        ask(&app, bad, "en")
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_IDENTIFIER");
+    }
+    let sent = phone.sent();
+    assert_eq!(sent.len(), 3);
+    assert!(sent.iter().all(|(to, _, _)| *to == e164), "{sent:?}");
+}
+
 #[tokio::test]
 async fn numbers_beginning_alike_have_their_own_hourly_cap() {
     let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));

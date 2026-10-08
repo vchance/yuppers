@@ -2,6 +2,8 @@ import type { ExchangeView as Exchange } from '@yuppers/api-client';
 import {
   defaultLanguage,
   maskPhone,
+  PHONE_EXAMPLE,
+  phoneAsTyped,
   staticPagePath,
   useSmsUpdates,
   type SmsUpdatesApi,
@@ -70,14 +72,18 @@ export function SmsUpdates({ exchange, client = api }: Props) {
             required
             error={control.invalidPhone ? w.phoneInvalid : null}
             keyboardType="phone-pad"
-            autoComplete="tel"
+            autoComplete="tel-national"
             textContentType="telephoneNumber"
+            placeholder={PHONE_EXAMPLE}
             value={phone}
             onChangeText={(value) => {
               setPhone(value);
               // What was ticked was for the number as it was.
               control.setCodeConsent(false);
             }}
+            // Written the American way on leaving: the same number, so the
+            // box stays as it was.
+            onBlur={() => setPhone(phoneAsTyped)}
           />
           <Failure code={control.failure} />
           <ConsentCheckbox

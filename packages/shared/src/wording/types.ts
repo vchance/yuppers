@@ -229,8 +229,14 @@ export interface Wording {
     introEmail: string
     emailLabel: string
     changeEmail: string
-    /** `identifierHint`, naming the country codes served: `{codes}`, such as `+1`. */
+    /**
+     * `identifierHint`, naming the country codes served: `{codes}`, such as
+     * `+1, +52`. A US number needs none; the hint asks for one only for
+     * numbers elsewhere.
+     */
     identifierHintCountries: string
+    /** `identifierHint` where the service texts US numbers only (`+1`): written as they are in the US. */
+    identifierHintUs: string
     /** Said, before anything is sent, of a phone number where only email addresses are taken. */
     emailOnly: string
     /** `INVALID_IDENTIFIER`, where only email addresses are taken. */

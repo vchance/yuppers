@@ -191,12 +191,12 @@ test('where the service sends text messages, a phone number is asked for and sen
   await open('/', { signedIn: false });
   await screen.findByText(w.signIn.intro);
   const identifier = screen.getByLabelText(w.signIn.identifierLabel);
-  expect(identifier.props.accessibilityHint).toContain(
-    w.signIn.identifierHintCountries.replace('{codes}', '+1'),
-  );
+  // Only +1 is texted: no country code is asked for.
+  expect(identifier.props.accessibilityHint).toContain(w.signIn.identifierHintUs);
+  expect(identifier.props.accessibilityHint).not.toContain('country code');
   expect(identifier.props.textContentType).toBe('username');
   expect(screen.queryByRole('checkbox')).toBeNull();
-  await fireEvent.changeText(identifier, '+15551234567');
+  await fireEvent.changeText(identifier, '+15552345678');
 
   // The box, unticked, named by the words the terms quote, its two
   // addresses links; "Send code" waits for it and says why.
@@ -224,12 +224,18 @@ test('where the service sends text messages, a phone number is asked for and sen
   // Another number unticks it, even typed back.
   await fireEvent.press(box);
   expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: true });
-  await fireEvent.changeText(identifier, '+15551234568');
+  await fireEvent.changeText(identifier, '+15552345679');
   expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: false });
-  await fireEvent.changeText(identifier, '+15551234567');
+  // Typed without +1, the American way: the same number, still unticked.
+  await fireEvent.changeText(identifier, '555-234-5678');
   expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: false });
 
   await fireEvent.press(screen.getByRole('checkbox'));
+  // Leaving the field writes the number the American way; the box stays
+  // ticked, for it is the same number.
+  await fireEvent(screen.getByLabelText(w.signIn.identifierLabel), 'blur');
+  expect(screen.getByLabelText(w.signIn.identifierLabel).props.value).toBe('(555) 234-5678');
+  expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: true });
   expect(send().props.accessibilityState).toMatchObject({ disabled: false });
   expect(send().props.accessibilityHint).toBeUndefined();
   expect(screen.queryByText(w.smsCode.tickToSend)).toBeNull();
@@ -238,10 +244,11 @@ test('where the service sends text messages, a phone number is asked for and sen
   expect(service.sent.at(-1)).toMatchObject({
     path: '/v1/auth/codes',
     body: {
-      identifier: '+15551234567',
+      identifier: '+15552345678',
       sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
     },
   });
+  screen.getByText(w.signIn.codeSent.replace('{identifier}', '(555) 234-5678'));
 
   // Back to the number: unticked again.
   await fireEvent.press(screen.getByText(w.signIn.changeIdentifier));

@@ -1,5 +1,5 @@
 import type { Account } from '@yuppers/api-client'
-import { useAccountDeletion, useSignInChannels } from '@yuppers/shared'
+import { formatPhone, useAccountDeletion, useSignInChannels } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -80,7 +80,8 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
     language,
   )
   const { step, preview, destination, busy } = deletion
-  const identifier = destination?.identifier ?? ''
+  // A phone number as the screens show one, `(856) 548-8780`.
+  const identifier = formatPhone(destination?.identifier ?? '')
 
   // The code step starts with the keyboard on the one thing it asks for.
   const codeInput = useRef<HTMLInputElement>(null)
@@ -225,7 +226,7 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
                   checked={option.channel === destination?.channel}
                   onChange={() => deletion.choose(option.channel)}
                 />
-                <Written inline>{option.identifier}</Written>
+                <Written inline>{formatPhone(option.identifier)}</Written>
               </label>
             ))}
           </fieldset>

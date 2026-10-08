@@ -2,10 +2,14 @@ import type { Account, ErrorCode } from '@yuppers/api-client';
 import {
   codeWaitText,
   failureCode,
+  formatPhone,
   identifierRefused,
+  identifierToSend,
   isComplete,
   languages,
+  phoneAsTyped,
   phoneOffered,
+  phoneRefused,
   pickLanguage,
   readsAsPhone,
   signInText,
@@ -121,6 +125,11 @@ export function Gate({ children, signedOut }: { children: ReactNode; signedOut?:
  * (`sms-code-consent.ts`). Never ticked to begin with, and unticked again
  * whenever the number changes.
  *
+ * A US number is typed the way it is written there, `(856) 548-8780`,
+ * with or without +1, and is sent in E.164 (`phone.ts`); leaving the field
+ * writes it that way. A number of a country the service does not text is
+ * stopped here, in the service's own words.
+ *
  * While the code is on its way, the form says to look in the spam folder
  * too, for an email from the address the service names, and offers another
  * code only half a minute after the last (`useResendReady`).
@@ -148,7 +157,9 @@ function SignIn() {
   // The box, while what is typed would be texted a code.
   const typed = identifier.trim();
   const texted = readsAsPhone(typed) && identifierRefused(typed, channels) === null;
-  const consent = useSmsCodeConsentBox(texted ? typed : null);
+  // The box is for the number, not for how it is written: writing it the
+  // American way on leaving the field leaves the box as it was.
+  const consent = useSmsCodeConsentBox(texted ? identifierToSend(typed) : null);
 
   // Each step starts with the keyboard on the one thing it asks for.
   useEffect(() => {
@@ -163,10 +174,16 @@ function SignIn() {
       setProblem(w.emailOnly);
       return;
     }
+    const refused = phoneRefused(to, channels);
+    if (refused) {
+      setFailure(refused);
+      return;
+    }
+    const target = identifierToSend(to);
     setBusy(true);
     try {
-      await api.requestCode(to, consent.checked ? smsCodeConsent(language) : undefined);
-      setSentTo(to);
+      await api.requestCode(target, consent.checked ? smsCodeConsent(language) : undefined);
+      setSentTo(target);
       setSentAt(Date.now());
       setResent(again);
       // The button pressed goes away until another code may be asked for;
@@ -216,6 +233,7 @@ function SignIn() {
             setIdentifier(value);
             setProblem(null);
           }}
+          onBlur={() => setIdentifier(phoneAsTyped)}
           onSubmitEditing={() => {
             if (!consent.missing) void requestCode(identifier.trim(), false);
           }}
@@ -263,7 +281,7 @@ function SignIn() {
   const wait = codeWaitText(w, sentTo, channels, fmt);
   return (
     <>
-      <P>{fmt(w.codeSent, { identifier: sentTo })}</P>
+      <P>{fmt(w.codeSent, { identifier: formatPhone(sentTo) })}</P>
       {wait ? <P>{wait}</P> : null}
       <TextField
         input={codeInput}

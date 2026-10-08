@@ -1,5 +1,5 @@
 import type { ExchangeView as Exchange } from '@yuppers/api-client'
-import { maskPhone, useSmsUpdates } from '@yuppers/shared'
+import { maskPhone, PHONE_EXAMPLE, phoneAsTyped, useSmsUpdates } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -90,13 +90,18 @@ export function SmsUpdates({ exchange }: Props) {
                 ref={phoneInput}
                 type="tel"
                 inputMode="tel"
-                autoComplete="tel"
+                autoComplete="tel-national"
+                placeholder={PHONE_EXAMPLE}
+                dir="ltr"
                 value={phone}
                 onChange={(event) => {
                   setPhone(event.target.value)
                   // What was ticked was for the number as it was.
                   control.setCodeConsent(false)
                 }}
+                // Written the American way on leaving: the same number, so
+                // the box stays as it was.
+                onBlur={() => setPhone(phoneAsTyped)}
               />
             )}
           </Field>

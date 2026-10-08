@@ -1,7 +1,7 @@
 import { apiLog } from './support/env'
 import { expect, test } from './support/fixtures'
 import { signIn } from './support/flows'
-import { codesTo, number, waitFor } from './support/texts'
+import { american, codesTo, number, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -11,7 +11,7 @@ import { en, fill } from './support/wording'
  * answering `GET /v1/meta` in the browser as such a service would.
  */
 
-test('the service offers phone numbers here, and the form asks for them with the countries', async ({
+test('the service offers phone numbers here, and the form asks for US numbers', async ({
   person,
 }) => {
   const ana = await person('Ana')
@@ -25,7 +25,8 @@ test('the service offers phone numbers here, and the form asks for them with the
 
   await page.goto('/')
   await expect(page.getByLabel(en.signIn.identifierLabel)).toBeVisible()
-  await expect(page.getByText(fill(en.signIn.identifierHintCountries, { codes: '+1' }))).toBeVisible()
+  // US numbers only, written as they are there: no country code asked for.
+  await expect(page.getByText(en.signIn.identifierHintUs)).toBeVisible()
   await signIn(ana)
   await expect(page.getByRole('heading', { name: en.profile.firstTitle })).toBeVisible()
 })
@@ -53,9 +54,10 @@ test('a phone number gets its code by text only once the box beside it is ticked
   await expect(box).toHaveCount(0)
   await expect(send).toBeEnabled()
 
-  // A number: the box, unticked, its addresses links to a new tab, and the
-  // button waiting for it, saying why. The short line it replaces is gone.
-  await identifier.fill(phone)
+  // A number, typed as people in the US write it, without +1: the box,
+  // unticked, its addresses links to a new tab, and the button waiting for
+  // it, saying why. The short line it replaces is gone.
+  await identifier.fill(american(phone))
   await expect(box).toBeVisible()
   await expect(box).not.toBeChecked()
   await expect(send).toBeDisabled()
@@ -72,9 +74,11 @@ test('a phone number gets its code by text only once the box beside it is ticked
 
   await box.check()
   await expect(send).toBeEnabled()
+  await expect(identifier).toHaveValue(american(phone))
   const before = codesTo(phone, apiLog).length
   await send.click()
-  await expect(page.getByText(fill(en.signIn.codeSent, { identifier: phone }))).toBeVisible()
+  // Sent in E.164, and shown the American way.
+  await expect(page.getByText(fill(en.signIn.codeSent, { identifier: american(phone) }))).toBeVisible()
   expect(asked).toEqual([{ identifier: phone, sms_consent: { version: expect.any(String), language: 'en' } }])
   // Twilio Verify would text it; here the log has it.
   const code = await waitFor(() => codesTo(phone, apiLog)[before], 'the code for the number')

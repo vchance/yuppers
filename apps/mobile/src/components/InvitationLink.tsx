@@ -1,6 +1,7 @@
 import {
   boundToLabel,
   invitationLink,
+  phoneAsTyped,
   phoneOffered,
   type InvitationChoice,
   type SignInChannels,
@@ -90,6 +91,11 @@ export function InvitationFor({
         autoComplete="off"
         value={choice.to}
         onChangeText={(to) => onChange({ ...choice, to })}
+        // A US number is written the American way on leaving the field.
+        onBlur={() => {
+          const shown = phoneAsTyped(choice.to);
+          if (shown !== choice.to) onChange({ ...choice, to: shown });
+        }}
       />
       <Actions>
         <Button

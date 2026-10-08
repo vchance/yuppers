@@ -201,6 +201,9 @@ test('the account saves payment options and names the wrong ones', async () => {
 
   await fireEvent.changeText(screen.getByLabelText(w.venmoLabel), '@ana-pays');
   await fireEvent.changeText(screen.getByLabelText(w.zelleLabel), '202-555-0142');
+  // A US number is written the American way on leaving the field.
+  await fireEvent(screen.getByLabelText(w.zelleLabel), 'blur');
+  expect(screen.getByLabelText(w.zelleLabel).props.value).toBe('(202) 555-0142');
   await fireEvent.press(screen.getByRole('button', { name: w.save }));
   expect(await screen.findByText(w.saved)).toBeTruthy();
   expect(client.setPaymentHandles).toHaveBeenCalledWith({

@@ -8,7 +8,7 @@ import {
   type PaymentHandles,
 } from './api'
 import { fractionDigitsOf, fromMinorUnits } from './decimal'
-import { usPhone } from './sms-updates'
+import { formatPhone, usPhone } from './phone'
 
 /*
  * Payment options (`backend/src/payments.rs`; DESIGN.md §7): the names a
@@ -156,8 +156,7 @@ export function hasAnyHandle(handles: PaymentHandles | null | undefined): boolea
 
 /** A Zelle recipient as shown: a US number as `(202) 555-0142`, an email address as it is. */
 export function zelleShown(recipient: string): string {
-  const match = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(recipient)
-  return match ? `(${match[1]}) ${match[2]}-${match[3]}` : recipient
+  return formatPhone(recipient)
 }
 
 /**

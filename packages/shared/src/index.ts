@@ -320,12 +320,21 @@ export {
 export type { WalletApi, WalletButton } from './wallet'
 export {
   consentPieces,
-  maskPhone,
   SMS_CONSENT_VERSION,
   smsUpdatesOffered,
-  usPhone,
   useSmsUpdates,
 } from './sms-updates'
+export {
+  formatPhone,
+  identifierToSend,
+  maskPhone,
+  PHONE_EXAMPLE,
+  phoneAsTyped,
+  phoneProblem,
+  readPhone,
+  usPhone,
+} from './phone'
+export type { PhoneReading } from './phone'
 export type {
   ConsentPiece,
   SmsUpdatesApi,
@@ -344,6 +353,7 @@ export {
   codeWaitText,
   identifierRefused,
   phoneOffered,
+  phoneRefused,
   RESEND_AFTER_MS,
   signInChannels,
   signInText,

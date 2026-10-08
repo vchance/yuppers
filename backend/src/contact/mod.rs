@@ -749,6 +749,27 @@ mod tests {
     }
 
     #[test]
+    fn a_us_number_has_one_index_however_it_was_typed() {
+        let keys = Keys::first(&config(7));
+        // What is stored and indexed is E.164, as before numbers could be
+        // typed without +1, so rows indexed then still match.
+        let stored = keys.index(Kind::Phone, "+18565488780");
+        for typed in [
+            "8565488780",
+            "+18565488780",
+            "(856) 548-8780",
+            "1-856-548-8780",
+        ] {
+            assert_eq!(
+                keys.index_of(&Identifier::parse(typed).unwrap()),
+                stored,
+                "{typed}"
+            );
+        }
+        assert_ne!(keys.index(Kind::Phone, "8565488780"), stored);
+    }
+
+    #[test]
     fn a_key_is_32_bytes_of_base64_and_is_never_printed() {
         let text = "q83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJA=";
         let key = Key::parse("CONTACT_DATA_KEY", text).unwrap();

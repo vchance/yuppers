@@ -23,7 +23,9 @@ use crate::notifications::sms_updates::Source;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RequestCode {
-    /// An email address, or a phone number in international form.
+    /// An email address, or a phone number: in international form, or a US
+    /// number without its country code as people there write it, ten digits
+    /// or 1 and ten (`(856) 548-8780`), which is taken as `+1`.
     pub identifier: String,
     /// For a phone number, required: the box beside it was ticked, with the
     /// version and language of the wording shown. Ignored for an email

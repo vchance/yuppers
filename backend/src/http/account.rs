@@ -148,7 +148,9 @@ pub async fn update_me(
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AddIdentifier {
-    /// An email address, or a phone number in international form.
+    /// An email address, or a phone number: in international form, or a US
+    /// number without its country code as people there write it, ten digits
+    /// or 1 and ten (`(856) 548-8780`), which is taken as `+1`.
     pub identifier: String,
     /// The one-time code sent to it.
     pub code: String,

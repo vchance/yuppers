@@ -1,3 +1,4 @@
+import { formatPhone } from '@yuppers/shared'
 import { useState } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -50,7 +51,7 @@ export default function AccountPage() {
         {account.phone && (
           <>
             <dt>{w.phoneLabel}</dt>
-            <dd dir="ltr">{account.phone}</dd>
+            <dd dir="ltr">{formatPhone(account.phone)}</dd>
           </>
         )}
       </dl>

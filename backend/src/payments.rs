@@ -178,15 +178,11 @@ pub const COLUMNS: [(&str, Field); 4] = [
     ("zelle_encrypted", Field::PAYMENT_ZELLE),
 ];
 
-/// How recently a payment option must have changed for a payer to be warned
-/// beside it: within this many days, and after the agreement came into
-/// force, whichever is later. A changed name while money is owed is how a
-/// payment is stolen after an account is taken over.
-pub const CHANGE_WARNING_DAYS: i64 = 7;
-
 /// When each of the payee's payment options changed, as RFC 3339, for those
-/// that changed recently enough to warn the payer about
-/// ([`CHANGE_WARNING_DAYS`]); null for the others. Never the old value.
+/// that changed after the agreement came into force, however long ago: the
+/// payer is warned beside each. A name changed while money is owed is how a
+/// payment is stolen after an account is taken over; one saved before the
+/// agreement is not warned about. Null for the others. Never the old value.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, ToSchema)]
 pub struct PaymentHandleChanges {
     pub venmo: Option<String>,
@@ -435,23 +431,17 @@ pub async fn shown(
     .await
 }
 
-/// From when a change to a payment option is warned about on an agreement
-/// that came into force at `in_force`: the later of that moment and
-/// [`CHANGE_WARNING_DAYS`] before `now`.
-pub fn warn_since(in_force: OffsetDateTime, now: OffsetDateTime) -> OffsetDateTime {
-    in_force.max(now - time::Duration::days(CHANGE_WARNING_DAYS))
-}
-
 /// The payee's payment options as the person who owes them money on an
 /// agreement sees them: only while the payee shows them on this agreement
 /// and their account is active, and `None` when they have none; with when
-/// each changed, for those changed after `since`. Whether the viewer owes
+/// each changed, for those changed after `in_force`, when the agreement came
+/// into force. Whether the viewer owes
 /// money still to be paid is the caller's to decide.
 pub async fn for_payer(
     conn: &mut PgConnection,
     payee: Uuid,
     exchange: Uuid,
-    since: OffsetDateTime,
+    in_force: OffsetDateTime,
 ) -> Result<Option<(PaymentHandles, PaymentHandleChanges)>, ApiError> {
     let row: Option<StoredRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {STORED_COLUMNS}
@@ -474,7 +464,7 @@ pub async fn for_payer(
     let recent = |index: usize| {
         stored.values[index].as_ref()?;
         stored.changed[index]
-            .filter(|at| *at > since)
+            .filter(|at| *at > in_force)
             .map(crate::exchanges::dto::rfc3339)
     };
     let changes = PaymentHandleChanges {
@@ -670,17 +660,5 @@ mod tests {
                 .unwrap(),
             "dana-fixes"
         );
-    }
-
-    #[test]
-    fn a_change_is_warned_about_from_the_later_of_coming_into_force_and_the_last_days() {
-        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
-        let week = time::Duration::days(CHANGE_WARNING_DAYS);
-        // In force a month ago: only the last seven days count.
-        let month_ago = now - time::Duration::days(30);
-        assert_eq!(warn_since(month_ago, now), now - week);
-        // In force two days ago: everything since then.
-        let two_days_ago = now - time::Duration::days(2);
-        assert_eq!(warn_since(two_days_ago, now), two_days_ago);
     }
 }

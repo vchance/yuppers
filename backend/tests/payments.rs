@@ -502,17 +502,48 @@ async fn a_payer_is_warned_beside_an_option_changed_since_the_agreement_came_int
     // Ana's own view says nothing of it.
     assert_eq!(changed(&app.view(ana, exchange).await), nothing);
 
-    // Older than the warning window: no longer said.
-    sqlx::query(
-        "UPDATE payment_handle
-         SET venmo_changed_at = now() - make_interval(days => $2 + 1)
-         WHERE account_id = $1",
-    )
-    .bind(ana.id)
-    .bind(yuppers_backend::payments::CHANGE_WARNING_DAYS as i32)
-    .execute(&app.owner)
-    .await
-    .unwrap();
+    // An old agreement: it came into force 60 days ago (history is
+    // append-only, so its guard is lifted for this one move, in a database
+    // of the tests' own).
+    let mut tx = app.owner.begin().await.unwrap();
+    for statement in [
+        "ALTER TABLE exchange_event DISABLE TRIGGER exchange_event_append_only",
+        "UPDATE exchange_event SET occurred_at = occurred_at - interval '60 days'
+         WHERE exchange_id = $1::uuid",
+        "ALTER TABLE exchange_event ENABLE TRIGGER exchange_event_append_only",
+    ] {
+        let query = sqlx::query(statement);
+        let query = if statement.contains("$1") {
+            query.bind(exchange)
+        } else {
+            query
+        };
+        query.execute(&mut *tx).await.unwrap();
+    }
+    tx.commit().await.unwrap();
+    let backdate = |days: i32| {
+        sqlx::query(
+            // The others as saved before the agreement, now 61 days ago.
+            "UPDATE payment_handle
+             SET venmo_changed_at = now() - make_interval(days => $2),
+                 cash_app_changed_at = now() - interval '61 days',
+                 paypal_changed_at = now() - interval '61 days',
+                 zelle_changed_at = now() - interval '61 days'
+             WHERE account_id = $1",
+        )
+        .bind(ana.id)
+        .bind(days)
+    };
+    // Changed 30 days into it, 30 days ago: still said, however long ago.
+    backdate(30).execute(&app.owner).await.unwrap();
+    let said = changed(&app.view(ben, exchange).await);
+    assert!(said["venmo"].is_string(), "{said}");
+    assert_eq!(
+        (&said["cash_app"], &said["paypal"], &said["zelle"]),
+        (&Value::Null, &Value::Null, &Value::Null)
+    );
+    // Changed before it came into force: nothing to say.
+    backdate(61).execute(&app.owner).await.unwrap();
     assert_eq!(changed(&app.view(ben, exchange).await), nothing);
 
     // Removed, then added again: a change too.

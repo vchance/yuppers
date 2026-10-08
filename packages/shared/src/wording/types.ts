@@ -1011,8 +1011,8 @@ export interface Wording {
     prefillsAmount: string
     enterAmount: string
     /**
-     * Beside an option the payee changed since the agreement came into
-     * force, recently (`CHANGE_WARNING_DAYS` in `backend/src/payments.rs`):
+     * Beside an option the payee changed after the agreement came into
+     * force, however long ago (`theirs_changed`, `backend/src/payments.rs`):
      * `{name}`, `{date}` it changed. Never the old value.
      */
     changed: {

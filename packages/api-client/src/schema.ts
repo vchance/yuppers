@@ -1457,8 +1457,10 @@ export interface components {
         };
         /**
          * @description When each of the payee's payment options changed, as RFC 3339, for those
-         *     that changed recently enough to warn the payer about
-         *     ([`CHANGE_WARNING_DAYS`]); null for the others. Never the old value.
+         *     that changed after the agreement came into force, however long ago: the
+         *     payer is warned beside each. A name changed while money is owed is how a
+         *     payment is stolen after an account is taken over; one saved before the
+         *     agreement is not warned about. Null for the others. Never the old value.
          */
         PaymentHandleChanges: {
             cash_app?: string | null;
@@ -1509,9 +1511,9 @@ export interface components {
             theirs?: components["schemas"]["PaymentHandles"] | null;
             /**
              * @description When each of `theirs` changed, for those that changed after the
-             *     agreement came into force and within `payments::CHANGE_WARNING_DAYS`
-             *     days: the payer is warned beside them to check with the payee
-             *     another way. Never the old value. All null when `theirs` is.
+             *     agreement came into force, however long ago: the payer is warned
+             *     beside them to check with the payee another way. Never the old value.
+             *     All null when `theirs` is.
              */
             theirs_changed?: components["schemas"]["PaymentHandleChanges"];
         };

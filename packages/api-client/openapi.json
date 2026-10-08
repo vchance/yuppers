@@ -4279,7 +4279,7 @@
       },
       "PaymentHandleChanges": {
         "type": "object",
-        "description": "When each of the payee's payment options changed, as RFC 3339, for those\nthat changed recently enough to warn the payer about\n([`CHANGE_WARNING_DAYS`]); null for the others. Never the old value.",
+        "description": "When each of the payee's payment options changed, as RFC 3339, for those\nthat changed after the agreement came into force, however long ago: the\npayer is warned beside each. A name changed while money is owed is how a\npayment is stolen after an account is taken over; one saved before the\nagreement is not warned about. Null for the others. Never the old value.",
         "properties": {
           "cash_app": {
             "type": [
@@ -4377,7 +4377,7 @@
           },
           "theirs_changed": {
             "$ref": "#/components/schemas/PaymentHandleChanges",
-            "description": "When each of `theirs` changed, for those that changed after the\nagreement came into force and within `payments::CHANGE_WARNING_DAYS`\ndays: the payer is warned beside them to check with the payee\nanother way. Never the old value. All null when `theirs` is."
+            "description": "When each of `theirs` changed, for those that changed after the\nagreement came into force, however long ago: the payer is warned\nbeside them to check with the payee another way. Never the old value.\nAll null when `theirs` is."
           }
         }
       },

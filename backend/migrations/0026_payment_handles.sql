@@ -24,8 +24,8 @@
 --
 -- `*_changed_at`: when each was last set to a value it did not have
 -- before, empty while there is none. A payer is warned beside a payment
--- option that changed recently, while they owe money (`payments::
--- CHANGE_WARNING_DAYS`); the old value is never kept.
+-- option that changed after the agreement came into force, however long
+-- ago (`payments::PaymentHandleChanges`); the old value is never kept.
 --
 -- `writes_in_window` and `write_window_started_at` count the changes the
 -- account made to its payment options, saving them or showing them on an

@@ -349,9 +349,11 @@ async fn view(
     // on the agreement in force still to be paid, and only where the other
     // party shows them here.
     // A payment option that changed after the agreement came into force,
-    // and recently, is shown with a warning (`payments::CHANGE_WARNING_DAYS`).
+    // however long ago, is shown with a warning (`payments::PaymentHandleChanges`).
     let theirs = match aggregate.account_of(you.other()) {
         Some(payee) if !other_party_left && owes_unpaid_money(&aggregate, you) => {
+            // Owing money means an agreement in force, which always has
+            // the event that put it in force; without one nothing is warned.
             let in_force: Option<OffsetDateTime> = sqlx::query_scalar(
                 "SELECT min(occurred_at) FROM exchange_event
                  WHERE exchange_id = $1 AND type = 'AGREEMENT_IN_FORCE'",
@@ -359,8 +361,7 @@ async fn view(
             .bind(id)
             .fetch_one(&mut *conn)
             .await?;
-            let since = payments::warn_since(in_force.unwrap_or_else(now), now());
-            payments::for_payer(conn, payee, id, since).await?
+            payments::for_payer(conn, payee, id, in_force.unwrap_or_else(now)).await?
         }
         _ => None,
     };

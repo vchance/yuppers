@@ -2,6 +2,7 @@ import type { Account, ErrorCode, ExchangeView } from '@yuppers/api-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { failureCode, type ExchangeApi, type SmsUpdates } from './api'
+import { usPhone } from './phone'
 import { smsCodeConsent } from './sms-code-consent'
 
 /*
@@ -30,34 +31,6 @@ export type SmsUpdatesApi = Pick<
   ExchangeApi,
   'meta' | 'smsUpdates' | 'setSmsUpdates' | 'requestCode' | 'addIdentifier'
 >
-
-/**
- * A US number as the service takes it, `+15551234567`, from what someone
- * typed: ten digits, or eleven starting with 1, with or without `+`, and
- * any spaces, dashes, dots or brackets. `null` for anything else, such as
- * an area code starting with 0 or 1.
- */
-export function usPhone(input: string): string | null {
-  const trimmed = input.trim()
-  if (!/^\+?[\d\s().-]+$/.test(trimmed)) return null
-  const digits = trimmed.replace(/\D/g, '')
-  const national = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
-  if (national.length !== 10 || !/^[2-9]\d{2}[2-9]/.test(national)) return null
-  // A number given with + must be +1.
-  if (trimmed.startsWith('+') && !(digits.length === 11 && digits.startsWith('1'))) return null
-  return `+1${national}`
-}
-
-/**
- * A phone number as the screens show it: all but its last four digits
- * hidden, `+1 •••-•••-4567`.
- */
-export function maskPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '')
-  const last = digits.slice(-4)
-  if (phone.startsWith('+1') && digits.length === 11) return `+1 •••-•••-${last}`
-  return `•••${last}`
-}
 
 /** A piece of the consent wording: text, or one of its two addresses, shown as a link. */
 export type ConsentPiece = { text: string } | { url: string }

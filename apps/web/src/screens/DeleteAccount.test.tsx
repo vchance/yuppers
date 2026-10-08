@@ -56,7 +56,7 @@ test('a code to the phone waits for the box beside it; one by email needs none',
 
   await press(box()!)
   await press(button(w.sendCode))
-  await until(() => document.body.textContent!.includes(w.codeSent.replace('{identifier}', PHONE).split('.')[0]), 'the code step')
+  await until(() => document.body.textContent!.includes(w.codeSent.replace('{identifier}', '(555) 234-5678').split('.')[0]), 'the code step')
   const asked = service.sent.filter((sent) => sent.call === 'POST /v1/me/deletion/codes')
   expect(asked.map((sent) => sent.body)).toEqual([
     { channel: 'PHONE', sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' } },

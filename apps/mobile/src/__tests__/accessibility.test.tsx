@@ -188,9 +188,7 @@ describe('signing in', () => {
     const identifier = screen.getByLabelText(w.signIn.identifierLabel);
     // A required field says so, since the platforms have no state for it.
     expect(identifier.props.accessibilityHint).toContain(w.a11y.required);
-    expect(identifier.props.accessibilityHint).toContain(
-      w.signIn.identifierHintCountries.replace('{codes}', '+1'),
-    );
+    expect(identifier.props.accessibilityHint).toContain(w.signIn.identifierHintUs);
     expect(screen.getByRole('header', { name: w.signIn.title })).toBeTruthy();
   });
 

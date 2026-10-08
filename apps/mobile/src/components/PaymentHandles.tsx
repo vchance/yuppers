@@ -1,5 +1,6 @@
 import {
   PAYMENT_APPS,
+  phoneAsTyped,
   usePaymentHandles,
   type PaymentApp,
   type PaymentHandlesApi,
@@ -52,6 +53,13 @@ export function PaymentHandles({ client = api }: Props) {
   const loading = form.saved === null && form.failure === null;
   const anySaved = PAYMENT_APPS.some((app) => Boolean(form.saved?.[app]));
 
+  // A US number for Zelle is written the American way on leaving the field;
+  // anything else is left as typed, and nothing changes if it already is.
+  const showZelleNumber = () => {
+    const shown = phoneAsTyped(form.inputs.zelle);
+    if (shown !== form.inputs.zelle) form.set('zelle', shown);
+  };
+
   return (
     <>
       <Heading level={2}>{w.heading}</Heading>
@@ -71,6 +79,7 @@ export function PaymentHandles({ client = api }: Props) {
           spellCheck={false}
           value={form.inputs[app]}
           onChangeText={(value) => form.set(app, value)}
+          onBlur={app === 'zelle' ? showZelleNumber : undefined}
         />
       ))}
       <Failure code={form.failure} />

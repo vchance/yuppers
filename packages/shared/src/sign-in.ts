@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 
 import type { ExchangeApi } from './api'
 import type { MessageValues } from './message'
+import { phoneProblem } from './phone'
+import { readsAsPhone } from './sms-code-consent'
 import type { Wording } from './wording/types'
 
 /*
@@ -82,6 +84,27 @@ export function identifierRefused(
   return input.includes('@') ? null : 'emailOnly'
 }
 
+/**
+ * Why a phone number typed to sign in is not sent, if it is not, as the
+ * service would answer: `INVALID_IDENTIFIER` for what is not a number, and
+ * `PHONE_COUNTRY_NOT_SERVED` for a country code the service has said it
+ * does not text. `null` for what does not read as a phone number at all.
+ */
+export function phoneRefused(
+  input: string,
+  channels: SignInChannels | null,
+): 'INVALID_IDENTIFIER' | 'PHONE_COUNTRY_NOT_SERVED' | null {
+  if (!readsAsPhone(input)) return null
+  switch (phoneProblem(input, channels?.countryCodes ?? [])) {
+    case 'invalid':
+      return 'INVALID_IDENTIFIER'
+    case 'country':
+      return 'PHONE_COUNTRY_NOT_SERVED'
+    case null:
+      return null
+  }
+}
+
 /** The words of the sign-in form for what the service can send codes to. */
 export interface SignInText {
   intro: string
@@ -104,10 +127,18 @@ export function signInText(
     }
   }
   const codes = channels?.countryCodes ?? []
+  // A US number needs no country code; only a service that texts other
+  // countries too asks for one, for those.
+  const hint =
+    codes.length === 1 && codes[0] === '+1'
+      ? w.identifierHintUs
+      : codes.length
+        ? fmt(w.identifierHintCountries, { codes: codes.join(', ') })
+        : w.identifierHint
   return {
     intro: w.intro,
     label: w.identifierLabel,
-    hint: codes.length ? fmt(w.identifierHintCountries, { codes: codes.join(', ') }) : w.identifierHint,
+    hint,
     changeIdentifier: w.changeIdentifier,
   }
 }

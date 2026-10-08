@@ -1,6 +1,7 @@
 import {
   boundToLabel,
   invitationLink,
+  phoneAsTyped,
   phoneOffered,
   shareAddresses,
   type InvitationChoice,
@@ -93,6 +94,11 @@ export function InvitationFor({
             spellCheck={false}
             value={choice.to}
             onChange={(event) => onChange({ ...choice, to: event.target.value })}
+            // A US number is written the American way on leaving the field.
+            onBlur={() => {
+              const shown = phoneAsTyped(choice.to)
+              if (shown !== choice.to) onChange({ ...choice, to: shown })
+            }}
           />
         )}
       </Field>

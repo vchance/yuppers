@@ -1,3 +1,4 @@
+import { formatPhone } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -54,7 +55,7 @@ export function AccountScreen() {
           <Label>{w.phoneLabel}</Label>
           {/* A phone number reads left to right in every language. */}
           <Text selectable style={[type.body, styles.ltr, { color: colors.text }]}>
-            {account.phone}
+            {formatPhone(account.phone)}
           </Text>
         </View>
       ) : null}

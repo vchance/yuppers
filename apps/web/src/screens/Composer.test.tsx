@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { ana, DRAFT, SENT_INVITATION } from '../test/fake-service'
@@ -101,7 +102,7 @@ describe('who the invitation is for', () => {
   })
 
   test('takes a phone number where codes are texted, of a country they are texted to', async () => {
-    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const { wording, service } = await start(`/exchanges/${DRAFT}`, ana)
     const w = wording.invitationLink
     await heading(wording.composer.titleFirst)
     await until(() => labels().includes(w.forLabel), 'the email or phone label')
@@ -117,9 +118,27 @@ describe('who the invitation is for', () => {
     await type(bound, 'carla')
     expect(document.body.textContent).toContain(w.forInvalid)
 
-    await type(bound, '+1 202 555 0142')
+    // A US number typed as people there write it, without +1, is a phone
+    // number, written the American way on leaving the field.
+    await act(async () => bound.focus())
+    await type(bound, '2025550142')
+    expect(document.body.textContent).not.toContain(w.forInvalid)
     await press(button(wording.composer.review))
     await heading(wording.composer.signTitle)
+    expect(document.body.textContent).toContain(
+      'Only someone who signs in with (202) 555-0142 will be able to use the link.',
+    )
+
+    // Sent as the service keeps it.
+    await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
+    await press(button(wording.composer.signAndSend))
+    await until(() => document.body.textContent!.includes(w.intro), 'the invitation link')
+    const sent = service.sent.find(
+      (request) => request.call === `POST /v1/exchanges/${DRAFT}/revisions`,
+    )
+    expect(sent?.body).toEqual(
+      expect.objectContaining({ invitation: { bound_to: '+12025550142' } }),
+    )
   })
 
   test('left empty, it is asked for: an empty field never makes a link for anyone', async () => {

@@ -221,7 +221,8 @@ pub struct SaveDraft {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct InvitationOptions {
     /// Names who the invitation is for: only an account that has verified
-    /// this email address or phone number can claim it.
+    /// this email address or phone number can claim it. A phone number is
+    /// read as signing in reads it: a US number may leave out the `+1`.
     pub bound_to: Option<String>,
     /// `true` for a link anyone who has it can claim. Required, as `true`,
     /// when `bound_to` is not given.

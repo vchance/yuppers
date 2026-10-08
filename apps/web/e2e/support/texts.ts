@@ -22,6 +22,14 @@ export function number(): string {
   return `+1${area}${2 + (digits() % 8)}${Array.from({ length: 6 }, digits).join('')}`
 }
 
+/**
+ * A number as people in the US write it, and as the screens show it, without
+ * +1: `(212) 555-0142` for `+12125550142`.
+ */
+export function american(phone: string): string {
+  return `(${phone.slice(2, 5)}) ${phone.slice(5, 8)}-${phone.slice(8)}`
+}
+
 /** The texts a log shows were sent to `phone`, oldest first. */
 export function textsTo(phone: string, log: string): string[] {
   let text: string

@@ -1,5 +1,10 @@
 import type { Account } from '@yuppers/api-client';
-import { useAccountDeletion, useSignInChannels, type CodeChannel } from '@yuppers/shared';
+import {
+  formatPhone,
+  useAccountDeletion,
+  useSignInChannels,
+  type CodeChannel,
+} from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type { TextInput } from 'react-native';
@@ -80,7 +85,8 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
     language,
   );
   const { step, preview, destination, busy } = deletion;
-  const identifier = destination?.identifier ?? '';
+  // A phone number as the screens show one, `(856) 548-8780`.
+  const identifier = formatPhone(destination?.identifier ?? '');
   const consent = deletion.codeConsent;
 
   // The code step starts with the keyboard on the one thing it asks for.
@@ -202,7 +208,7 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
             value={destination?.channel ?? null}
             options={deletion.destinations.map((option) => ({
               value: option.channel,
-              label: option.identifier,
+              label: formatPhone(option.identifier),
             }))}
             onChange={deletion.choose}
             disabled={busy}

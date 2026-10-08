@@ -20,7 +20,7 @@ import {
 import { apiEnvironment, apiLog, port, repoRoot, webRoot, workerBinary } from './support/env'
 import { expect, test } from './support/fixtures'
 import { agree, move, type ItemSpec } from './support/flows'
-import { codesTo, number, textsTo, waitFor } from './support/texts'
+import { american, codesTo, number, textsTo, waitFor } from './support/texts'
 import { en, fill } from './support/wording'
 
 /*
@@ -55,7 +55,8 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   // No number on the account yet: one to add, checked with a code by text.
   const control = page.getByRole('region', { name: w.heading, exact: true })
   await expect(control.getByText(w.addPhoneIntro)).toBeVisible()
-  await control.getByLabel(w.phoneLabel).fill(phone)
+  // Typed as people in the US write it, without +1.
+  await control.getByLabel(w.phoneLabel).fill(american(phone))
   // The code goes by text only once the box beside the number is ticked.
   const sendCode = control.getByRole('button', { name: w.sendCode, exact: true })
   await expect(sendCode).toBeDisabled()
@@ -64,7 +65,7 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   await codeBox.check()
   const before = codesTo(phone, apiLog).length
   await sendCode.click()
-  await expect(control.getByText(fill(w.codeSent, { phone: `+1 •••-•••-${phone.slice(-4)}` }))).toBeVisible()
+  await expect(control.getByText(fill(w.codeSent, { phone: `(•••) •••-${phone.slice(-4)}` }))).toBeVisible()
   // Twilio Verify would text it; here the log has it. No text of the
   // service's own carries it.
   const code = await waitFor(() => codesTo(phone, apiLog)[before], 'the code for the number')
@@ -85,10 +86,10 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   )
   await box.check()
   await control.getByRole('button', { name: w.save, exact: true }).click()
-  const confirmation = fill(w.on, { phone: `+1 •••-•••-${phone.slice(-4)}` })
+  const confirmation = fill(w.on, { phone: `(•••) •••-${phone.slice(-4)}` })
   await expect(control.getByText(confirmation)).toBeVisible()
   expect(confirmation).toBe(
-    `Text updates are on for this agreement. You’ll get one text per status change at +1 •••-•••-${phone.slice(-4)}. Reply STOP to opt out.`,
+    `Text updates are on for this agreement. You’ll get one text per status change at (•••) •••-${phone.slice(-4)}. Reply STOP to opt out.`,
   )
   // Still on after a reload.
   await page.reload()

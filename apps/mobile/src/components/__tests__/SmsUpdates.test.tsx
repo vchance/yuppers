@@ -157,14 +157,24 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   expect(await screen.findByText(w.phoneInvalid)).toBeTruthy();
   expect(service.codes).toEqual([]);
 
-  // Another number: unticked again.
-  await fireEvent.changeText(screen.getByLabelText(w.phoneLabel), '(555) 234-5678');
+  // A phone keyboard, and an example written as US numbers are.
+  const number = () => screen.getByLabelText(w.phoneLabel);
+  expect(number().props.keyboardType).toBe('phone-pad');
+  expect(number().props.textContentType).toBe('telephoneNumber');
+  expect(number().props.autoComplete).toBe('tel-national');
+  expect(number().props.placeholder).toBe('(555) 123-4567');
+
+  // Another number, typed without +1: unticked again, and written the
+  // American way on leaving the field.
+  await fireEvent.changeText(number(), '555.234.5678');
+  await fireEvent(number(), 'blur');
+  expect(number().props.value).toBe('(555) 234-5678');
   expect(codeBox().props.accessibilityState).toMatchObject({ checked: false });
   await fireEvent.press(send());
   expect(service.codes).toEqual([]);
   await fireEvent.press(codeBox());
   await fireEvent.press(send());
-  expect(await screen.findByText('We texted a code to +1 •••-•••-5678.')).toBeTruthy();
+  expect(await screen.findByText('We texted a code to (•••) •••-5678.')).toBeTruthy();
   expect(service.codes).toEqual([PHONE]);
   expect(service.consents).toEqual([{ version: SMS_CODE_CONSENT_VERSION, language: 'en' }]);
 
@@ -172,7 +182,7 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   await fireEvent.press(screen.getByRole('button', { name: w.addPhone }));
   const box = await screen.findByRole('checkbox');
   expect(session.setAccount).toHaveBeenCalledWith({ ...account, phone: PHONE });
-  expect(screen.getByText('+1 •••-•••-5678 is now on your account.')).toBeTruthy();
+  expect(screen.getByText('(•••) •••-5678 is now on your account.')).toBeTruthy();
 
   // The box is named by the consent wording, word for word, which is shown
   // beside it with its two addresses as links to the browser.
@@ -192,7 +202,7 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   expect(screen.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: true });
   await fireEvent.press(screen.getByRole('button', { name: w.save }));
   const confirmation =
-    'Text updates are on for this agreement. You’ll get one text per status change at +1 •••-•••-5678. Reply STOP to opt out.';
+    'Text updates are on for this agreement. You’ll get one text per status change at (•••) •••-5678. Reply STOP to opt out.';
   expect(await screen.findByText(confirmation)).toBeTruthy();
   expect(service.saved).toEqual([
     { on: true, consent: { version: SMS_CONSENT_VERSION, language: 'en' } },
@@ -220,7 +230,7 @@ test('the page on how people opt in opens in the browser, in the language shown'
 test('a number that replied STOP is told how to get texts again, and offered no box', async () => {
   const { wording } = await show(stand({ phone: PHONE, optedOut: true }));
   expect(
-    await screen.findByText(wording.smsUpdates.optedOut.replace('{phone}', '+1 •••-•••-5678')),
+    await screen.findByText(wording.smsUpdates.optedOut.replace('{phone}', '(•••) •••-5678')),
   ).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
 });

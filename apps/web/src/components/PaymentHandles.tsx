@@ -1,4 +1,10 @@
-import { PAYMENT_APPS, readHandles, usePaymentHandles, type PaymentApp } from '@yuppers/shared'
+import {
+  PAYMENT_APPS,
+  phoneAsTyped,
+  readHandles,
+  usePaymentHandles,
+  type PaymentApp,
+} from '@yuppers/shared'
 import { useEffect, useId, useRef, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
@@ -46,6 +52,13 @@ export function PaymentHandles() {
     void form.save()
   }
 
+  // A US number for Zelle is written the American way on leaving the field;
+  // anything else is left as typed, and nothing changes if it already is.
+  function showZelleNumber() {
+    const shown = phoneAsTyped(form.inputs.zelle)
+    if (shown !== form.inputs.zelle) form.set('zelle', shown)
+  }
+
   const anySaved = PAYMENT_APPS.some((app) => Boolean(form.saved?.[app]))
 
   return (
@@ -79,6 +92,7 @@ export function PaymentHandles() {
                 value={form.inputs[app]}
                 disabled={form.saved === null && form.failure === null}
                 onChange={(event) => form.set(app, event.target.value)}
+                onBlur={app === 'zelle' ? showZelleNumber : undefined}
               />
             )}
           </Field>

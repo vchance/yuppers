@@ -15,8 +15,13 @@ pub struct InvalidIdentifier;
 
 impl Identifier {
     /// Reads what someone typed. Anything containing `@` is treated as an
-    /// email address; anything else must be a phone number in international
-    /// form. Formatting characters in phone numbers are dropped.
+    /// email address; anything else must be a phone number. Formatting
+    /// characters in phone numbers (spaces, dashes, dots, brackets) are
+    /// dropped. A number in international form, `+` and its country code, is
+    /// taken as given; one without, as people in the US write theirs, is a
+    /// `+1` number: ten digits, or eleven starting with 1, as in
+    /// `(856) 548-8780` or `1-856-548-8780`. Either way the result is E.164,
+    /// so the same number is the same identifier however it was typed.
     ///
     /// This checks shape only. Whether the address or number exists is proved
     /// by the one-time code.
@@ -48,7 +53,10 @@ impl Identifier {
     }
 
     fn phone(input: &str) -> Result<Self, InvalidIdentifier> {
-        let rest = input.strip_prefix('+').ok_or(InvalidIdentifier)?;
+        let (international, rest) = match input.strip_prefix('+') {
+            Some(rest) => (true, rest),
+            None => (false, input),
+        };
         if !rest
             .chars()
             .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '-' | '(' | ')' | '.'))
@@ -57,9 +65,31 @@ impl Identifier {
         }
         let digits: String = rest.chars().filter(char::is_ascii_digit).collect();
 
-        let valid = (7..=15).contains(&digits.len()) && !digits.starts_with('0');
+        if international {
+            // A +1 number is the country code and ten digits; any other is
+            // left to the country's own plan, within E.164's length.
+            let valid = if let Some(national) = digits.strip_prefix('1') {
+                national.len() == 10
+            } else {
+                (7..=15).contains(&digits.len()) && !digits.starts_with('0')
+            };
+            return valid
+                .then(|| Self::Phone(format!("+{digits}")))
+                .ok_or(InvalidIdentifier);
+        }
+
+        // Without a country code, a number in the North American plan: ten
+        // digits, after a leading 1 if there is one, whose area code and
+        // exchange each begin with 2 to 9.
+        let national = match digits.len() {
+            10 => digits.as_str(),
+            11 if digits.starts_with('1') => &digits[1..],
+            _ => return Err(InvalidIdentifier),
+        };
+        let bytes = national.as_bytes();
+        let valid = matches!(bytes[0], b'2'..=b'9') && matches!(bytes[3], b'2'..=b'9');
         valid
-            .then(|| Self::Phone(format!("+{digits}")))
+            .then(|| Self::Phone(format!("+1{national}")))
             .ok_or(InvalidIdentifier)
     }
 
@@ -130,13 +160,60 @@ mod tests {
     }
 
     #[test]
-    fn phone_numbers_need_a_country_code_and_a_sane_length() {
+    fn us_numbers_need_no_country_code() {
+        for input in [
+            "8565488780",
+            "856-548-8780",
+            "(856) 548-8780",
+            "856.548.8780",
+            "856 548 8780",
+            "1 856 548 8780",
+            "1-856-548-8780",
+            "18565488780",
+            "+1 856 548 8780",
+            "+18565488780",
+            " (856)548-8780 ",
+        ] {
+            assert_eq!(
+                Identifier::parse(input),
+                Ok(Identifier::Phone("+18565488780".into())),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn other_country_codes_are_kept_for_the_service_to_refuse() {
+        // Parsed as given; `AuthRules::check_taken` refuses them as not served.
+        assert_eq!(
+            Identifier::parse("+44 20 7946 0958"),
+            Ok(Identifier::Phone("+442079460958".into()))
+        );
+    }
+
+    #[test]
+    fn phone_numbers_need_a_sane_length_and_shape() {
         for bad in [
-            "2025550142",
+            // Too few or too many digits without a country code.
+            "202555014",
+            "20255501420",
+            "2 202 555 0142",
+            // An area code or exchange starting with 0 or 1.
+            "0125550142",
+            "1125550142",
+            "2021550142",
+            "2020550142",
+            "1 202 155 0142",
+            // A +1 number is ten digits after the country code.
+            "+1202555014",
+            "+120255501420",
             "+0123456789",
             "+123456",
             "+1234567890123456",
             "+1 202 555 01x2",
+            "202 555 01x2",
+            "++12025550142",
+            "202+5550142",
             "",
         ] {
             assert_eq!(Identifier::parse(bad), Err(InvalidIdentifier), "{bad}");

@@ -281,7 +281,9 @@ fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
             // (`TwilioSmsSender::form`), so that Twilio picks the
             // campaign's number from the service's pool.
             let from = required(get, "SMS_FROM")?.trim().to_owned();
-            let number = matches!(Identifier::parse(&from), Ok(Identifier::Phone(_)));
+            // In international form only: Twilio takes `From` as E.164.
+            let number = from.starts_with('+')
+                && matches!(Identifier::parse(&from), Ok(Identifier::Phone(_)));
             if !number && !is_twilio_sid(&from, "MG") {
                 bail!(
                     "SMS_FROM={from} is neither a phone number in international form \
@@ -1376,6 +1378,8 @@ mod tests {
             "MG0123",
             "MG0000000000000000000000000000000g",
             "+1555",
+            // A number, but not in the international form Twilio takes.
+            "2025550142",
         ] {
             let wrong = [&twilio[..3], &[("SMS_FROM", wrong)]].concat();
             let error = format!("{:#}", read(&wrong).err().expect("refused"));

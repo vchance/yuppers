@@ -49,6 +49,9 @@ test('an invitation made for someone addresses the message to them', () => {
 
   const phone = shareAddresses({ message: MESSAGE, subject: 'S', boundTo: '+1 (202) 555-0142' })
   expect(phone.sms.startsWith('sms:+12025550142?body=')).toBe(true)
+  // Typed without +1, as a US number usually is.
+  const american = shareAddresses({ message: MESSAGE, subject: 'S', boundTo: '(202) 555-0142' })
+  expect(american.sms.startsWith('sms:+12025550142?body=')).toBe(true)
   expect(phone.email.startsWith('mailto:?subject=')).toBe(true)
 
   // Something that is neither is left out rather than half used.
@@ -70,7 +73,10 @@ test('who an invitation is for is checked gently, by the service’s own rule', 
     expect(boundToProblem(fine, both)).toBeNull()
     expect(boundToProblem(fine, emailOnly)).toBeNull()
   }
-  expect(boundToProblem('+1 202 555 0142', both)).toBeNull()
+  // A US number however it is written, a bare ten digits included.
+  for (const phone of ['+1 202 555 0142', '2025550142', '(202) 555-0142', '1-202-555-0142']) {
+    expect(boundToProblem(phone, both), phone).toBeNull()
+  }
 
   for (const malformed of [
     'carla@',
@@ -83,11 +89,19 @@ test('who an invitation is for is checked gently, by the service’s own rule', 
     expect(boundToProblem(malformed, both)).toBe('invalid')
     expect(boundToProblem(malformed, emailOnly)).toBe('invalidEmail')
   }
-  for (const malformed of ['carla', '2025550142', '+0123456789', '+12345', '+1 202 555 0142 ext 3']) {
+  for (const malformed of [
+    'carla',
+    '202555014',
+    '202 155 0142',
+    '+0123456789',
+    '+12345',
+    '+1 202 555 0142 ext 3',
+  ]) {
     expect(boundToProblem(malformed, both)).toBe('invalid')
   }
   // A phone number where codes go by email only: they could never sign in with it.
   expect(boundToProblem('+1 202 555 0142', emailOnly)).toBe('emailOnly')
+  expect(boundToProblem('(202) 555-0142', emailOnly)).toBe('emailOnly')
   expect(boundToProblem('carla', emailOnly)).toBe('invalidEmail')
   // Nor with a number of a country that is not texted.
   expect(boundToProblem('+44 20 7946 0958', both)).toBe('country')
@@ -141,6 +155,10 @@ test('someone has to be named, unless a link for anyone is chosen on purpose', (
 
 test('the service is told outright who a link is for: the person named, or anyone', () => {
   expect(invitationOptions(' carla@example.test ')).toEqual({ bound_to: 'carla@example.test' })
+  // A phone number goes as the service keeps it, however it was typed.
+  expect(invitationOptions('(856) 548-8780')).toEqual({ bound_to: '+18565488780' })
+  expect(invitationOptions('+44 20 7946 0958')).toEqual({ bound_to: '+442079460958' })
+  expect(invitationOptions('856 548')).toEqual({ bound_to: '856 548' })
   expect(invitationOptions(null)).toEqual({ for_anyone: true })
   expect(invitationOptions('  ')).toEqual({ for_anyone: true })
 })

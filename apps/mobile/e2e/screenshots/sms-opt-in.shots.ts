@@ -190,6 +190,11 @@ async function save(browser: Browser, png: Buffer, screen: Screen, language: str
 /** Only what is on screen: the browser keeps screens further down the stack in the page, hidden. */
 const shown = (locator: Locator) => locator.filter({ visible: true })
 
+/** A number as the screens show it: `(201) 555-0123` for `+12015550123`. */
+function shownPhone(phone: string): string {
+  return `(${phone.slice(2, 5)}) ${phone.slice(5, 8)}-${phone.slice(8)}`
+}
+
 /** Deletes the account signed in on `page` with the code texted for it, freeing the number for the next run. */
 async function deleteAccount(page: Page, code: string) {
   const token = await page.evaluate(() => window.sessionStorage.getItem('yuppers.harness.session'))
@@ -235,7 +240,7 @@ for (const [language, locale, w] of [
     // the consentBox beside it, unticked, and "Send code" waiting for it.
     await page.goto('/')
     await expect(shown(page.getByRole('heading', { name: w.signIn.title, level: 1 }))).toBeVisible()
-    await expect(shown(page.getByText(fill(w.signIn.identifierHintCountries, { codes: '+1' })))).toBeVisible()
+    await expect(shown(page.getByText(w.signIn.identifierHintUs))).toBeVisible()
     const field = shown(page.getByLabel(w.signIn.identifierLabel))
     await field.fill(SAMPLE_PHONE)
     await field.blur()
@@ -257,7 +262,7 @@ for (const [language, locale, w] of [
 
     // 3. After asking for a code.
     const code = await phoneCodeFrom(SAMPLE_PHONE, 'sign-in', () => send.click())
-    await expect(shown(page.getByText(fill(w.signIn.codeSent, { identifier: SAMPLE_PHONE })))).toBeVisible()
+    await expect(shown(page.getByText(fill(w.signIn.codeSent, { identifier: shownPhone(SAMPLE_PHONE) })))).toBeVisible()
     const codeField = shown(page.getByLabel(w.signIn.codeLabel))
     await expect(codeField).toBeFocused()
     await codeField.blur()
@@ -291,7 +296,7 @@ for (const [language, locale, w] of [
     await expect(box).toBeChecked()
     const saveButton = shown(page.getByRole('button', { name: w.smsUpdates.save, exact: true }))
     await saveButton.click()
-    const on = fill(w.smsUpdates.on, { phone: `+1 •••-•••-${SAMPLE_PHONE.slice(-4)}` })
+    const on = fill(w.smsUpdates.on, { phone: `(•••) •••-${SAMPLE_PHONE.slice(-4)}` })
     await expect(shown(page.getByText(on, { exact: true }))).toBeVisible()
     await saveButton.blur()
     await save(browser, await page.screenshot(), 'confirmation', language)
@@ -337,7 +342,7 @@ for (const [language, locale, w] of [
 
     // 8. After asking for the code. The number is left unconfirmed.
     await phoneCodeFrom(SAMPLE_PHONE_TO_ADD, 'sign-in', () => textMe.click())
-    const toAdd = `+1 •••-•••-${SAMPLE_PHONE_TO_ADD.slice(-4)}`
+    const toAdd = `(•••) •••-${SAMPLE_PHONE_TO_ADD.slice(-4)}`
     await expect(
       shown(ana.getByText(fill(w.smsUpdates.codeSent, { phone: toAdd }), { exact: true })),
     ).toBeVisible()
@@ -375,7 +380,7 @@ for (const [language, locale, w] of [
     // is taken.
     const deletionCode = await phoneCodeFrom(SAMPLE_PHONE, 'delete', () => sendDeletion.click())
     const deletionSent = shown(
-      page.getByText(fill(w.deletion.codeSent, { identifier: SAMPLE_PHONE }), { exact: true }),
+      page.getByText(fill(w.deletion.codeSent, { identifier: shownPhone(SAMPLE_PHONE) }), { exact: true }),
     )
     await expect(deletionSent).toBeVisible()
     await deletionSent.evaluate((element) => element.scrollIntoView({ block: 'center' }))

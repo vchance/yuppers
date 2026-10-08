@@ -7,6 +7,7 @@ import { formatMessage, type MessageValues } from './message'
 import {
   codeWaitText,
   identifierRefused,
+  phoneRefused,
   RESEND_AFTER_MS,
   signInChannels,
   signInText,
@@ -70,10 +71,30 @@ test('the form says email only until the service offers phone numbers, then name
   expect(signInText(w, { phone: true, countryCodes: ['+1', '+52'], codeSender: null }, fmt)).toEqual({
     intro: w.intro,
     label: w.identifierLabel,
-    hint: 'For a phone number, start with the country code. We can only send codes to phone numbers starting +1, +52.',
+    hint: 'For a phone number outside the US, start with its country code. We can only send codes to phone numbers starting +1, +52.',
     changeIdentifier: w.changeIdentifier,
   })
   expect(signInText(w, { phone: true, countryCodes: [], codeSender: null }, fmt).hint).toBe(w.identifierHint)
+  // US numbers only: written as they are there, with no country code asked for.
+  expect(signInText(w, { phone: true, countryCodes: ['+1'], codeSender: null }, fmt).hint).toBe(
+    'US phone numbers only, such as (555) 123-4567.',
+  )
+})
+
+test('a phone number is stopped before it is sent, in the service’s words, only once it is not one', () => {
+  const us = { phone: true, countryCodes: ['+1'], codeSender: null }
+  for (const fine of ['(856) 548-8780', '856-548-8780', '8565488780', '+1 856 548 8780']) {
+    expect(phoneRefused(fine, us), fine).toBeNull()
+  }
+  expect(phoneRefused('+44 20 7946 0958', us)).toBe('PHONE_COUNTRY_NOT_SERVED')
+  expect(phoneRefused('856 148 8780', us)).toBe('INVALID_IDENTIFIER')
+  expect(phoneRefused('856 548', us)).toBe('INVALID_IDENTIFIER')
+  // Not a phone number at all: the service decides.
+  expect(phoneRefused('ana@example.test', us)).toBeNull()
+  expect(phoneRefused('ana', us)).toBeNull()
+  // Not known which countries: the shape only.
+  expect(phoneRefused('+44 20 7946 0958', null)).toBeNull()
+  expect(phoneRefused('856 548', null)).toBe('INVALID_IDENTIFIER')
 })
 
 test('the service names the address codes come from, where it has one', async () => {

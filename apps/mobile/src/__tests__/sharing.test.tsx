@@ -146,6 +146,27 @@ describe('who the invitation is for', () => {
     expect(sent?.body).toEqual(expect.objectContaining({ invitation: { for_anyone: true } }));
   });
 
+  test('takes a US number typed without +1, written the American way, and sends it in E.164', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    const field = () => screen.getByLabelText(w.invitationLink.forLabel);
+    await screen.findByLabelText(w.invitationLink.forLabel);
+
+    await fireEvent.changeText(field(), '2025550142');
+    await fireEvent(field(), 'blur');
+    expect(field().props.value).toBe('(202) 555-0142');
+    await fireEvent.press(screen.getByText(w.composer.review));
+    await screen.findByText(w.composer.signIntro);
+    screen.getByText('Only someone who signs in with (202) 555-0142 will be able to use the link.');
+
+    await fireEvent(screen.getByTestId('consent-agree'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('consent-sign'));
+    await waitFor(() =>
+      expect(
+        service.sent.find((request) => request.path === `/v1/exchanges/${DRAFT}/revisions`)?.body,
+      ).toEqual(expect.objectContaining({ invitation: { bound_to: '+12025550142' } })),
+    );
+  });
+
   test('is an email address only where codes go by email only', async () => {
     await open(`/exchanges/${DRAFT}`, { signedIn: true, phone: false });
     const field = await screen.findByLabelText(w.invitationLink.forLabelEmail);
@@ -181,7 +202,7 @@ describe('waiting for a sign-in code', () => {
     screen.getByText(w.signIn.checkInboxAnySender);
 
     await fireEvent.press(screen.getByText(w.signIn.changeIdentifier));
-    await requestCode('+15551234567');
+    await requestCode('+15552345678');
     expect(screen.queryByText(w.signIn.checkInboxAnySender)).toBeNull();
   });
 

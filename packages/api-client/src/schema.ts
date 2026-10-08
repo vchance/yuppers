@@ -911,7 +911,11 @@ export interface components {
         AddIdentifier: {
             /** @description The one-time code sent to it. */
             code: string;
-            /** @description An email address, or a phone number in international form. */
+            /**
+             * @description An email address, or a phone number: in international form, or a US
+             *     number without its country code as people there write it, ten digits
+             *     or 1 and ten (`(856) 548-8780`), which is taken as `+1`.
+             */
             identifier: string;
         };
         /**
@@ -1292,7 +1296,8 @@ export interface components {
         InvitationOptions: {
             /**
              * @description Names who the invitation is for: only an account that has verified
-             *     this email address or phone number can claim it.
+             *     this email address or phone number can claim it. A phone number is
+             *     read as signing in reads it: a US number may leave out the `+1`.
              */
             bound_to?: string | null;
             /**
@@ -1790,7 +1795,11 @@ export interface components {
          */
         ReportStatus: "OPEN" | "DISMISSED" | "ACTIONED";
         RequestCode: {
-            /** @description An email address, or a phone number in international form. */
+            /**
+             * @description An email address, or a phone number: in international form, or a US
+             *     number without its country code as people there write it, ten digits
+             *     or 1 and ten (`(856) 548-8780`), which is taken as `+1`.
+             */
             identifier: string;
             sms_consent?: components["schemas"]["SmsCodeConsent"] | null;
         };

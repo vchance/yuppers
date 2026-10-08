@@ -8,7 +8,7 @@ import es from '../wording/es.json'
 import termsEn from '../wording/terms/en.json'
 import termsEs from '../wording/terms/es.json'
 import { legalInline, type LegalWording } from './legal'
-import { consentPieces, maskPhone, SMS_CONSENT_VERSION, usPhone } from './sms-updates'
+import { consentPieces, SMS_CONSENT_VERSION } from './sms-updates'
 
 /*
  * Text updates for an agreement: the number a person types, how it is
@@ -58,41 +58,5 @@ describe('the consent wording', () => {
       'utf8',
     )
     expect(backend).toContain(`pub const CONSENT_VERSION: &str = "${SMS_CONSENT_VERSION}";`)
-  })
-})
-
-describe('a US number', () => {
-  test('is taken as typed, in any usual shape', () => {
-    for (const typed of [
-      '5552345678',
-      '555 234 5678',
-      '(555) 234-5678',
-      '555.234.5678',
-      '+1 555 234 5678',
-      '+15552345678',
-      '1-555-234-5678',
-    ]) {
-      expect(usPhone(typed), typed).toBe('+15552345678')
-    }
-  })
-
-  test('is refused when it is not one', () => {
-    for (const typed of [
-      '',
-      '234 5678',
-      '+44 7700 900123',
-      '+525512345678',
-      '055 234 5678',
-      '555 134 5678',
-      'call me',
-      'ana@example.test',
-    ]) {
-      expect(usPhone(typed), typed).toBeNull()
-    }
-  })
-
-  test('is shown with all but its last four digits hidden', () => {
-    expect(maskPhone('+15552345678')).toBe('+1 •••-•••-5678')
-    expect(maskPhone('+447700900123')).toBe('•••0123')
   })
 })

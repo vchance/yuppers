@@ -2909,7 +2909,7 @@
           },
           "identifier": {
             "type": "string",
-            "description": "An email address, or a phone number in international form."
+            "description": "An email address, or a phone number: in international form, or a US\nnumber without its country code as people there write it, ten digits\nor 1 and ten (`(856) 548-8780`), which is taken as `+1`."
           }
         }
       },
@@ -3949,7 +3949,7 @@
               "string",
               "null"
             ],
-            "description": "Names who the invitation is for: only an account that has verified\nthis email address or phone number can claim it."
+            "description": "Names who the invitation is for: only an account that has verified\nthis email address or phone number can claim it. A phone number is\nread as signing in reads it: a US number may leave out the `+1`."
           },
           "for_anyone": {
             "type": "boolean",
@@ -5074,7 +5074,7 @@
         "properties": {
           "identifier": {
             "type": "string",
-            "description": "An email address, or a phone number in international form."
+            "description": "An email address, or a phone number: in international form, or a US\nnumber without its country code as people there write it, ten digits\nor 1 and ten (`(856) 548-8780`), which is taken as `+1`."
           },
           "sms_consent": {
             "oneOf": [

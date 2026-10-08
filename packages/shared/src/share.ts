@@ -17,6 +17,7 @@
  * person picks would.
  */
 
+import { identifierToSend, phoneProblem, readPhone } from './phone'
 import { phoneOffered, type SignInChannels } from './sign-in'
 import type { MessageValues } from './message'
 import type { Wording } from './wording/types'
@@ -91,18 +92,14 @@ function validEmail(input: string): boolean {
 }
 
 /**
- * The phone number in `input` as the service would keep it, `+` and its
- * digits, or `null` when it is not one by the service's rule: a `+`, then
- * 7 to 15 digits not starting with 0, written with spaces, dashes, dots or
- * brackets if at all.
+ * The phone number in `input` as the service would keep it, in E.164, or
+ * `null` when it is not one: a US number written any usual way, `(202)
+ * 555-0142` or `202-555-0142`, with or without +1, or a number given with
+ * another country code (`phone.ts`).
  */
 function phoneNumber(input: string): string | null {
-  const given = input.trim()
-  if (!given.startsWith('+')) return null
-  const rest = given.slice(1)
-  if (!/^[0-9 ().-]*$/.test(rest)) return null
-  const digits = rest.replace(/[^0-9]/g, '')
-  return digits.length >= 7 && digits.length <= 15 && !digits.startsWith('0') ? `+${digits}` : null
+  const reading = readPhone(input)
+  return reading.kind === 'invalid' ? null : reading.phone
 }
 
 /**
@@ -150,15 +147,16 @@ export function invitationBoundTo(choice: InvitationChoice): string | null {
 
 /**
  * Who an invitation is for, as the service must be told it outright: the
- * person named, or `for_anyone` for a link anyone who has it can claim. The
- * service refuses a request that says neither, so a link for anyone is
- * never what leaving something out gets.
+ * person named (a phone number in E.164, however it was typed), or
+ * `for_anyone` for a link anyone who has it can claim. The service refuses
+ * a request that says neither, so a link for anyone is never what leaving
+ * something out gets.
  */
 export function invitationOptions(
   boundTo: string | null,
 ): { bound_to: string } | { for_anyone: true } {
   const named = boundTo?.trim()
-  return named ? { bound_to: named } : { for_anyone: true }
+  return named ? { bound_to: identifierToSend(named) } : { for_anyone: true }
 }
 
 /**
@@ -181,12 +179,9 @@ export function boundToProblem(
     if (validEmail(given)) return null
     return emailOnly ? 'invalidEmail' : 'invalid'
   }
-  const phone = phoneNumber(given)
-  if (emailOnly) return phone ? 'emailOnly' : 'invalidEmail'
-  if (!phone) return 'invalid'
-  const codes = channels?.countryCodes ?? []
-  if (codes.length > 0 && !codes.some((code) => phone.startsWith(code))) return 'country'
-  return null
+  const problem = phoneProblem(given, channels?.countryCodes ?? [])
+  if (emailOnly) return problem === 'invalid' ? 'invalidEmail' : 'emailOnly'
+  return problem
 }
 
 /** The words for a [`BoundToProblem`]. */

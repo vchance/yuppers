@@ -60,6 +60,11 @@ import { apiPort, screenshotsLog, webOrigin } from './playwright.config'
 
 const API = `http://127.0.0.1:${apiPort}`
 
+/** A number as the screens show it: `(201) 555-0123` for `+12015550123`. */
+function shownPhone(phone: string): string {
+  return `(${phone.slice(2, 5)}) ${phone.slice(5, 8)}-${phone.slice(8)}`
+}
+
 /**
  * The code for a phone number, read back from the log: with
  * SMS_CODE_DELIVERY=log the service writes it where Twilio Verify would
@@ -222,7 +227,7 @@ for (const [language, locale, w] of [
     // 1. The sign-in form, offering phone numbers, with a number entered:
     // the consentBox beside it, unticked, and "Send code" waiting for it.
     await page.goto('/')
-    await expect(page.getByText(fill(w.signIn.identifierHintCountries, { codes: '+1' }))).toBeVisible()
+    await expect(page.getByText(w.signIn.identifierHintUs)).toBeVisible()
     await page.getByLabel(w.signIn.identifierLabel, { exact: true }).fill(SAMPLE_PHONE)
     const consentBox = page.getByRole('checkbox', { name: w.smsCode.signIn, exact: true })
     const send = page.getByRole('button', { name: w.signIn.sendCode, exact: true })
@@ -241,7 +246,7 @@ for (const [language, locale, w] of [
 
     // 3. After asking for a code.
     const code = await phoneCodeFrom(SAMPLE_PHONE, 'sign-in', () => send.click())
-    await expect(page.getByText(fill(w.signIn.codeSent, { identifier: SAMPLE_PHONE }))).toBeVisible()
+    await expect(page.getByText(fill(w.signIn.codeSent, { identifier: shownPhone(SAMPLE_PHONE) }))).toBeVisible()
     await page.mouse.click(1, 1)
     await save(browser, await page.screenshot(), 'codeSent', language)
 
@@ -272,7 +277,7 @@ for (const [language, locale, w] of [
     // 5. Ticked and saved.
     await box.check()
     await control.getByRole('button', { name: w.smsUpdates.save, exact: true }).click()
-    const on = fill(w.smsUpdates.on, { phone: `+1 •••-•••-${SAMPLE_PHONE.slice(-4)}` })
+    const on = fill(w.smsUpdates.on, { phone: `(•••) •••-${SAMPLE_PHONE.slice(-4)}` })
     await expect(control.getByText(on)).toBeVisible()
     await control.getByRole('button', { name: w.smsUpdates.save, exact: true }).blur()
     await save(browser, await control.screenshot(), 'confirmation', language)
@@ -303,7 +308,7 @@ for (const [language, locale, w] of [
 
     // 8. After asking for the code. The number is left unconfirmed.
     await phoneCodeFrom(SAMPLE_PHONE_TO_ADD, 'sign-in', () => textMe.click())
-    const toAdd = `+1 •••-•••-${SAMPLE_PHONE_TO_ADD.slice(-4)}`
+    const toAdd = `(•••) •••-${SAMPLE_PHONE_TO_ADD.slice(-4)}`
     await expect(adding.getByText(fill(w.smsUpdates.codeSent, { phone: toAdd }))).toBeVisible()
     await ana.mouse.click(1, 1)
     await save(browser, await adding.screenshot(), 'confirmNumberCodeSent', language)
@@ -340,7 +345,7 @@ for (const [language, locale, w] of [
     // is taken.
     const deletionCode = await phoneCodeFrom(SAMPLE_PHONE, 'delete', () => sendDeletion.click())
     await expect(
-      deletion.getByText(fill(w.deletion.codeSent, { identifier: SAMPLE_PHONE })),
+      deletion.getByText(fill(w.deletion.codeSent, { identifier: shownPhone(SAMPLE_PHONE) })),
     ).toBeVisible()
     await page.mouse.click(1, 1)
     await deletion.evaluate((element) => element.scrollIntoView({ block: 'start' }))

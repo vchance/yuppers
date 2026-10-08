@@ -75,31 +75,63 @@ describe('signing in where the service has no text messages', () => {
 })
 
 describe('signing in where the service sends text messages', () => {
-  test('a phone number is asked for too, with the countries served, and sent', async () => {
+  test('a phone number is asked for too, US numbers only, and sent in E.164', async () => {
     const { wording, service } = await start('/', null)
     const w = wording.signIn
     await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
 
     expect(document.body.textContent).toContain(w.intro)
-    expect(document.body.textContent).toContain(
-      w.identifierHintCountries.replace('{codes}', '+1'),
-    )
+    // Only +1 is texted: no country code is asked for.
+    expect(document.body.textContent).toContain(w.identifierHintUs)
+    expect(document.body.textContent).not.toContain('country code')
     const identifier = field(w.identifierLabel) as HTMLInputElement
-    // An email field would refuse the `+` and the spaces of a phone number.
+    // An email field would refuse the brackets and the spaces of a phone number.
     expect(identifier.type).toBe('text')
 
-    await type(identifier, '+15551234567')
+    // Typed as people in the US write it, without +1.
+    await act(async () => identifier.focus())
+    await type(identifier, '555-234-5678')
+    // Ticking the box leaves the field, which writes the number the American
+    // way; the box stays ticked, for it is the same number.
     await press(field(wording.smsCode.signIn))
+    expect(identifier.value).toBe('(555) 234-5678')
+    expect((field(wording.smsCode.signIn) as HTMLInputElement).checked).toBe(true)
     await press(button(w.sendCode))
     await until(() => hasLabel(w.codeLabel), 'the code field')
     expect(service.sent.at(-1)).toEqual({
       call: 'POST /v1/auth/codes',
       body: {
-        identifier: '+15551234567',
+        identifier: '+15552345678',
         sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
       },
     })
+    expect(document.body.textContent).toContain(
+      w.codeSent.replace('{identifier}', '(555) 234-5678'),
+    )
     button(w.changeIdentifier)
+  })
+
+  test('a number of another country, or not a number, is stopped here in the service’s words', async () => {
+    const { wording, service } = await start('/', null)
+    const w = wording.signIn
+    await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+    const identifier = field(w.identifierLabel) as HTMLInputElement
+
+    for (const [typed, code] of [
+      ['+44 20 7946 0958', 'PHONE_COUNTRY_NOT_SERVED'],
+      ['555 134 5678', 'INVALID_IDENTIFIER'],
+      ['555 2345', 'INVALID_IDENTIFIER'],
+    ] as const) {
+      await type(identifier, typed)
+      await press(field(wording.smsCode.signIn))
+      await press(button(w.sendCode))
+      await until(
+        () => document.body.textContent!.includes(wording.errors[code]),
+        `${code} for ${typed}`,
+      )
+      expect(identifier.value).toBe(typed)
+    }
+    expect(service.sent.some((request) => request.call === 'POST /v1/auth/codes')).toBe(false)
   })
 })
 
@@ -243,7 +275,7 @@ describe('waiting for the code', () => {
     expect(document.body.textContent).not.toContain('an email from')
 
     await press(button(w.changeIdentifier))
-    await type(field(w.identifierLabel), '+15551234567')
+    await type(field(w.identifierLabel), '+15552345678')
     await press(field(wording.smsCode.signIn))
     await press(button(w.sendCode))
     await until(() => hasLabel(w.codeLabel), 'the code field')

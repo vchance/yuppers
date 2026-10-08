@@ -233,7 +233,7 @@ test('a code that is wrong goes back to asking for it, and the account and its s
   screen.getByText(d.codeChoice);
   // By email, the first offered, there is no box.
   expect(screen.queryByRole('checkbox')).toBeNull();
-  await fireEvent.press(screen.getByRole('radio', { name: '+12025550142' }));
+  await fireEvent.press(screen.getByRole('radio', { name: '(202) 555-0142' }));
 
   // To the phone: a box, unticked, named by the words for deleting, and
   // the button waits for it, saying why.
@@ -254,12 +254,12 @@ test('a code that is wrong goes back to asking for it, and the account and its s
   expect(send().props.accessibilityState).toMatchObject({ disabled: false });
   await fireEvent.press(screen.getByRole('radio', { name: 'ana@example.test' }));
   expect(screen.queryByRole('checkbox')).toBeNull();
-  await fireEvent.press(screen.getByRole('radio', { name: '+12025550142' }));
+  await fireEvent.press(screen.getByRole('radio', { name: '(202) 555-0142' }));
   expect(box().props.accessibilityState).toMatchObject({ checked: false });
 
   await fireEvent.press(box());
   await fireEvent.press(send());
-  await screen.findByText(fmt(d.codeSent, { identifier: '+12025550142' }));
+  await screen.findByText(fmt(d.codeSent, { identifier: '(202) 555-0142' }));
   expect(service.sent.at(-1)).toMatchObject({
     path: '/v1/me/deletion/codes',
     body: { channel: 'PHONE', sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' } },

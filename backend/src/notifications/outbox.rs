@@ -16,7 +16,10 @@
 //! * `completed_at` empty and `attempts` below the limit: waiting, not before
 //!   `available_at`;
 //! * `completed_at` empty and `attempts` at the limit: given up on, and left
-//!   as it is for someone to look at, with the last failure in `last_error`;
+//!   as it is for someone to look at, with the last failure in `last_error`.
+//!   A refusal that trying again cannot change ([`super::Undeliverable`],
+//!   such as an address the provider will not take) is given up on at once:
+//!   `attempts` goes straight to the limit;
 //! * `completed_at` set and `last_error` empty: sent;
 //! * `completed_at` set and `last_error` set: closed without sending, because
 //!   there was no longer anyone to send it to or, for a reminder, because
@@ -31,7 +34,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use super::wording::{Links, Wording};
-use super::{Email, EmailSender};
+use super::{Email, EmailSender, Undeliverable};
 use crate::contact::{self, Field};
 use crate::domain::notification::Notice;
 use crate::domain::reminder;
@@ -212,6 +215,8 @@ impl Delivered {
 enum Attempt {
     Sent,
     Failed(String),
+    /// Refused for good: not tried again.
+    Undeliverable(String),
     Dropped(&'static str),
 }
 
@@ -330,7 +335,12 @@ async fn deliver_next(
             match tokio::time::timeout(rules.send_timeout, delivery.sender.send(&email)).await {
                 Ok(Ok(())) => Attempt::Sent,
                 Ok(Err(error)) => {
-                    Attempt::Failed(without_address(&format!("{error:#}"), &email.to))
+                    let text = without_address(&format!("{error:#}"), &email.to);
+                    if error.is::<Undeliverable>() {
+                        Attempt::Undeliverable(text)
+                    } else {
+                        Attempt::Failed(text)
+                    }
                 }
                 Err(_) => Attempt::Failed(format!("no answer within {:?}", rules.send_timeout)),
             }
@@ -371,6 +381,26 @@ async fn deliver_next(
             } else {
                 tracing::warn!(outbox = id, error, "notification not sent; will retry");
             }
+        }
+        Attempt::Undeliverable(error) => {
+            let error: String = error.chars().take(500).collect();
+            sqlx::query(
+                "UPDATE outbox SET attempts = GREATEST(attempts + 1, $3), last_error = $2
+                 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(&error)
+            .bind(rules.max_attempts)
+            .execute(&mut *tx)
+            .await?;
+            delivered.failed += 1;
+            delivered.given_up += 1;
+            tracing::error!(
+                outbox = id,
+                error,
+                refused_for_good = true,
+                "notification given up on"
+            );
         }
         Attempt::Dropped(reason) => {
             sqlx::query("UPDATE outbox SET completed_at = $2, last_error = $3 WHERE id = $1")

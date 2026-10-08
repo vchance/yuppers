@@ -3,7 +3,7 @@
 //! A change to an exchange queues its messages in the outbox, in the same
 //! transaction as the events that caused them, so a message exists exactly
 //! when its event does. The worker delivers them: by email ([`outbox`],
-//! [`smtp`]) and, to those with the app, by push ([`push`], [`expo`]).
+//! [`smtp`] or [`resend`]) and, to those with the app, by push ([`push`], [`expo`]).
 //! Which change calls for which message is a rule, and lives in
 //! `domain::notification`. One-time codes go by email, or by text message
 //! to a phone number, made, sent and checked by Twilio Verify ([`verify`],
@@ -16,6 +16,7 @@ pub mod expo;
 mod html;
 pub mod outbox;
 pub mod push;
+pub mod resend;
 pub mod sms;
 pub mod sms_updates;
 pub mod smtp;
@@ -38,10 +39,26 @@ pub struct Email {
     pub reference: i64,
 }
 
-/// Delivers an email.
+/// Delivers an email. An error is retried by the outbox, unless it is
+/// [`Undeliverable`].
 pub trait EmailSender: Send + Sync {
     fn send<'a>(&'a self, email: &'a Email) -> SendFuture<'a>;
 }
+
+/// A refusal that trying again cannot change, such as an address the
+/// provider will not take: the outbox gives the message up at once instead
+/// of retrying it. Its text is what `outbox.last_error` records, so it names
+/// no address.
+#[derive(Debug)]
+pub struct Undeliverable(pub String);
+
+impl std::fmt::Display for Undeliverable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Undeliverable {}
 
 /// Development delivery: writes the message to the worker's log, which is
 /// where you read it. Never configured in production, where it would mean

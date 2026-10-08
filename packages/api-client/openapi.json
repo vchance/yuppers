@@ -3806,7 +3806,7 @@
               "string",
               "null"
             ],
-            "description": "The email address sign-in codes come from, such as\n`no-reply@yuppers.app`: the address part of `SMTP_FROM`, without its\ndisplay name. A client tells someone waiting for a code to look for\nit, in their spam folder too. Absent where codes are not sent by\nemail from an address of the service's own (the development log)."
+            "description": "The email address sign-in codes come from, such as\n`no-reply@yuppers.app`: the address part of `EMAIL_FROM` (or\n`SMTP_FROM`), without its display name, whether codes go by Resend or\nSMTP. A client tells someone waiting for a code to look for\nit, in their spam folder too. Absent where codes are not sent by\nemail from an address of the service's own (the development log)."
           },
           "commit": {
             "type": "string",

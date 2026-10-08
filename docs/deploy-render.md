@@ -2,7 +2,7 @@
 
 The owner's checklist for the first deployment of Yuppers: from creating the accounts to signing in on the live site and naming yourself a reviewer, then what to check, how to roll back, how backups work there, and what it costs. `render.yaml` at the root of the repository is the Blueprint it applies. [operations.md](operations.md) is the runbook for everything after; this page says where Render differs.
 
-Render's documentation and prices were read on **2026-10-03**; both change, so check the pages linked here before relying on a detail. Nothing in this repository has a Render or Postmark account, and nothing here was tried against one: the steps marked **check** are the ones only the first real deploy can confirm.
+Render's documentation and prices were read on **2026-10-03**; both change, so check the pages linked here before relying on a detail. Resend's documentation was read on **2026-10-08**. Nothing in this repository has a Render or Resend account, and nothing here was tried against one: the steps marked **check** are the ones only the first real deploy can confirm.
 
 ## What the Blueprint creates
 
@@ -12,7 +12,7 @@ Render's documentation and prices were read on **2026-10-03**; both change, so c
 | `yuppers-worker` | Background worker, the same `Dockerfile` | `/usr/local/bin/worker`; before each deploy, `/usr/local/bin/migrate` too | `0.5c-512mb`, one instance |
 | `yuppers-db` | PostgreSQL **17** | Database `yuppers`, owner user `exchange`; internal connections only | `0.1c-256mb`, 5 GB disk |
 | `yuppers-settings` | Environment group | The plain settings shared by both services | |
-| `yuppers-secrets` | Environment group | `SMTP_USERNAME` and `SMTP_PASSWORD` (asked for), `APP_DB_PASSWORD` (generated), and for text messages `SMS_ACCOUNT_SID`, `SMS_API_KEY_SID`, `SMS_API_KEY_SECRET`, `SMS_WEBHOOK_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID` and `TWILIO_VERIFY_DELETION_SERVICE_SID` (entered by hand; "Text messages") | |
+| `yuppers-secrets` | Environment group | `RESEND_API_KEY` (entered by hand; "1. Email"), `SMTP_USERNAME` and `SMTP_PASSWORD` (the SMTP option only), `APP_DB_PASSWORD` (generated), and for text messages `SMS_ACCOUNT_SID`, `SMS_API_KEY_SID`, `SMS_API_KEY_SECRET`, `SMS_WEBHOOK_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID` and `TWILIO_VERIFY_DELETION_SERVICE_SID` (entered by hand; "Text messages") | |
 
 Everything is in `virginia` (US East). Render's regions are `oregon`, `ohio`, `virginia`, `frankfurt` and `singapore`, and services reach each other and the database privately only within one region ([Blueprint spec](https://render.com/docs/blueprint-spec), [private network](https://render.com/docs/private-network)). Render currently offers PostgreSQL 13 to 18 for new databases; the version cannot be changed after creation, so it is pinned to 17, the version the code, CI and the backup scripts use ([creating and connecting](https://render.com/docs/postgresql-creating-connecting)).
 
@@ -21,10 +21,11 @@ Everything is in `virginia` (US East). Render's regions are `oregon`, `ohio`, `v
 | Setting | Value | Where |
 |---|---|---|
 | `WEB_ORIGIN` | `https://yuppers.app` (confirm the domain) | group `yuppers-settings` |
-| `CODE_DELIVERY`, `NOTIFICATION_DELIVERY` | `smtp` | group |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` | `smtp.postmarkapp.com`, `587`, `starttls` | group |
-| `SMTP_FROM` | `Yuppers <no-reply@yuppers.app>` (confirm the address) | group |
-| `SMTP_USERNAME`, `SMTP_PASSWORD` | Postmark's Server API token, both | group `yuppers-secrets`, entered in the dashboard |
+| `CODE_DELIVERY`, `NOTIFICATION_DELIVERY` | `resend` (`smtp` is the other option; "The SMTP option") | group |
+| `EMAIL_FROM` | `Yuppers <no-reply@yuppers.app>`, on the domain verified in Resend | group |
+| `RESEND_API_KEY` | Resend's API key, sending access, restricted to `yuppers.app` | group `yuppers-secrets`, entered in the dashboard |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_FROM` | `smtp.resend.com`, `587`, `starttls`, the same sender as `EMAIL_FROM`; for the SMTP option only, unused while both deliveries are `resend` | group |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | for the SMTP option only: for Resend's SMTP, `resend` and the API key | group `yuppers-secrets`, entered in the dashboard |
 | `TRUSTED_PROXY_HEADER`, `TRUSTED_PROXIES` | `CF-Connecting-IP`, `1` ("Client addresses" below) | group |
 | `SMS_DELIVERY`, `PUSH_DELIVERY` | `off` (`SMS_DELIVERY=twilio`, agreement updates, once Twilio approves the campaign; "Text messages") | group |
 | `SMS_CODE_DELIVERY` | `off` (`verify`, one-time codes by Twilio Verify, once its two services exist; "One-time codes by Twilio Verify") | group |
@@ -113,31 +114,39 @@ Render's own backups and point-in-time recovery made before step 3 still hold th
 
 1. **The domain.** `yuppers.app` registered, with access to its DNS records.
 2. **A Render account** at <https://dashboard.render.com>, signed in with the GitHub account that owns `vchance/yuppers`, and a payment method: pre-deploy commands and the database's backups need paid instances ([deploys](https://render.com/docs/deploys), [free instances](https://render.com/docs/free)). The **Hobby** workspace plan is enough to start; "Backups" below says when **Pro** is worth it.
-3. **A Postmark account** at <https://postmarkapp.com>.
+3. **A Resend account** at <https://resend.com>, and the DNS for `yuppers.app` on Cloudflare.
 4. **The Render CLI** on your machine, for one-off commands: `brew install render`, then `render login` ([CLI](https://render.com/docs/cli)).
 5. **Optional**: Docker or a Rust toolchain on your machine, for the fallbacks below.
 
-## 1. Postmark
+## 1. Email
 
-1. **Create a server** named `Yuppers`. Its default transactional message stream (`outbound`) is the one the service sends through; it sets no stream header, so Postmark uses that one ([SMTP](https://postmarkapp.com/developer/user-guide/send-email-with-smtp)).
-2. **Add the domain** `yuppers.app` under Sender Signatures → Domains, and add the records Postmark shows at your DNS host ([verifying a domain](https://postmarkapp.com/support/article/1046-how-do-i-verify-a-domain)):
+Codes and notifications go by **Resend**'s HTTP API (`CODE_DELIVERY=resend`, `NOTIFICATION_DELIVERY=resend`; `backend/src/notifications/resend.rs`): one `POST https://api.resend.com/emails` per message, with the key as a bearer token, the text and the HTML of the message, and for a notification an `Idempotency-Key` made from its outbox ID, so that a retry is never sent twice ([send email](https://resend.com/docs/api-reference/emails/send-email), [idempotency keys](https://resend.com/docs/dashboard/emails/idempotency-keys)).
+
+1. **Add the domain** `yuppers.app` in Resend (Domains → Add Domain), in the region **North Virginia (us-east-1)**, beside the services. Resend shows the records to add ([domains](https://resend.com/docs/dashboard/domains/introduction), [Cloudflare](https://resend.com/docs/knowledge-base/cloudflare)). In Cloudflare (DNS → Records), add each one **with the proxy off (DNS only)**, and paste names without the domain (`send`, not `send.yuppers.app`), since Cloudflare adds it:
 
    | Type | Name | Value | Why |
    |---|---|---|---|
-   | TXT | the selector Postmark shows, such as `20261003123456pm._domainkey` | the DKIM key Postmark shows | signs every message (DKIM) |
-   | CNAME | `pm-bounces` | `pm.mtasv.net` | custom Return-Path: bounces go to Postmark, and the message passes SPF aligned with your domain |
-   | TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:<an address of yours>` | recommended by Postmark; tighten to `quarantine` once reports look clean |
+   | MX | `send` | the `feedback-smtp….amazonses.com` host Resend shows, priority `10` | bounces and complaints come back to Resend on the Return-Path subdomain |
+   | TXT | `send` | the `v=spf1 include:amazonses.com ~all` Resend shows | SPF for the Return-Path subdomain |
+   | TXT | `resend._domainkey` | the DKIM key Resend shows | signs every message (DKIM) |
+   | TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:<an address of yours>` | keep the one there; tighten to `quarantine` once reports look clean |
 
-   Postmark no longer asks for an SPF record: the Return-Path CNAME carries its SPF ([why](https://postmarkapp.com/blog/why-we-no-longer-ask-for-spf-records)). Both records usually verify within 48 hours. Click **Verify** for DKIM and for Return-Path.
-3. **Request account approval.** Until Postmark approves the account it sends only to addresses on domains you have verified, so only `@yuppers.app` addresses would get codes ([approval](https://postmarkapp.com/support/article/1084-how-does-the-account-approval-process-work)). Review takes under a day on weekdays.
-4. **Copy the Server API token** (server → API Tokens). It is both the SMTP username and the password. Keep it for step 2; never put it in the repository.
+   Click **Verify DNS Records**; Resend sends from the domain once all show **Verified**. Leave the domain's **open and click tracking off** (its default): the emails' links go straight to `yuppers.app`, and the privacy policy says Resend receives the address and the message, nothing about who opened what. Postmark's old records (its `…pm._domainkey` TXT and the `pm-bounces` CNAME) can be removed.
+2. **Create an API key** (API Keys → Create API Key) named `yuppers-production`, with **Sending access** and the domain restricted to **`yuppers.app`**, so that a leaked key can send only as Yuppers and read nothing ([API keys](https://resend.com/docs/dashboard/api-keys/introduction)). Resend shows it once. Never put it in the repository.
+3. **Enter it in Render** as `RESEND_API_KEY` in the environment group **yuppers-secrets** (Environment Groups → yuppers-secrets → Add Environment Variable), **before** the deploy that first sets `resend`: with `resend` chosen and no key, the api and the worker refuse to start (`RESEND_API_KEY is not set`). Render does not prompt for a `sync: false` value added to a Blueprint already applied, and it applies a change to `render.yaml`'s groups as soon as it is merged, so the key has to be there first. Saving it restarts both services.
 
-Postmark's SMTP is STARTTLS on port 587 (also 25 and 2525); it does not offer TLS from the first byte on 465, hence `SMTP_TLS=starttls`.
+**What is logged.** `email handed to Resend` with Resend's ID for the message (`id`), to find it in Resend's Emails page; never the address, the subject, the body or the key. A refusal is logged and kept in `outbox.last_error` by its HTTP status and Resend's error name, such as `HTTP 422, validation_error`, never Resend's message, which can quote the address.
+
+**Failures** ([errors](https://resend.com/docs/api-reference/errors)): `429` (over the rate, 10 requests a second per team, or the quota), `5xx`, no answer within 20 seconds and no connection are retried with the outbox's backoff (1 minute doubling to an hour, 8 tries). A `400` or `422`, such as an address Resend will not take, is given up on at once (`attempts` goes straight to 8, logged as `notification given up on` with `refused_for_good=true`). A `401` or `403` means the key is missing, wrong, revoked or restricted, or the From domain is not verified: logged as an error naming `RESEND_API_KEY`, and retried, as a wrong SMTP password is, so nothing is lost once it is fixed within the 8 tries (about two hours); see [operations.md](operations.md), "When the worker is down", for sending again what was given up on.
+
+### The SMTP option
+
+`CODE_DELIVERY=smtp` and `NOTIFICATION_DELIVERY=smtp` send through any provider's SMTP server instead, with `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_USERNAME` and `SMTP_PASSWORD`, from the same `EMAIL_FROM`. `render.yaml` points the `SMTP_*` settings at Resend's own SMTP server: `smtp.resend.com`, STARTTLS on port `587`, username `resend` and the API key as the password ([SMTP](https://resend.com/docs/send-with-smtp)). To use it, set `SMTP_USERNAME` to `resend` and `SMTP_PASSWORD` to the key in yuppers-secrets, then the two deliveries to `smtp`. Another provider needs its own host, port and credentials, and its DNS records for `yuppers.app`. SMTP has no idempotency key; a message sent again after a crash carries the same `Message-ID` instead.
 
 ## 2. Render: apply the Blueprint
 
 1. In the dashboard: **New → Blueprint**, connect GitHub if asked, and pick `vchance/yuppers`, branch `main`. Render reads `render.yaml` and lists what it will create ([infrastructure as code](https://render.com/docs/infrastructure-as-code)).
-2. It asks for the `sync: false` values: paste the Postmark token as `SMTP_USERNAME` and again as `SMTP_PASSWORD`, and the `CONTACT_DATA_KEY` you made and saved ("Contact data key" above); leave `CONTACT_DATA_KEY_PREVIOUS` empty.
+2. It asks for the `sync: false` values: paste the Resend key as `RESEND_API_KEY`, leave `SMTP_USERNAME` and `SMTP_PASSWORD` empty (the SMTP option only), and the `CONTACT_DATA_KEY` you made and saved ("Contact data key" above); leave `CONTACT_DATA_KEY_PREVIOUS` empty.
 3. **Apply.** Render creates the database, builds the image once per service (a Rust release build: expect well over ten minutes the first time), runs `migrate` on a separate instance, then starts the new api and worker.
 4. **Read the pre-deploy log** of the first deploy (web service → Events → the deploy). The lines are JSON; look for `"message":"build"`, `"message":"application role created"` and `"message":"migrations applied"`. The worker's pre-deploy says `application role already exists` if the web's ran first, or the other way round.
 
@@ -164,7 +173,7 @@ Until the domain works, the app's pages load on the `onrender.com` address, but 
 ## 4. First sign-in
 
 1. Open `https://yuppers.app`. The home page loads.
-2. Sign in with your email address. The code arrives within seconds; Postmark's Activity tab for the server shows it delivered. In the received message's headers ("show original"), `dkim=pass` for `yuppers.app` and `spf=pass` for `pm-bounces.yuppers.app`.
+2. Sign in with your email address. The code arrives within seconds; Resend's Emails page shows it delivered, under the ID the api logged with `email handed to Resend`. In the received message's headers ("show original"), `dkim=pass` for `yuppers.app` and `spf=pass` for `send.yuppers.app`.
 3. Give your name and confirm your age, so that the account exists.
 
 ## 5. Naming yourself a reviewer
@@ -194,7 +203,7 @@ docker run --rm -e MIGRATION_DATABASE_URL='<external URL>?sslmode=require' yuppe
 - [ ] **The deployed build**: `curl -s https://yuppers.app/v1/meta` shows `commit` equal to the commit the web service's Events page says it deployed (the head of `main`), and `curl -sI https://yuppers.app/ | grep -i x-yuppers-version` shows its first seven characters. Your account screen ends with "Version 0.1.0 (…)" with the same seven characters. [operations.md](operations.md), "What is deployed", says how to match it to its CI run.
 - [ ] Headers on `/`: `strict-transport-security`, `content-security-policy: default-src 'self'…`, `x-frame-options: DENY`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, `x-request-id`.
 - [ ] `https://yuppers.app/metrics` is the app's page, never metrics.
-- [ ] A sign-in code arrives at an address outside `yuppers.app` (once Postmark has approved the account), and not in spam.
+- [ ] A sign-in code arrives at an address outside `yuppers.app`, and not in spam.
 - [ ] The web service's logs (dashboard → Logs) are one JSON object per line, including a `build` line with the commit, and no warning about `TRUSTED_PROXY_HEADER` or a missing header.
 - [ ] The worker's logs show `worker started`, its own `build` line, and `timers ran` about every minute. Two test accounts making a yup each get the notification email within seconds.
 - [ ] `render jobs create srv-... --start-command "/usr/local/bin/staff list"` lists you.
@@ -345,7 +354,7 @@ The database accepts internal connections only (`ipAllowList: []`). For anything
 
 ## Costs
 
-From [Render's pricing](https://render.com/pricing) and [Postmark's pricing](https://postmarkapp.com/pricing), checked **2026-10-03**. Prices change; read the pages before deciding.
+From [Render's pricing](https://render.com/pricing), checked **2026-10-03**, and [Resend's](https://resend.com/pricing), checked **2026-10-08**. Prices change; read the pages before deciding.
 
 | Item | Plan | Per month |
 |---|---|---|
@@ -356,11 +365,11 @@ From [Render's pricing](https://render.com/pricing) and [Postmark's pricing](htt
 | Build minutes beyond the plan's | $5 per 1,000. Every deploy builds the image twice (once per service), and the pre-deploy commands use pipeline minutes too ([deploys](https://render.com/docs/deploys)) | $0 to a few dollars |
 | Bandwidth beyond the plan's | $0.15 per GB | small at first |
 | One-off jobs | per second at the job's plan, a few seconds each | cents |
-| Postmark | Basic: 10,000 emails a month for $15, then $1.80 per 1,000. The free tier's 100 a month, with no overage, is for testing only | $15 |
+| Resend | Free: 3,000 emails a month, at most 100 a day, enough to start; Pro: 50,000 a month, no daily limit, for $20 | $0 or $20 |
 | Twilio Verify, once codes by text are on | $0.05 per successful verification plus $0.0083 per SMS to a US number, checked 2026-10-06 ("One-time codes by Twilio Verify") | per use |
 | The domain | at the registrar | yearly |
 
-About **$36 a month** on Hobby, **$61** on Pro, before traffic. Compute is billed by the second. The database's connection limit is 100 on every plan under 8 GB; the api's 10 connections, the worker's 10 and `migrate`'s 1 fit easily. If a Rust release build twice per deploy uses up the pipeline minutes, the image can instead be built once by CI, pushed to a registry, and deployed to both services as a prebuilt image; prebuilt images are deployed by hand or by API, not automatically ([web services](https://render.com/docs/web-services)).
+About **$21 a month** on Hobby with Resend's free plan (**$41** with its Pro), **$46** or **$66** on Render's Pro, before traffic. Compute is billed by the second. The database's connection limit is 100 on every plan under 8 GB; the api's 10 connections, the worker's 10 and `migrate`'s 1 fit easily. If a Rust release build twice per deploy uses up the pipeline minutes, the image can instead be built once by CI, pushed to a registry, and deployed to both services as a prebuilt image; prebuilt images are deployed by hand or by API, not automatically ([web services](https://render.com/docs/web-services)).
 
 ## What only the first deploy can confirm
 
@@ -369,5 +378,6 @@ About **$36 a month** on Hobby, **$61** on Pro, before traffic. Compute is bille
 - That `RENDER_GIT_COMMIT` reaches the Docker build as a build argument. Render passes the service's own environment variables as build arguments; whether its built-in ones go too is not stated. The api and worker fall back to `RENDER_GIT_COMMIT` at run time, which is documented, so `/v1/meta` names the commit either way; the web app's version line then lacks the commit until this is settled, for example by having CI build the image.
 - That `RUN --mount=type=cache` in the `Dockerfile` works on Render's BuildKit builders. Render uses BuildKit and caches layers; the cargo cache likely does not persist between builds, which makes builds slower but not wrong.
 - That `CF-Connecting-IP` is present on every request ("Client addresses").
+- That Resend takes the first email and answers a repeated `Idempotency-Key` with its first answer, as its documentation says. Nothing has been sent through Resend; the requests are checked against a stand-in (`backend/tests/resend.rs`) written from its documentation ("1. Email").
 - That Twilio takes the first text message, and that Verify accepts the first verification and checks its code as its documentation says. Nothing has been sent through Twilio; the requests are checked against stand-ins (`backend/tests/sms.rs` for the Messages API, `backend/tests/verify.rs` for Verify), written from its documentation ("Text messages").
 - That the Verify console takes "Yuppers.app" as a service's friendly name, and what its Spanish template says ("One-time codes by Twilio Verify").

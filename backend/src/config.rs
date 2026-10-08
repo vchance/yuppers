@@ -24,6 +24,7 @@ use crate::http::{AppLinks, TrustedProxies};
 use crate::nanp;
 use crate::notifications::expo::{EXPO_ORIGIN, ExpoPushSender};
 use crate::notifications::push::{LogPushSender, PushSender};
+use crate::notifications::resend::{RESEND_ORIGIN, ResendSender, ResendSettings};
 use crate::notifications::sms::{
     CodeRouter, LogSmsSender, PhoneCodes, SmsSender, TWILIO_ORIGIN, TwilioCredential,
     TwilioSmsSender,
@@ -66,9 +67,18 @@ fn web_origin(get: Lookup<'_>) -> anyhow::Result<String> {
 /// a notification usually fails by.
 const SMTP_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// The address email comes from, whichever way it is sent: `EMAIL_FROM`,
+/// or else `SMTP_FROM`, the name it had when SMTP was the only way, which
+/// still works.
+fn email_from(get: Lookup<'_>) -> anyhow::Result<String> {
+    optional(get, "EMAIL_FROM")
+        .or_else(|| optional(get, "SMTP_FROM"))
+        .context("EMAIL_FROM is not set (nor SMTP_FROM, which it replaces)")
+}
+
 /// The SMTP server, from `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`,
-/// `SMTP_USERNAME`, `SMTP_PASSWORD` and `SMTP_FROM`. The password is read
-/// into a type that cannot be printed.
+/// `SMTP_USERNAME` and `SMTP_PASSWORD`, sending from [`email_from`]. The
+/// password is read into a type that cannot be printed.
 fn smtp_settings(get: Lookup<'_>) -> anyhow::Result<SmtpSettings> {
     let tls = match optional(get, "SMTP_TLS") {
         None => TlsMode::Tls,
@@ -99,7 +109,7 @@ fn smtp_settings(get: Lookup<'_>) -> anyhow::Result<SmtpSettings> {
         port,
         tls,
         credentials,
-        from: required(get, "SMTP_FROM")?,
+        from: email_from(get)?,
         timeout: SMTP_TIMEOUT,
     })
 }
@@ -142,18 +152,43 @@ fn smtp_sender(get: Lookup<'_>) -> anyhow::Result<Arc<SmtpSender>> {
     Ok(Arc::new(sender))
 }
 
+/// How long one request to Resend may take, like SMTP's: within the
+/// outbox's own limit on a send.
+const RESEND_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Resend's API, with `RESEND_API_KEY`, sending from [`email_from`]. The
+/// key is read into a type that cannot be printed, and no error quotes it.
+fn resend_sender(get: Lookup<'_>, origin: &str) -> anyhow::Result<Arc<ResendSender>> {
+    let api_key = optional(get, "RESEND_API_KEY")
+        .context("RESEND_API_KEY is not set, and delivery by Resend needs it")?;
+    let settings = ResendSettings {
+        api_key: Secret::new(api_key.trim().to_owned()),
+        from: email_from(get)?,
+        timeout: RESEND_TIMEOUT,
+    };
+    Ok(Arc::new(ResendSender::new(
+        origin,
+        settings,
+        Wording::embedded()?,
+    )?))
+}
+
 /// The sender named by `NOTIFICATION_DELIVERY`.
 fn email_sender(get: Lookup<'_>) -> anyhow::Result<Arc<dyn EmailSender>> {
     match required(get, "NOTIFICATION_DELIVERY")?.as_str() {
         "log" => Ok(Arc::new(LogEmailSender)),
         "smtp" => Ok(smtp_sender(get)?),
-        other => bail!("NOTIFICATION_DELIVERY={other} is not supported; use `smtp` or `log`"),
+        "resend" => Ok(resend_sender(get, RESEND_ORIGIN)?),
+        other => {
+            bail!("NOTIFICATION_DELIVERY={other} is not supported; use `smtp`, `resend` or `log`")
+        }
     }
 }
 
 /// The sender of one-time codes: `CODE_DELIVERY` for email addresses, and
 /// for phone numbers too while `SMS_CODE_DELIVERY` is off (as before SMS
-/// was built: `log` writes them to the log, `smtp` refuses them); with
+/// was built: `log` writes them to the log, `smtp` and `resend` refuse
+/// them); with
 /// `SMS_CODE_DELIVERY` on, phone numbers get their codes as it says
 /// ([`phone_codes`]). `SMS_DELIVERY` has no part in it: it sends agreement
 /// updates only.
@@ -161,7 +196,8 @@ fn code_sender(get: Lookup<'_>) -> anyhow::Result<Arc<dyn CodeSender>> {
     let email: Arc<dyn CodeSender> = match required(get, "CODE_DELIVERY")?.as_str() {
         "log" => Arc::new(LogSender),
         "smtp" => smtp_sender(get)?,
-        other => bail!("CODE_DELIVERY={other} is not supported; use `smtp` or `log`"),
+        "resend" => resend_sender(get, RESEND_ORIGIN)?,
+        other => bail!("CODE_DELIVERY={other} is not supported; use `smtp`, `resend` or `log`"),
     };
     Ok(match phone_codes(get)? {
         None => email,
@@ -1642,6 +1678,99 @@ mod tests {
         let whole = table(&pairs);
         assert!(email_sender(&lookup(&whole)).is_ok());
         assert!(code_sender(&lookup(&whole)).is_ok());
+    }
+
+    #[test]
+    fn resend_delivery_needs_its_key_and_a_from_address_and_never_quotes_the_key() {
+        const KEY: &str = "re_not_a_real_key_for_tests";
+        let read = |pairs: &[(&str, &str)]| {
+            let both = [
+                &[
+                    ("NOTIFICATION_DELIVERY", "resend"),
+                    ("CODE_DELIVERY", "resend"),
+                ][..],
+                pairs,
+            ]
+            .concat();
+            let table = table(&both);
+            let email = email_sender(&lookup(&table)).map(|_| ());
+            let code = code_sender(&lookup(&table)).map(|sender| sender.email_sender());
+            (email, code)
+        };
+
+        // No key: refused, whatever else is there, and both processes say so.
+        for pairs in [
+            &[("EMAIL_FROM", "Yuppers <no-reply@example.test>")][..],
+            &[
+                ("EMAIL_FROM", "Yuppers <no-reply@example.test>"),
+                ("RESEND_API_KEY", "  "),
+            ],
+        ] {
+            let (email, code) = read(pairs);
+            for error in [email.err().unwrap(), code.err().unwrap()] {
+                assert!(format!("{error:#}").contains("RESEND_API_KEY"), "{error:#}");
+            }
+        }
+        // No sender address.
+        let (email, code) = read(&[("RESEND_API_KEY", KEY)]);
+        for error in [email.err().unwrap(), code.err().unwrap()] {
+            let error = format!("{error:#}");
+            assert!(error.contains("EMAIL_FROM"), "{error}");
+            assert!(!error.contains(KEY), "{error}");
+        }
+        // A sender address that is not one: the error quotes it, not the key.
+        let (email, _) = read(&[("RESEND_API_KEY", KEY), ("EMAIL_FROM", "nobody")]);
+        let error = format!("{:#}", email.err().unwrap());
+        assert!(error.contains("nobody") && !error.contains(KEY), "{error}");
+
+        // EMAIL_FROM, or SMTP_FROM where it is all there is, and EMAIL_FROM
+        // where both are.
+        for (pairs, want) in [
+            (
+                &[("EMAIL_FROM", "Yuppers <no-reply@yuppers.example>")][..],
+                "no-reply@yuppers.example",
+            ),
+            (
+                &[("SMTP_FROM", "Yuppers <old@yuppers.example>")],
+                "old@yuppers.example",
+            ),
+            (
+                &[
+                    ("EMAIL_FROM", "new@yuppers.example"),
+                    ("SMTP_FROM", "old@yuppers.example"),
+                ],
+                "new@yuppers.example",
+            ),
+        ] {
+            let (email, code) = read(&[pairs, &[("RESEND_API_KEY", KEY)]].concat());
+            assert!(email.is_ok());
+            assert_eq!(code.unwrap().as_deref(), Some(want));
+        }
+    }
+
+    #[test]
+    fn smtp_sends_from_email_from_or_else_smtp_from() {
+        let from = |pairs: &[(&str, &str)]| {
+            let table = table(&[&[("SMTP_HOST", "smtp.example.test")][..], pairs].concat());
+            smtp_settings(&lookup(&table)).map(|settings| settings.from)
+        };
+        assert_eq!(
+            from(&[("SMTP_FROM", "a@example.test")]).unwrap(),
+            "a@example.test"
+        );
+        assert_eq!(
+            from(&[("EMAIL_FROM", "b@example.test")]).unwrap(),
+            "b@example.test"
+        );
+        assert_eq!(
+            from(&[
+                ("EMAIL_FROM", "b@example.test"),
+                ("SMTP_FROM", "a@example.test")
+            ])
+            .unwrap(),
+            "b@example.test"
+        );
+        assert!(from(&[]).is_err());
     }
 
     #[test]

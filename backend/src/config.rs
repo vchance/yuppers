@@ -484,8 +484,9 @@ fn limit(get: Lookup<'_>, name: &str, default: i64) -> anyhow::Result<i64> {
 
 /// The rules for one-time codes, with the limits on sign-in that a
 /// deployment may set (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`,
-/// `SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY`). Each defaults to the
-/// placeholder in [`AuthRules::default`].
+/// `SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY`), and how long a session
+/// lasts (`SESSION_IDLE_DAYS`, `SESSION_MAX_DAYS`). Each defaults to the
+/// value in [`AuthRules::default`].
 ///
 /// `SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR` was once a setting here.
 /// Wrong guesses are no longer limited by address (`crate::auth::verify_code`
@@ -500,6 +501,7 @@ fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
         );
     }
     let defaults = AuthRules::default();
+    let (session_idle, session_max) = session_days(get, &defaults)?;
     Ok(AuthRules {
         code_requests_per_address_per_hour: limit(
             get,
@@ -519,8 +521,26 @@ fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
         )?,
         phone_country_codes: country_codes(get)?.unwrap_or(defaults.phone_country_codes),
         phone_regions: regions(get)?.unwrap_or(defaults.phone_regions),
+        session_idle,
+        session_max,
         ..defaults
     })
+}
+
+/// How long a session lasts unused, and at most (`SESSION_IDLE_DAYS`,
+/// `SESSION_MAX_DAYS`), in whole days of 1 or more. The most may not be less
+/// than the idle time: a deployment that wrote them the wrong way round
+/// would otherwise get sessions that never slide.
+fn session_days(
+    get: Lookup<'_>,
+    defaults: &AuthRules,
+) -> anyhow::Result<(time::Duration, time::Duration)> {
+    let idle = limit(get, "SESSION_IDLE_DAYS", defaults.session_idle.whole_days())?;
+    let max = limit(get, "SESSION_MAX_DAYS", defaults.session_max.whole_days())?;
+    if max < idle {
+        anyhow::bail!("SESSION_MAX_DAYS={max} is less than SESSION_IDLE_DAYS={idle}");
+    }
+    Ok((time::Duration::days(idle), time::Duration::days(max)))
 }
 
 /// `SMS_UPDATES_PER_PERSON_PER_DAY`: how many update texts one person may
@@ -1648,6 +1668,24 @@ mod tests {
             3
         );
         assert!(read(&[("SMS_MAX_PER_PREFIX_PER_HOUR", "0")]).is_err());
+    }
+
+    #[test]
+    fn sessions_last_30_days_unused_and_180_at_most_unless_set() {
+        let read = |pairs: &[(&str, &str)]| auth_rules(&lookup(&table(pairs)));
+        let rules = read(&[]).unwrap();
+        assert_eq!(rules.session_idle, time::Duration::days(30));
+        assert_eq!(rules.session_max, time::Duration::days(180));
+        let rules = read(&[("SESSION_IDLE_DAYS", "7"), ("SESSION_MAX_DAYS", "7")]).unwrap();
+        assert_eq!(rules.session_idle, time::Duration::days(7));
+        assert_eq!(rules.session_max, time::Duration::days(7));
+        for wrong in ["0", "-1", "a month"] {
+            assert!(read(&[("SESSION_IDLE_DAYS", wrong)]).is_err(), "{wrong}");
+            assert!(read(&[("SESSION_MAX_DAYS", wrong)]).is_err(), "{wrong}");
+        }
+        // The most a session lasts can't be less than how long it lasts unused.
+        assert!(read(&[("SESSION_IDLE_DAYS", "60"), ("SESSION_MAX_DAYS", "30")]).is_err());
+        assert!(read(&[("SESSION_MAX_DAYS", "29")]).is_err());
     }
 
     #[test]

@@ -50,8 +50,10 @@ export const LEGAL_FIGURES = {
   networkDays: 90,
   /** How long a one-time code works (`AuthRules::code_ttl`). */
   codeMinutes: 10,
-  /** How long a session lasts (`AuthRules::session_ttl`). */
-  sessionDays: 30,
+  /** How long a session lasts unused (`AuthRules::session_idle`). */
+  sessionIdleDays: 30,
+  /** The most a session lasts, however much it is used (`AuthRules::session_max`). */
+  sessionMaxDays: 180,
   /**
    * How long the record of consent to text updates is kept once they have
    * ended (`Rules::sms_consent_retention`), in years.

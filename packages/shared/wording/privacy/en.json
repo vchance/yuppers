@@ -111,7 +111,7 @@
         },
         {
           "ul": [
-            "yuppers_session (a cookie): keeps you signed in. It holds a random token, lasts {sessionDays} days or until you sign out, and the page’s scripts can’t read it.",
+            "yuppers_session (a cookie): keeps you signed in. It holds a random token, lasts as long as you use the site at least once every {sessionIdleDays} days, up to {sessionMaxDays} days, or until you sign out, and the page’s scripts can’t read it.",
             "yuppers.language (local storage): the language you picked, so that the website opens in it next time.",
             "yuppers.invitation (session storage): the code from an invitation link while you sign in to read it, so that reloading the page doesn’t lose it. It is removed once the invitation is opened or turns out to be no longer valid, and when you close the tab."
           ]
@@ -203,7 +203,7 @@
             "The record of text updates you turned on for an agreement, and of their ending: for as long as the updates are on, and then for {smsConsentYears} years after they end, as proof that you asked for the texts we sent. The IP address and user agent recorded with it: {networkDays} days. A phone number that replied STOP: for as long as it stays unsubscribed, so that we don’t text it again.",
             "The record of each code you asked for by text: {smsConsentYears} years, as proof that you asked for it. The IP address and user agent recorded with it: {networkDays} days.",
             "One-time codes: each code works for {codeMinutes} minutes, and only once. A code by text works for {codeMinutes} minutes from when it was first sent, and asking again within that time resends the same code. The record of a code (a keyed hash of where it went, when, and the code’s hash where we keep one) is deleted a day after the code was asked for, once it has expired or been used; deleting your account deletes the ones for your email address and phone number at once.",
-            "Sign-ins: each lasts {sessionDays} days, unless you sign out first.",
+            "Sign-ins: each lasts as long as you use Yuppers at least once every {sessionIdleDays} days, up to {sessionMaxDays} days after you entered the code, unless you sign out first. Then you need a new code.",
             "Sign-in limit counts: two days.",
             "Push tokens: until you turn notifications off, sign out on that device or delete your account, or the push service tells us the token no longer works.",
             "Wallet passes: the record of a pass stays with its yup; when you delete your account, your passes are voided. The device identifiers Apple gives us are removed when a device removes the pass, and no later than 30 days after a pass is voided.",

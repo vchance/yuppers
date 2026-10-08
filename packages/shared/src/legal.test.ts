@@ -245,7 +245,8 @@ describe('the figures the documents state', () => {
     expect(LEGAL_FIGURES).toEqual({
       networkDays: rule(rules, 'network_metadata_retention', 'days'),
       codeMinutes: rule(auth, 'code_ttl', 'minutes'),
-      sessionDays: rule(auth, 'session_ttl', 'days'),
+      sessionIdleDays: rule(auth, 'session_idle', 'days'),
+      sessionMaxDays: rule(auth, 'session_max', 'days'),
       smsConsentYears: years(rules, 'sms_consent_retention'),
     })
   })

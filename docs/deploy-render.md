@@ -201,7 +201,7 @@ docker run --rm -e MIGRATION_DATABASE_URL='<external URL>?sslmode=require' yuppe
 
 - [ ] `curl -si https://yuppers.app/healthz` and `/readyz` answer `204`.
 - [ ] **The deployed build**: `curl -s https://yuppers.app/v1/meta` shows `commit` equal to the commit the web service's Events page says it deployed (the head of `main`), and `curl -sI https://yuppers.app/ | grep -i x-yuppers-version` shows its first seven characters. Your account screen ends with "Version 0.1.0 (…)" with the same seven characters. [operations.md](operations.md), "What is deployed", says how to match it to its CI run.
-- [ ] Headers on `/`: `strict-transport-security`, `content-security-policy: default-src 'self'…`, `x-frame-options: DENY`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, `x-request-id`.
+- [ ] Headers on `/`: `strict-transport-security: max-age=31536000; includeSubDomains`, `content-security-policy: default-src 'self'…`, `x-frame-options: DENY`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, `permissions-policy: accelerometer=()…`, `cross-origin-opener-policy: same-origin`, `x-request-id`.
 - [ ] `https://yuppers.app/metrics` is the app's page, never metrics.
 - [ ] A sign-in code arrives at an address outside `yuppers.app`, and not in spam.
 - [ ] The web service's logs (dashboard → Logs) are one JSON object per line, including a `build` line with the commit, and no warning about `TRUSTED_PROXY_HEADER` or a missing header.

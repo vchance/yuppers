@@ -235,11 +235,18 @@ async fn route(
 
 /// Hashed assets for a year, everything else checked every time. A page is
 /// never cached, and nor is an asset that is not found: a later build may
-/// have it.
+/// have it. That one says `no-store` outright, or a cache in front of the
+/// service (Render's CDN, a browser) may keep the miss for hours by its own
+/// default, and a release that adds the file would be missing it there.
 async fn cache_control(request: Request, next: Next) -> Response {
     let hashed = request.uri().path().starts_with("/assets/");
     let mut response = next.run(request).await;
-    if response.status().is_success() || response.status() == StatusCode::NOT_MODIFIED {
+    let served = response.status().is_success() || response.status() == StatusCode::NOT_MODIFIED;
+    if hashed && !served {
+        response
+            .headers_mut()
+            .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    } else if served {
         let page = response
             .headers()
             .get(CONTENT_TYPE)

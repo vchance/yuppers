@@ -36,7 +36,7 @@ All three come from the same image: the `api` is its default command, the other 
    - Once Wallet passes are wanted: `APPLE_PASS_KEY` and `GOOGLE_WALLET_SERVICE_ACCOUNT` ([docs/wallet.md](wallet.md)).
 
 3. **Settings** (plain environment):
-   - `WEB_ORIGIN`: the public HTTPS origin, such as `https://app.example.com`, without a trailing slash. Cookie sessions are honored only from it, emails link into it, and because it is HTTPS every response carries HSTS.
+   - `WEB_ORIGIN`: the public HTTPS origin, such as `https://app.example.com`, without a trailing slash. Cookie sessions are honored only from it, emails link into it, and because it is HTTPS every response carries HSTS, for its host and every name under it (`includeSubDomains`): serve every subdomain of that host over HTTPS.
    - `EMAIL_FROM`, the sender (`SMTP_FROM`, its older name, still works), and `CODE_DELIVERY` and `NOTIFICATION_DELIVERY`: `resend` (Resend's API, with `RESEND_API_KEY`) or `smtp` with `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` (`tls` for port 465, `starttls` for 587). The sending domain needs the provider's SPF and DKIM records, or codes land in spam.
    - `TRUSTED_PROXY_HEADER`: the header the proxy in front of the API sets to the client's address, and `TRUSTED_PROXIES` if more than one proxy appends to `X-Forwarded-For`. Without it every signature records the proxy's address (`DESIGN.md` §8) and the per-address sign-in limits count every person as one. Name a header only if the proxy always sets it and clients cannot reach the API around the proxy; otherwise a client can choose its own address.
    - The `SIGN_IN_*` limits only if the placeholders in `.env.example` do not suit (README, "Deploying").

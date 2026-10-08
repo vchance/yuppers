@@ -308,6 +308,12 @@ jobs:
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^x-frame-options: DENY'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^cache-control: no-cache'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet "^content-security-policy: default-src 'self'"
+          curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^permissions-policy: .*camera=().*geolocation=().*microphone=().*payment=().*usb=()'
+          curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^cross-origin-opener-policy: same-origin'
+          curl --silent --fail --head http://127.0.0.1:8080/v1/meta | grep --ignore-case --quiet '^cross-origin-opener-policy: same-origin'
+          # A missing asset is stored by no cache: a later build may have it.
+          check '404' '%{http_code}' http://127.0.0.1:8080/assets/missing-00000000.js
+          curl --silent --head http://127.0.0.1:8080/assets/missing-00000000.js | grep --ignore-case --quiet '^cache-control: no-store'
           curl --silent --fail --head http://127.0.0.1:8080/v1/meta | grep --ignore-case --quiet '^cache-control: no-store'
           # Never a redirect to //assets/, which a browser reads as another host.
           check '200' '%{http_code}' --path-as-is http://127.0.0.1:8080//assets

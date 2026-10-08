@@ -76,6 +76,13 @@ impl Drop for Build {
     }
 }
 
+/// What every response says no page may use: none of the device's sensors,
+/// cameras, microphones, location, payments or ports; sharing only from
+/// this origin.
+const PERMISSIONS: &str = "accelerometer=(), browsing-topics=(), camera=(), \
+    display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), \
+    midi=(), payment=(), serial=(), usb=(), web-share=(self)";
+
 fn service(web_origin: &str, web: Option<WebApp>) -> Router {
     service_with_links(web_origin, web, AppLinks::default())
 }
@@ -254,7 +261,13 @@ async fn the_privacy_policy_and_the_terms_are_pages_of_their_own_in_each_languag
         assert_eq!(page.header(REFERRER_POLICY), "no-referrer", "{path}");
         assert_eq!(
             page.header(STRICT_TRANSPORT_SECURITY),
-            "max-age=31536000",
+            "max-age=31536000; includeSubDomains",
+            "{path}"
+        );
+        assert_eq!(page.header("permissions-policy"), PERMISSIONS, "{path}");
+        assert_eq!(
+            page.header("cross-origin-opener-policy"),
+            "same-origin",
             "{path}"
         );
     }
@@ -321,7 +334,7 @@ async fn hashed_assets_are_cached_for_a_year_and_pages_are_not() {
         );
     }
     // A missing asset, a source map included, is not found rather than the
-    // app's page, and is not cached: a later build may have it.
+    // app's page, and is not stored by any cache: a later build may have it.
     for path in [
         "/assets/gone-00000000.js",
         "/assets/index-DCaXBRW7.js.map",
@@ -330,7 +343,7 @@ async fn hashed_assets_are_cached_for_a_year_and_pages_are_not() {
         let missing = get(&app, path).await;
         assert_eq!(missing.status, StatusCode::NOT_FOUND, "{path}");
         assert_ne!(missing.body, HOME, "{path}");
-        assert_eq!(missing.header(CACHE_CONTROL), "", "{path}");
+        assert_eq!(missing.header(CACHE_CONTROL), "no-store", "{path}");
     }
 }
 
@@ -400,6 +413,12 @@ async fn every_response_carries_the_headers_a_signing_page_needs() {
         );
         assert_eq!(reply.header(X_CONTENT_TYPE_OPTIONS), "nosniff", "{path}");
         assert_eq!(reply.header(REFERRER_POLICY), "no-referrer", "{path}");
+        assert_eq!(reply.header("permissions-policy"), PERMISSIONS, "{path}");
+        assert_eq!(
+            reply.header("cross-origin-opener-policy"),
+            "same-origin",
+            "{path}"
+        );
         // Not over plain HTTP, or a development setup locks itself out.
         assert_eq!(reply.header(STRICT_TRANSPORT_SECURITY), "", "{path}");
     }
@@ -410,13 +429,13 @@ async fn every_response_carries_the_headers_a_signing_page_needs() {
     );
     assert_eq!(
         get(&secure, "/").await.header(STRICT_TRANSPORT_SECURITY),
-        "max-age=31536000"
+        "max-age=31536000; includeSubDomains"
     );
     assert_eq!(
         get(&secure, "/v1/meta")
             .await
             .header(STRICT_TRANSPORT_SECURITY),
-        "max-age=31536000"
+        "max-age=31536000; includeSubDomains"
     );
 }
 

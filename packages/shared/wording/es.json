@@ -215,6 +215,18 @@
     "invalidEmail": "Escribe un correo electrónico válido.",
     "changeEmail": "Usar otro correo electrónico"
   },
+  "inAppBrowser": {
+    "noteIos": "Estás en el navegador de {app}, que quizá no mantenga tu sesión abierta. Abre esta página en Safari para mantener la sesión abierta.",
+    "noteOther": "Estás en el navegador de {app}, que quizá no mantenga tu sesión abierta. Abre esta página en tu navegador para mantener la sesión abierta.",
+    "someApp": "una app",
+    "openSafari": "Abrir en Safari",
+    "openBrowser": "Abrir en el navegador",
+    "menu": "O abre el menú de la app y elige “Abrir en el navegador”, o copia el enlace y pégalo en tu navegador.",
+    "copy": "Copiar enlace",
+    "copied": "Enlace copiado.",
+    "copyFailed": "No se pudo copiar el enlace. Usa el menú de la app.",
+    "hide": "Ocultar"
+  },
   "profile": {
     "firstTitle": "Configura tu cuenta",
     "firstIntro": "Lo necesitamos antes de que puedas firmar algo.",

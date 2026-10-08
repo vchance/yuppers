@@ -110,8 +110,16 @@ pub struct AuthRules {
     /// are taken, by area code (`crate::nanp`): the US alone unless a
     /// deployment says otherwise (`SMS_ALLOWED_REGIONS`). Never empty.
     pub phone_regions: Vec<nanp::Region>,
-    /// How long a session lasts. A placeholder.
-    pub session_ttl: Duration,
+    /// How long a session lasts unused. Each use moves its end to this long
+    /// after the use, at most about once a day ([`AuthRules::renew_below`]),
+    /// and never past [`AuthRules::session_max`]. A deployment may set it in
+    /// days (`SESSION_IDLE_DAYS`).
+    pub session_idle: Duration,
+    /// How long a session can last however much it is used, from the
+    /// sign-in that made it; then a new code is needed. A deployment may set
+    /// it in days (`SESSION_MAX_DAYS`). Never shorter than
+    /// [`AuthRules::session_idle`].
+    pub session_max: Duration,
 }
 
 impl Default for AuthRules {
@@ -129,12 +137,26 @@ impl Default for AuthRules {
             sms_codes_per_prefix_per_hour: 10,
             phone_country_codes: vec!["1".to_owned()],
             phone_regions: vec![nanp::Region::Us],
-            session_ttl: Duration::days(30),
+            session_idle: Duration::days(30),
+            session_max: Duration::days(180),
         }
     }
 }
 
 impl AuthRules {
+    /// A session is renewed only once less than this much of its idle time
+    /// is left: a day less than [`AuthRules::session_idle`], so a session
+    /// used all day long is written at most about once a day. For an idle
+    /// time of two days or less, half of it.
+    pub fn renew_below(&self) -> Duration {
+        self.session_idle - Duration::days(1).min(self.session_idle / 2)
+    }
+
+    /// How long a new session lasts before its first renewal.
+    pub fn session_initial(&self) -> Duration {
+        self.session_idle.min(self.session_max)
+    }
+
     /// The allowed country code a phone number begins with, if any. Country
     /// calling codes are a prefix code (no code begins another), so at most
     /// one matches. Always `None` for an email address.

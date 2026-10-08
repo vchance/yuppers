@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use time::{Duration, OffsetDateTime};
 use tokio::sync::MutexGuard;
 use uuid::Uuid;
-use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
+use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture, token_hash};
 use yuppers_backend::code_consent::CODE_CONSENT_VERSION;
 use yuppers_backend::contact::Field;
 use yuppers_backend::deletion;
@@ -779,6 +779,18 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
         json!({ "drafts": 1, "open_proposals": 0, "agreements_in_force": 1 })
     );
 
+    // The browser's session is due for renewal, so the request that deletes
+    // the account renews it on the way in. The deletion must still end it,
+    // and the response must clear the cookie, never send it again.
+    sqlx::query(
+        "UPDATE account_session SET expires_at = now() + interval '28 days'
+         WHERE token_hash = $1",
+    )
+    .bind(token_hash(cookie.strip_prefix("yuppers_session=").unwrap()).as_slice())
+    .execute(&app.owner)
+    .await
+    .unwrap();
+
     // Deleted from the browser, with a code sent to the phone.
     let code = test.deletion_code(ana, "PHONE", &phone).await;
     let body = json!({ "channel": "PHONE", "code": code });
@@ -802,6 +814,7 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
         )
         .await;
     done(&deleted);
+    assert_eq!(deleted.headers.get_all(SET_COOKIE).iter().count(), 1);
     let cleared = deleted.headers[SET_COOKIE].to_str().unwrap();
     assert!(
         cleared.starts_with("yuppers_session=;") && cleared.contains("Max-Age=0"),

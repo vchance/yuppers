@@ -38,6 +38,15 @@ export function takeInvitationToken(): string | null {
 }
 
 /**
+ * The token this tab holds for the invitation page, without taking anything
+ * out of the address bar: for opening the same invitation link in another
+ * browser (`in-app-browser.ts`).
+ */
+export function heldInvitationToken(): string | null {
+  return invitationToken(window.location.hash) ?? stored()
+}
+
+/**
  * Forgets `token`, unless another link has taken its place in this tab since:
  * an answer about the old one can arrive after the new one was opened.
  */

@@ -107,6 +107,11 @@ pub fn router_with_wallet(state: AppState, web: Option<WebApp>, wallet: Arc<Wall
         )
         .route(web::ASSET_LINKS_PATH, get(web::asset_links))
         .nest("/v1", v1::router())
+        // A web session renewed by a request gets its cookie sent again.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            extract::refresh_session_cookie,
+        ))
         .layer(Extension(wallet))
         .layer(middleware::from_fn_with_state(
             state.clone(),

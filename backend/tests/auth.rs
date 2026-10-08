@@ -929,6 +929,245 @@ async fn an_expired_session_stops_working() {
     app.finish(&[&email]).await;
 }
 
+/// What the service holds about a session: when it ends, when its holder
+/// last proved an identifier, and the row version (`xmin`), which changes
+/// whenever the row is written.
+async fn session_row(app: &App, token: &str) -> (OffsetDateTime, OffsetDateTime, String) {
+    sqlx::query_as(
+        "SELECT expires_at, authenticated_at, xmin::text FROM account_session
+         WHERE token_hash = $1",
+    )
+    .bind(token_hash(token).as_slice())
+    .fetch_one(&app.owner)
+    .await
+    .unwrap()
+}
+
+/// Moves a session back in time: made `made_days_ago` days ago (fractions
+/// allowed), and ending `ends_in_days` days from now (negative for the past).
+async fn age_session(app: &App, token: &str, made_days_ago: f64, ends_in_days: f64) {
+    sqlx::query(
+        "UPDATE account_session
+         SET created_at = now() - $2 * interval '1 day',
+             authenticated_at = now() - $2 * interval '1 day',
+             expires_at = now() + $3 * interval '1 day'
+         WHERE token_hash = $1",
+    )
+    .bind(token_hash(token).as_slice())
+    .bind(made_days_ago)
+    .bind(ends_in_days)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+}
+
+/// How far `at` is from `days` days from now, in seconds.
+fn off_by(at: OffsetDateTime, days: i64) -> i64 {
+    (at - (OffsetDateTime::now_utc() + time::Duration::days(days)))
+        .whole_seconds()
+        .abs()
+}
+
+#[tokio::test]
+async fn a_session_in_use_slides_but_is_written_at_most_once_a_day() {
+    let app = App::start().await;
+    let email = email();
+    let (token, _) = app.sign_in(&email).await;
+
+    // A new session lasts the idle time.
+    let (expires, proved, version) = session_row(&app, &token).await;
+    assert!(off_by(expires, 30) < 60, "{expires}");
+
+    // Used within its first day, it is not written at all.
+    for _ in 0..3 {
+        assert_eq!(app.get_as(&token, "/v1/me").await.status, StatusCode::OK);
+    }
+    assert_eq!(session_row(&app, &token).await, (expires, proved, version));
+
+    // Used two days later, it ends 30 days after that use.
+    age_session(&app, &token, 2.0, 28.0).await;
+    let (_, proved, version) = session_row(&app, &token).await;
+    assert_eq!(app.get_as(&token, "/v1/me").await.status, StatusCode::OK);
+    let (renewed, still_proved, renewed_version) = session_row(&app, &token).await;
+    assert!(off_by(renewed, 30) < 60, "{renewed}");
+    assert_ne!(renewed_version, version, "renewing is one write");
+    // When the identifier was last proved, which signing and the staff
+    // endpoints check, is not touched.
+    assert_eq!(still_proved, proved);
+
+    // Used again the same day: nothing more is written.
+    assert_eq!(app.get_as(&token, "/v1/me").await.status, StatusCode::OK);
+    assert_eq!(
+        session_row(&app, &token).await,
+        (renewed, proved, renewed_version)
+    );
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn a_session_left_unused_for_the_idle_time_ends() {
+    let app = App::start().await;
+    let email = email();
+    let (token, _) = app.sign_in(&email).await;
+
+    // Last used 30 days and a moment ago.
+    age_session(&app, &token, 40.0, -0.001).await;
+    let before = session_row(&app, &token).await;
+    assert_eq!(
+        app.get_as(&token, "/v1/me").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    // Using it does not bring it back.
+    assert_eq!(session_row(&app, &token).await, before);
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn constant_use_never_carries_a_session_past_its_absolute_end() {
+    let app = App::start().await;
+    let email = email();
+    let (token, _) = app.sign_in(&email).await;
+
+    // Made 175 days ago and used every day since: renewed only to 180 days
+    // after it was made, five days from now.
+    age_session(&app, &token, 175.0, 3.0).await;
+    assert_eq!(app.get_as(&token, "/v1/me").await.status, StatusCode::OK);
+    let (expires, ..) = session_row(&app, &token).await;
+    assert!(off_by(expires, 5) < 60, "{expires}");
+
+    // Once there, using it moves nothing.
+    let before = session_row(&app, &token).await;
+    assert_eq!(app.get_as(&token, "/v1/me").await.status, StatusCode::OK);
+    assert_eq!(session_row(&app, &token).await, before);
+
+    // Past 180 days it is refused, even with time left on it (as when a
+    // deployment shortens SESSION_MAX_DAYS), and a new code is needed.
+    age_session(&app, &token, 180.01, 10.0).await;
+    assert_eq!(
+        app.get_as(&token, "/v1/me").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let (fresh, _) = app.sign_in(&email).await;
+    assert_eq!(app.get_as(&fresh, "/v1/me").await.status, StatusCode::OK);
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn signing_out_ends_a_session_due_for_renewal() {
+    let app = App::start().await;
+    let email = email();
+    let (token, _) = app.sign_in(&email).await;
+    age_session(&app, &token, 2.0, 28.0).await;
+
+    let reply = app
+        .send(
+            Method::DELETE,
+            "/v1/auth/session",
+            None,
+            &[(AUTHORIZATION, &format!("Bearer {token}"))],
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        app.get_as(&token, "/v1/me").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+
+    app.finish(&[&email]).await;
+}
+
+/// The `Max-Age` of the session cookie a response sets, if it sets one.
+fn cookie_max_age(reply: &Reply) -> Option<i64> {
+    let cookies: Vec<&str> = reply
+        .headers
+        .get_all(SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().unwrap())
+        .filter(|value| value.starts_with("yuppers_session="))
+        .collect();
+    assert!(
+        cookies.len() <= 1,
+        "one session cookie at most: {cookies:?}"
+    );
+    let cookie = cookies.first()?;
+    for attribute in ["HttpOnly", "SameSite=Lax", "Secure", "Path=/"] {
+        assert!(cookie.contains(attribute), "{cookie}");
+    }
+    cookie
+        .split("; ")
+        .find_map(|part| part.strip_prefix("Max-Age="))
+        .map(|age| age.parse().unwrap())
+}
+
+#[tokio::test]
+async fn a_renewed_web_session_sends_its_cookie_again_to_match() {
+    let app = App::start().await;
+    let email = email();
+    let code = app.request_code(&email).await;
+    let reply = app
+        .send(
+            Method::POST,
+            "/v1/auth/sessions",
+            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE" })),
+            &[(ORIGIN, WEB_ORIGIN)],
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+    assert_eq!(cookie_max_age(&reply), Some(30 * 86_400));
+    let cookie = reply.headers[SET_COOKIE]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+    let token = cookie.strip_prefix("yuppers_session=").unwrap().to_owned();
+    let with_cookie = [(COOKIE, cookie.as_str())];
+    let me = || app.send(Method::GET, "/v1/me", None, &with_cookie);
+
+    // Not renewed: no cookie.
+    assert_eq!(cookie_max_age(&me().await), None);
+
+    // Renewed: the cookie again, lasting as long as the session now does.
+    age_session(&app, &token, 2.0, 28.0).await;
+    let renewed = me().await;
+    assert_eq!(renewed.status, StatusCode::OK);
+    let age = cookie_max_age(&renewed).expect("the cookie is sent again");
+    assert!((30 * 86_400 - age).abs() < 60, "{age}");
+    assert_eq!(cookie_max_age(&me().await), None, "once a day at most");
+
+    // Near the absolute end, no longer than what is left of it.
+    age_session(&app, &token, 170.0, 5.0).await;
+    let age = cookie_max_age(&me().await).expect("the cookie is sent again");
+    assert!((10 * 86_400 - age).abs() < 60, "{age}");
+
+    // A bearer token never gets a cookie.
+    age_session(&app, &token, 2.0, 28.0).await;
+    let bearer = app.get_as(&token, "/v1/me").await;
+    assert_eq!(bearer.status, StatusCode::OK);
+    assert_eq!(cookie_max_age(&bearer), None);
+
+    // Signing out with a session due for renewal clears the cookie, and
+    // sends nothing that would put it back.
+    age_session(&app, &token, 2.0, 28.0).await;
+    let out = app
+        .send(
+            Method::DELETE,
+            "/v1/auth/session",
+            None,
+            &[(COOKIE, &cookie), (ORIGIN, WEB_ORIGIN)],
+        )
+        .await;
+    assert_eq!(out.status, StatusCode::NO_CONTENT);
+    assert_eq!(cookie_max_age(&out), Some(0));
+    assert_eq!(me().await.status, StatusCode::UNAUTHORIZED);
+
+    app.finish(&[&email]).await;
+}
+
 #[tokio::test]
 async fn a_web_session_is_a_cookie_scripts_cannot_read() {
     let app = App::start().await;

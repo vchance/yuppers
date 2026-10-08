@@ -218,7 +218,7 @@ pub async fn create_session(
     .bind(account_id)
     .bind(auth::token_hash(&token).as_slice())
     .bind(method)
-    .bind(settings.auth.session_ttl.whole_seconds() as f64)
+    .bind(settings.auth.session_initial().whole_seconds() as f64)
     .execute(&mut *tx)
     .await?;
 
@@ -273,8 +273,25 @@ pub async fn delete_session(
         .into_response())
 }
 
+/// The cookie for a new session: it lasts as long as the session does
+/// before its first renewal.
 fn session_cookie(settings: &Settings, token: &str) -> HeaderValue {
-    cookie(settings, token, settings.auth.session_ttl.whole_seconds())
+    session_cookie_for(
+        settings,
+        token,
+        settings.auth.session_initial().whole_seconds(),
+    )
+}
+
+/// The cookie for a session with `seconds_left` to run, sent again each time
+/// the session is renewed (`extract::refresh_session_cookie`), so that the
+/// browser keeps it exactly as long as the service will take it.
+pub(super) fn session_cookie_for(
+    settings: &Settings,
+    token: &str,
+    seconds_left: i64,
+) -> HeaderValue {
+    cookie(settings, token, seconds_left.max(0))
 }
 
 pub(super) fn expired_cookie(settings: &Settings) -> HeaderValue {

@@ -215,6 +215,18 @@
     "invalidEmail": "Enter a valid email address.",
     "changeEmail": "Use a different email address"
   },
+  "inAppBrowser": {
+    "noteIos": "You’re in {app}’s browser, which may not keep you signed in. Open this page in Safari to stay signed in.",
+    "noteOther": "You’re in {app}’s browser, which may not keep you signed in. Open this page in your browser to stay signed in.",
+    "someApp": "an app",
+    "openSafari": "Open in Safari",
+    "openBrowser": "Open in browser",
+    "menu": "Or open the app’s menu and choose “Open in browser”, or copy the link and paste it into your browser.",
+    "copy": "Copy link",
+    "copied": "Link copied.",
+    "copyFailed": "The link couldn’t be copied. Use the app’s menu instead.",
+    "hide": "Hide"
+  },
   "profile": {
     "firstTitle": "Set up your account",
     "firstIntro": "We need this before you can sign anything.",

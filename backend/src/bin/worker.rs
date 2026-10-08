@@ -1,6 +1,7 @@
 //! Background worker: outbox delivery, reminders, expiries, closures, and the
-//! purge of old network metadata and of old sign-in limit counts (DESIGN.md
-//! §13, §14). Runs as its own process so slow jobs never stall requests.
+//! purge of old network metadata, of old sign-in limit counts, and of ended
+//! sessions, old idempotency keys and finished notifications
+//! (`yuppers_backend::sweep`; DESIGN.md §13, §14). Runs as its own process so slow jobs never stall requests.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,7 +24,7 @@ use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
 use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
-use yuppers_backend::{code_consent, db, shutdown, telemetry};
+use yuppers_backend::{code_consent, db, shutdown, sweep, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
 
@@ -84,6 +85,8 @@ async fn main() -> anyhow::Result<()> {
     let receipt_rules = ReceiptRules::default();
     // When the push service was last asked for receipts.
     let mut last_receipts: Option<std::time::Instant> = None;
+    // When old working rows were last swept (`sweep::SWEEP_EVERY`).
+    let mut last_sweep: Option<std::time::Instant> = None;
     if push_delivery.sender.is_none() {
         tracing::info!("push notifications are off (PUSH_DELIVERY)");
     }
@@ -191,6 +194,19 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "one-time codes past use removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "one-time code purge failed"),
+                }
+                if last_sweep.is_none_or(|last| last.elapsed() >= sweep::SWEEP_EVERY) {
+                    last_sweep = Some(std::time::Instant::now());
+                    match sweep::sweep(&db, OffsetDateTime::now_utc(), delivery.rules.max_attempts).await {
+                        Ok(swept) if swept.is_empty() => {}
+                        Ok(swept) => tracing::info!(
+                            sessions = swept.sessions,
+                            idempotency_keys = swept.idempotency_keys,
+                            notifications = swept.notifications,
+                            "old sessions, idempotency keys and notifications removed"
+                        ),
+                        Err(error) => tracing::error!(error = %Redacted(&error), "sweep of old rows failed"),
+                    }
                 }
                 // After both, so what they just caused goes out in the same
                 // pass.

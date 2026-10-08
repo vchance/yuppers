@@ -613,6 +613,7 @@ async fn an_idempotency_key_has_a_length_limit() {
         "expected_version": 0,
         "terms": fence_job(Uuid::new_v4(), Uuid::new_v4()),
         "consent": consent(),
+        "invitation": { "for_anyone": true },
     });
     let path = format!("/v1/exchanges/{exchange}/revisions");
     let long = "k".repeat(201);
@@ -657,7 +658,10 @@ async fn a_dead_link_says_nothing_about_why() {
     app.post(&deal.ben, &path, json!({}))
         .await
         .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
-    let new = app.post(&deal.ana, &path, json!({})).await.ok();
+    let new = app
+        .post(&deal.ana, &path, json!({ "for_anyone": true }))
+        .await
+        .ok();
     let new = json!({ "token": new["invitation_token"] });
 
     app.post(&deal.ben, "/v1/invitations/claim", old.clone())
@@ -701,7 +705,7 @@ async fn a_dead_link_says_nothing_about_why() {
     // Someone else can still claim it, after which it cannot be replaced.
     let carla = app.user("Carla").await;
     app.post(&carla, "/v1/invitations/claim", new).await.ok();
-    app.post(&deal.ana, &path, json!({}))
+    app.post(&deal.ana, &path, json!({ "for_anyone": true }))
         .await
         .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
 }
@@ -1256,9 +1260,11 @@ async fn invitation_links_cannot_be_reissued_without_limit() {
 
     // The first link was issued with the proposal; four replacements make five.
     for _ in 0..4 {
-        app.post(&deal.ana, &path, json!({})).await.ok();
+        app.post(&deal.ana, &path, json!({ "for_anyone": true }))
+            .await
+            .ok();
     }
-    app.post(&deal.ana, &path, json!({}))
+    app.post(&deal.ana, &path, json!({ "for_anyone": true }))
         .await
         .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
 }
@@ -1483,4 +1489,69 @@ async fn an_invitation_preview_names_the_currency_and_the_timezone() {
     assert_eq!(preview["currency"], view["currency"]);
     assert_eq!(preview["timezone"], "America/Chicago");
     assert_eq!(preview["timezone"], view["timezone"]);
+}
+
+/// A link anyone holding it can claim is never what a request gets by
+/// leaving something out: the first proposal and every replacement say who
+/// the link is for, a person or anyone, and never both.
+#[tokio::test]
+async fn who_an_invitation_is_for_is_said_outright() {
+    let app = app().await;
+    let ana = app.user("Ana").await;
+    let exchange = app.draft(&ana).await;
+    let path = format!("/v1/exchanges/{exchange}/revisions");
+    for invitation in [
+        None,
+        Some(json!({})),
+        Some(json!({ "for_anyone": false })),
+        Some(json!({ "bound_to": null })),
+        Some(json!({ "bound_to": "ben@example.test", "for_anyone": true })),
+    ] {
+        let mut body = json!({
+            "expected_version": 0,
+            "terms": fence_job(Uuid::new_v4(), Uuid::new_v4()),
+            "consent": consent(),
+        });
+        if let Some(invitation) = &invitation {
+            body["invitation"] = invitation.clone();
+        }
+        app.post(&ana, &path, body)
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    }
+    // Nothing was sent.
+    assert_eq!(app.view(&ana, &exchange).await["version"], 0);
+
+    let sent = app
+        .post(
+            &ana,
+            &path,
+            json!({
+                "expected_version": 0,
+                "terms": fence_job(Uuid::new_v4(), Uuid::new_v4()),
+                "consent": consent(),
+                "invitation": { "bound_to": "ben@example.test" },
+            }),
+        )
+        .await
+        .ok();
+    assert!(sent["invitation_token"].is_string());
+
+    let link = format!("/v1/exchanges/{exchange}/invitation");
+    for options in [
+        json!({}),
+        json!({ "for_anyone": false }),
+        json!({ "bound_to": "ben@example.test", "for_anyone": true }),
+    ] {
+        app.post(&ana, &link, options)
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    }
+    for options in [
+        json!({ "for_anyone": true }),
+        json!({ "bound_to": "ben@example.test" }),
+        json!({ "bound_to": "ben@example.test", "for_anyone": false }),
+    ] {
+        assert!(app.post(&ana, &link, options).await.ok()["invitation_token"].is_string());
+    }
 }

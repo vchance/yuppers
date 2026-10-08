@@ -42,7 +42,7 @@
         {
           "ul": [
             "Yuppers.app no es parte de los acuerdos que haces con Yuppers. Un acuerdo es entre las dos personas que lo firman.",
-            "No guardamos ni movemos dinero. Cualquier pago es entre ustedes, fuera de Yuppers; Yuppers solo registra lo que cada uno dice sobre él.",
+            "No guardamos ni movemos dinero. Cualquier pago es entre ustedes, fuera de Yuppers; Yuppers solo registra lo que cada uno dice sobre él. Las opciones de pago (un usuario de Venmo, un $Cashtag de Cash App, un nombre de PayPal.Me, un correo electrónico o número de teléfono de Zelle) son información que cada persona agrega por su cuenta; no las comprobamos, y pagar con esas apps se rige por sus propios términos.",
             "No decidimos disputas. Cuando no están de acuerdo, registramos lo que dice cada uno. No decidimos quién tiene razón.",
             "No garantizamos que nadie cumpla, y no podemos obligar a nadie a hacer su parte.",
             "No comprobamos lo que registras. Marcar algo como entregado, confirmarlo, disputarlo o dispensarlo, y cada nota que escribes, son declaraciones tuyas.",
@@ -145,7 +145,7 @@
             "Qué dice una actualización: solo que algo cambió, con un enlace para entrar y verlo. Nunca incluye los términos, las cantidades ni los nombres de lo que se entrega, igual que nuestros correos y las notificaciones de la app.",
             "Desactivar las actualizaciones por mensaje de texto de un acuerdo las detiene solo para ese acuerdo.",
             "Pueden aplicarse tarifas por mensajes y datos. (Message and data rates may apply.)",
-            "**Responde HELP para obtener ayuda.** **Responde STOP para dejar de recibir mensajes.** STOP detiene todos los mensajes de Yuppers.app a tu número, tanto las actualizaciones de acuerdos como los códigos de un solo uso, hasta que respondas START. Todavía puedes entrar con un correo electrónico.",
+            "**Responde HELP para obtener ayuda.** **Responde STOP para dejar de recibir mensajes.** STOP detiene todos los mensajes de Yuppers.app a tu número, tanto las actualizaciones de acuerdos como los códigos de un solo uso, hasta que respondas START. Todavía puedes entrar con un correo electrónico, si tu cuenta tiene uno.",
             "Ayuda: escribe a {supportEmail}, o responde HELP a cualquier actualización de un acuerdo.",
             "Los operadores no son responsables de los mensajes retrasados o no entregados.",
             "No enviamos mensajes a números fuera de Estados Unidos: solo enviamos mensajes a números de EE. UU., que empiezan con el código de país +1 y el código de área de uno de los 50 estados o de Washington D. C. No enviamos mensajes a números de Canadá, de los países del Caribe y del Pacífico ni de los territorios de EE. UU. que comparten el +1, ni a números gratuitos.",
@@ -164,7 +164,7 @@
             "Frecuencia de los mensajes: un mensaje por cada código que pides.",
             "Qué dice el mensaje: Twilio Verify lo escribe con su propia plantilla, con nuestro nombre. En inglés dice “Your Yuppers.app verification code is: 123456”, con tu código en lugar de 123456, y un código para confirmar la eliminación de tu cuenta llega de un servicio de Verify propio y dice “Your Yuppers.app account deletion verification code is: 123456”; en español, Twilio envía su propia versión en español del mismo mensaje. Cada código sirve durante {codeMinutes} minutos desde que se envió por primera vez, y una sola vez; si lo pides de nuevo en ese tiempo, se reenvía el mismo código.",
             "Tarifas: también pueden aplicarse tarifas por mensajes y datos a los mensajes con códigos.",
-            "STOP: a un número que respondió STOP a nuestras actualizaciones de acuerdos tampoco le enviamos códigos, hasta que responda START. Un código llega desde un número de Twilio, así que un STOP o un HELP en respuesta a él le llega a Twilio, no a nosotros: no desactiva las actualizaciones de acuerdos, y Twilio puede dejar de enviar códigos a tu número. Para obtener ayuda con un código, escribe a {supportEmail}. Siempre puedes entrar con un correo electrónico."
+            "STOP: a un número que respondió STOP a nuestras actualizaciones de acuerdos tampoco le enviamos códigos, hasta que responda START. Un código llega desde un número de Twilio, así que un STOP o un HELP en respuesta a él le llega a Twilio, no a nosotros: no desactiva las actualizaciones de acuerdos, y Twilio puede dejar de enviar códigos a tu número. Para obtener ayuda con un código, escribe a {supportEmail}. Siempre puedes entrar con un correo electrónico, si tu cuenta tiene uno."
           ]
         },
         {

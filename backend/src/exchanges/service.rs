@@ -661,9 +661,18 @@ async fn issue_invitation(
     rules: &Rules,
     at: OffsetDateTime,
 ) -> Result<String, ApiError> {
-    let bound = match options.and_then(|options| options.bound_to) {
-        Some(text) => Some(Identifier::parse(&text)?),
-        None => None,
+    // Who it is for is said outright: a link for anyone is never what a
+    // request gets by leaving something out.
+    let bound = match options {
+        Some(InvitationOptions {
+            bound_to: Some(text),
+            for_anyone: false,
+        }) => Some(Identifier::parse(&text)?),
+        Some(InvitationOptions {
+            bound_to: None,
+            for_anyone: true,
+        }) => None,
+        _ => return Err(ErrorCode::InvalidRequest.into()),
     };
     // Only the blind index of whom it names is kept: a claim is compared
     // with it, and nothing reads it back (`crate::contact`).

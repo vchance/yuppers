@@ -1105,7 +1105,7 @@ async fn an_invitation_someone_else_bound_to_the_address_forgets_it_and_dies() {
     app.post(
         &ana,
         &format!("/v1/exchanges/{exchange}/invitation"),
-        json!({}),
+        json!({ "for_anyone": true }),
     )
     .await
     .ok();
@@ -1328,7 +1328,7 @@ async fn someone_the_initiator_had_not_confirmed_leaves_the_exchange_as_they_go(
         .post(
             &ana,
             &format!("/v1/exchanges/{signed}/invitation"),
-            json!({}),
+            json!({ "for_anyone": true }),
         )
         .await
         .ok()["invitation_token"]

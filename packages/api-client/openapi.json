@@ -818,6 +818,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Neither or both of `bound_to` and `for_anyone: true`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -3932,6 +3942,7 @@
       },
       "InvitationOptions": {
         "type": "object",
+        "description": "Who an invitation link is for, said outright: one of `bound_to` and\n`for_anyone: true`, never both and never neither. A link anyone holding\nit can claim is never what a request gets by leaving something out.",
         "properties": {
           "bound_to": {
             "type": [
@@ -3939,6 +3950,10 @@
               "null"
             ],
             "description": "Names who the invitation is for: only an account that has verified\nthis email address or phone number can claim it."
+          },
+          "for_anyone": {
+            "type": "boolean",
+            "description": "`true` for a link anyone who has it can claim. Required, as `true`,\nwhen `bound_to` is not given."
           }
         }
       },
@@ -5528,7 +5543,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/InvitationOptions",
-                "description": "Used when this is the first revision, which also issues the invitation."
+                "description": "Required when this is the first revision, which also issues the\ninvitation; ignored after."
               },
               {
                 "type": "null"

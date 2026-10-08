@@ -221,7 +221,7 @@ describe('inline pieces', () => {
 
   test('the effective date is written in each language', () => {
     expect(legalEffectiveDate('privacy', 'en')).toBe('October 8, 2026')
-    expect(legalEffectiveDate('terms', 'es')).toBe('6 de octubre de 2026')
+    expect(legalEffectiveDate('terms', 'es')).toBe('8 de octubre de 2026')
   })
 })
 
@@ -233,6 +233,11 @@ describe('the figures the documents state', () => {
     if (!found) throw new Error(`no ${field} in the backend's defaults`)
     return Number(found[1])
   }
+  const constant = (source: string, name: string) => {
+    const found = new RegExp(`${name}: Duration = Duration::days\\((\\d+)\\)`).exec(source)
+    if (!found) throw new Error(`no ${name} in the backend`)
+    return Number(found[1])
+  }
   const rule = (source: string, field: string, unit: string) => {
     const found = new RegExp(`${field}: Duration::${unit}\\((\\d+)\\)`).exec(source)
     if (!found) throw new Error(`no ${field} in the backend's defaults`)
@@ -242,12 +247,16 @@ describe('the figures the documents state', () => {
   test('are the service’s own', () => {
     const rules = backend('domain/mod.rs')
     const auth = backend('auth.rs')
+    const sweep = backend('sweep.rs')
     expect(LEGAL_FIGURES).toEqual({
       networkDays: rule(rules, 'network_metadata_retention', 'days'),
       codeMinutes: rule(auth, 'code_ttl', 'minutes'),
       sessionIdleDays: rule(auth, 'session_idle', 'days'),
       sessionMaxDays: rule(auth, 'session_max', 'days'),
       smsConsentYears: years(rules, 'sms_consent_retention'),
+      endedSessionDays: constant(sweep, 'ENDED_SESSION_RETENTION'),
+      idempotencyKeyDays: constant(sweep, 'IDEMPOTENCY_KEY_RETENTION'),
+      notificationDays: constant(sweep, 'FINISHED_NOTIFICATION_RETENTION'),
     })
   })
 })

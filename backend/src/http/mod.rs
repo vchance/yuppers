@@ -225,6 +225,22 @@ pub const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'self'; img-src 'se
     object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; \
     script-src 'self' 'sha256-KxR9MhTq1F37YaceB87TcfvvGJe+U71nuBxrnuq+JCQ='";
 
+/// The browser features no page here may use. The web app uses none of
+/// them; its one feature, offering an invitation link to the device's
+/// share sheet, stays allowed to this origin (`web-share`), and copying to
+/// the clipboard needs no permission. Payment options open the payment
+/// app by an ordinary link, never the Payment Request API.
+pub const PERMISSIONS_POLICY_VALUE: &str = "accelerometer=(), browsing-topics=(), camera=(), \
+    display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), \
+    midi=(), payment=(), serial=(), usb=(), web-share=(self)";
+
+/// HTTPS only, for a year, here and on every subdomain. Every name under
+/// `yuppers.app` is HTTPS-only already: the whole `.app` domain is on the
+/// browsers' preload list, and the only other web name is `www`, which
+/// Render serves over HTTPS as a redirect to the apex. Not submitted for
+/// preloading by name: that is hard to undo, and `.app` already is.
+pub const STRICT_TRANSPORT_SECURITY_VALUE: &str = "max-age=31536000; includeSubDomains";
+
 async fn security_headers(hsts: bool, request: Request, next: Next) -> Response {
     // The API's answers are about one person, often behind a session: no
     // cache, shared or the browser's own, may keep them, unless a handler
@@ -242,10 +258,20 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
     );
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static(PERMISSIONS_POLICY_VALUE),
+    );
+    // A page here shares no browsing context with a window of another
+    // origin, which could otherwise reach it through `window.opener`.
+    headers.insert(
+        HeaderName::from_static("cross-origin-opener-policy"),
+        HeaderValue::from_static("same-origin"),
+    );
     if hsts {
         headers.insert(
             STRICT_TRANSPORT_SECURITY,
-            HeaderValue::from_static("max-age=31536000"),
+            HeaderValue::from_static(STRICT_TRANSPORT_SECURITY_VALUE),
         );
     }
     response

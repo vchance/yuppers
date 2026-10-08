@@ -252,6 +252,7 @@ export {
   boundToProblemText,
   invitationBoundTo,
   invitationForProblem,
+  invitationOptions,
   NAMED_INVITATION,
   shareAddresses,
 } from './share'

@@ -25,5 +25,6 @@ pub mod payments;
 pub mod review;
 pub mod safety;
 pub mod shutdown;
+pub mod sweep;
 pub mod telemetry;
 pub mod wallet;

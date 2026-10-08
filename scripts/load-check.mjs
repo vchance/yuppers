@@ -290,6 +290,7 @@ async function pair(codes, n) {
       terms: proposal,
       consent: CONSENT,
       note: "Here is what we discussed.",
+      invitation: { for_anyone: true },
     },
   });
   const revision = sent.exchange.open_revision.id;

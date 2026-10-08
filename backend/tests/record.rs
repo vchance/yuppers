@@ -25,7 +25,10 @@ async fn send_with_note(app: &App, user: &User, exchange: &str, terms: Value, no
     app.post(
         user,
         &format!("/v1/exchanges/{exchange}/revisions"),
-        json!({ "expected_version": version, "terms": terms, "note": note, "consent": consent() }),
+        json!({
+            "expected_version": version, "terms": terms, "note": note, "consent": consent(),
+            "invitation": { "for_anyone": true },
+        }),
     )
     .await
     .ok()

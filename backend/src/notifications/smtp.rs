@@ -21,7 +21,7 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 
 use super::wording::Wording;
-use super::{Email, EmailSender};
+use super::{Email, EmailSender, Outage};
 use crate::auth::{CodeMessage, CodeSender, SendFuture, SignInChannel};
 use crate::domain::identity::Identifier;
 
@@ -169,11 +169,20 @@ impl SmtpSender {
                 .body(body.to_owned()),
         }
         .map_err(|_| anyhow::anyhow!("the message could not be built"))?;
-        let response = self
-            .transport
-            .send(message)
-            .await
-            .map_err(|error| anyhow::anyhow!(describe(&error)))?;
+        let response = self.transport.send(message).await.map_err(|error| {
+            let described = describe(&error);
+            if refuses_credentials(&error) {
+                // Nothing will go until the password is put right: said
+                // loudly, and not counted against the message.
+                tracing::error!(
+                    "the SMTP server refused the credentials: check SMTP_USERNAME and \
+                         SMTP_PASSWORD"
+                );
+                anyhow::Error::from(Outage(described))
+            } else {
+                anyhow::anyhow!(described)
+            }
+        })?;
         // What the server said on taking the message, such as a provider's
         // own ID for it, so a delivery can be traced in the provider's
         // records. Any line that could carry an address is left out.
@@ -188,6 +197,18 @@ impl SmtpSender {
         );
         Ok(())
     }
+}
+
+/// Whether the server refused to let this service in at all: `530`
+/// (authentication required), `534` (a stronger mechanism required) or
+/// `535` (the credentials are wrong), which RFC 4954 gives to
+/// authentication alone. A refused recipient or message never has these
+/// codes, so an outage is told apart from a refusal of one message. A
+/// `454` (authentication failed for now) is retried as any other failure.
+pub fn refuses_credentials(error: &lettre::transport::smtp::Error) -> bool {
+    error
+        .status()
+        .is_some_and(|code| matches!(code.to_string().as_str(), "530" | "534" | "535"))
 }
 
 /// Why a send failed, without anything the server said beyond its reply
@@ -220,7 +241,10 @@ impl EmailSender for SmtpSender {
         Box::pin(async move {
             // The same message sent again after a crash carries the same ID,
             // so a mailbox can tell it is a repeat.
-            let id = format!("<outbox-{}@{}>", email.reference, self.from.email.domain());
+            // The outbox row's own random key, never its ID, which starts
+            // again from 1 in a database made afresh: a mailbox that drops
+            // a repeated Message-ID would drop a new message too.
+            let id = format!("<outbox-{}@{}>", email.key, self.from.email.domain());
             self.deliver(
                 &email.to,
                 &email.subject,

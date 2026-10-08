@@ -579,13 +579,20 @@ impl App {
         view["id"].as_str().unwrap().to_owned()
     }
 
-    /// Sends a revision at the exchange's current version.
+    /// Sends a revision at the exchange's current version. A first one
+    /// issues a link for anyone, as it must say outright; later ones ignore
+    /// it.
     pub async fn send(&self, user: &User, exchange: &str, terms: Value) -> Reply {
         let version = self.view(user, exchange).await["version"].clone();
         self.post(
             user,
             &format!("/v1/exchanges/{exchange}/revisions"),
-            json!({ "expected_version": version, "terms": terms, "consent": consent() }),
+            json!({
+                "expected_version": version,
+                "terms": terms,
+                "consent": consent(),
+                "invitation": { "for_anyone": true },
+            }),
         )
         .await
     }

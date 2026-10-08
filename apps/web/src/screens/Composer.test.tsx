@@ -168,6 +168,6 @@ describe('who the invitation is for', () => {
     const sent = service.sent.find(
       (request) => request.call === `POST /v1/exchanges/${DRAFT}/revisions`,
     )
-    expect(sent?.body).toMatchObject({ invitation: { bound_to: null } })
+    expect(sent?.body).toEqual(expect.objectContaining({ invitation: { for_anyone: true } }))
   })
 })

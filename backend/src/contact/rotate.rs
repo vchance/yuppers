@@ -21,6 +21,10 @@ pub struct Column {
     pub field: Field,
     /// What else each value is bound to besides its column.
     pub bound: Bound,
+    /// The table's primary key, one column, and its type: how a row is
+    /// found again. Not its `ctid`, which changes whenever anyone updates
+    /// the row.
+    pub primary_key: (&'static str, &'static str),
 }
 
 /// What a value is bound to besides its table and column.
@@ -69,48 +73,56 @@ pub const COLUMNS: [Column; 8] = [
         table: "account",
         column: "email_encrypted",
         field: Field::ACCOUNT_EMAIL,
+        primary_key: ("id", "uuid"),
         bound: Bound::Column,
     },
     Column {
         table: "account",
         column: "phone_encrypted",
         field: Field::ACCOUNT_PHONE,
+        primary_key: ("id", "uuid"),
         bound: Bound::Column,
     },
     Column {
         table: "sms_consent",
         column: "phone_encrypted",
         field: Field::SMS_CONSENT_PHONE,
+        primary_key: ("id", "bigint"),
         bound: Bound::Row,
     },
     Column {
         table: "sms_code_consent",
         column: "phone_encrypted",
         field: Field::SMS_CODE_CONSENT_PHONE,
+        primary_key: ("id", "bigint"),
         bound: Bound::Row,
     },
     Column {
         table: "payment_handle",
         column: "venmo_encrypted",
         field: Field::PAYMENT_VENMO,
+        primary_key: ("account_id", "uuid"),
         bound: Bound::Account,
     },
     Column {
         table: "payment_handle",
         column: "cash_app_encrypted",
         field: Field::PAYMENT_CASH_APP,
+        primary_key: ("account_id", "uuid"),
         bound: Bound::Account,
     },
     Column {
         table: "payment_handle",
         column: "paypal_encrypted",
         field: Field::PAYMENT_PAYPAL,
+        primary_key: ("account_id", "uuid"),
         bound: Bound::Account,
     },
     Column {
         table: "payment_handle",
         column: "zelle_encrypted",
         field: Field::PAYMENT_ZELLE,
+        primary_key: ("account_id", "uuid"),
         bound: Bound::Account,
     },
 ];
@@ -170,18 +182,25 @@ impl fmt::Display for Rotation {
 pub async fn rotate(owner: &PgPool, keys: &Keys) -> Result<Rotation, store::OpenError> {
     let mut rotation = Rotation::default();
     for target in COLUMNS {
-        let Column { table, column, .. } = target;
+        let Column {
+            table,
+            column,
+            primary_key: (primary_key, key_type),
+            ..
+        } = target;
         let id = target.bound.select();
         let current = i16::from(keys.current_id());
         let mut done = Rotated::default();
+        // The rows already found unreadable, by primary key: each is
+        // counted once and not taken again.
         let mut skipped: Vec<String> = Vec::new();
         loop {
             let mut tx = owner.begin().await?;
             let rows: Vec<(String, Option<String>, Vec<u8>)> =
                 sqlx::query_as(sqlx::AssertSqlSafe(format!(
-                    "SELECT ctid::text, {id}, {column} FROM {table}
+                    "SELECT {primary_key}::text, {id}, {column} FROM {table}
                      WHERE {column} IS NOT NULL AND get_byte({column}, 0) <> $1
-                       AND NOT (ctid::text = ANY($3))
+                       AND NOT ({primary_key}::text = ANY($3))
                      LIMIT $2
                      FOR UPDATE"
                 )))
@@ -191,7 +210,7 @@ pub async fn rotate(owner: &PgPool, keys: &Keys) -> Result<Rotation, store::Open
                 .fetch_all(&mut *tx)
                 .await?;
             let taken = rows.len();
-            for (tid, key, sealed) in rows {
+            for (row, key, sealed) in rows {
                 let opened = target
                     .bound
                     .field(target.field, key.as_deref())
@@ -202,9 +221,9 @@ pub async fn rotate(owner: &PgPool, keys: &Keys) -> Result<Rotation, store::Open
                 {
                     Ok((field, value)) => {
                         sqlx::query(sqlx::AssertSqlSafe(format!(
-                            "UPDATE {table} SET {column} = $2 WHERE ctid = $1::tid"
+                            "UPDATE {table} SET {column} = $2 WHERE {primary_key} = $1::{key_type}"
                         )))
-                        .bind(&tid)
+                        .bind(&row)
                         .bind(keys.seal(field, &value))
                         .execute(&mut *tx)
                         .await?;
@@ -212,7 +231,7 @@ pub async fn rotate(owner: &PgPool, keys: &Keys) -> Result<Rotation, store::Open
                     }
                     Err(Unreadable) => {
                         done.unreadable += 1;
-                        skipped.push(tid);
+                        skipped.push(row);
                     }
                 }
             }

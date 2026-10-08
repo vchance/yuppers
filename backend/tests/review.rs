@@ -1270,7 +1270,7 @@ async fn a_reviewer_never_sees_or_decides_a_report_they_take_part_in() {
         .post(
             &deal.ana,
             &format!("/v1/exchanges/{}/invitation", deal.exchange),
-            json!({}),
+            json!({ "for_anyone": true }),
         )
         .await
         .ok();
@@ -1734,6 +1734,7 @@ async fn hidden_content_hides_every_piece_of_free_text_and_leaves_the_signed_doc
             json!({
                 "expected_version": 0, "terms": terms, "consent": common::consent(),
                 "note": format!("Message: {MARK}"),
+                "invitation": { "for_anyone": true },
             }),
         )
         .await

@@ -8,9 +8,11 @@
 //! Checked here: the request's shape, key, sender and alternatives; the
 //! same key on every try of one message, so a retry never sends twice; a
 //! `422` given up on at once; `429` and `5xx` retried with the outbox's
-//! backoff; a silent API cut off by the timeout; a refused key logged
-//! loudly and retried; and the key, the recipient and the message never in
-//! a log or an error.
+//! backoff; a silent API cut off by the timeout; a refused key or a spent
+//! quota logged loudly and retried without counting the tries, for a day;
+//! a key Resend already holds with other content given up on as its own
+//! case; keys that never repeat when outbox IDs do; and the key, the
+//! recipient and the message never in a log or an error.
 //!
 //! Delivery acts on every queued message in the database, so the tests take
 //! turns, and each starts with an empty outbox.
@@ -217,6 +219,14 @@ async fn app() -> (App, MutexGuard<'static, ()>) {
     (app, turn)
 }
 
+/// Each outbox row's own key, by ID.
+async fn keys(app: &App) -> Vec<(i64, Uuid)> {
+    sqlx::query_as("SELECT id, delivery_key FROM outbox ORDER BY id")
+        .fetch_all(&app.db)
+        .await
+        .unwrap()
+}
+
 /// What the outbox holds: (id, attempts, completed, last_error) per row.
 async fn outbox(app: &App) -> Vec<(i64, i32, bool, Option<String>)> {
     sqlx::query_as(
@@ -285,7 +295,7 @@ async fn a_notification_goes_to_resend_in_the_shape_its_api_takes() {
 
     let received = resend.received();
     assert_eq!(received.len(), 4);
-    let ids: Vec<i64> = outbox(&app).await.iter().map(|row| row.0).collect();
+    let rows = keys(&app).await;
     let mut keys = BTreeSet::new();
     for request in &received {
         assert_eq!(request.path, "/emails");
@@ -312,10 +322,10 @@ async fn a_notification_goes_to_resend_in_the_shape_its_api_takes() {
         assert!(body["text"].as_str().unwrap().contains(WEB_ORIGIN));
         assert!(body["html"].as_str().unwrap().contains("<html"));
     }
-    // One key per outbox row.
-    let want: BTreeSet<String> = ids
+    // One key per outbox row: its own.
+    let want: BTreeSet<String> = rows
         .iter()
-        .map(|id| ResendSender::idempotency_key(*id))
+        .map(|(_, key)| ResendSender::idempotency_key(*key))
         .collect();
     assert_eq!(keys, want);
     let to: BTreeSet<String> = received.iter().map(Received::to).collect();
@@ -347,6 +357,7 @@ async fn a_retry_carries_the_same_key_and_resend_sends_once() {
         body: "Nothing to see.".to_owned(),
         html: Some("<p>Nothing to see.</p>".to_owned()),
         reference: 4242,
+        key: Uuid::from_u128(0x4242),
     };
     let (resend, addr) = StandIn::start().await;
     let direct = sender(addr);
@@ -363,7 +374,7 @@ async fn a_retry_carries_the_same_key_and_resend_sends_once() {
     );
     assert_eq!(
         received[0].header("idempotency-key"),
-        Some("yuppers-outbox/4242")
+        Some("yuppers-outbox/00000000-0000-0000-0000-000000004242")
     );
     assert_eq!(resend.sent().len(), 1);
 
@@ -392,8 +403,9 @@ async fn a_retry_carries_the_same_key_and_resend_sends_once() {
     assert_eq!((delivered.sent, delivered.failed), (4, 0));
     let received = resend.received();
     assert_eq!(received.len(), 8);
+    let own: HashMap<i64, Uuid> = keys(&app).await.into_iter().collect();
     for row in outbox(&app).await {
-        let key = ResendSender::idempotency_key(row.0);
+        let key = ResendSender::idempotency_key(own[&row.0]);
         let tries = received
             .iter()
             .filter(|request| request.header("idempotency-key") == Some(&*key))
@@ -475,8 +487,8 @@ async fn too_many_requests_and_server_errors_are_retried_with_the_backoff() {
             json!({"statusCode": 429, "name": "rate_limit_exceeded", "message": "Too many requests."}),
         ),
         (
-            StatusCode::TOO_MANY_REQUESTS,
-            json!({"statusCode": 429, "name": "daily_quota_exceeded", "message": "quota"}),
+            StatusCode::CONFLICT,
+            json!({"statusCode": 409, "name": "concurrent_idempotent_requests", "message": "busy"}),
         ),
         (
             StatusCode::BAD_GATEWAY,
@@ -507,7 +519,8 @@ async fn too_many_requests_and_server_errors_are_retried_with_the_backoff() {
         errors,
         BTreeSet::from([
             "Resend did not take the message for now (HTTP 429, rate_limit_exceeded)".to_owned(),
-            "Resend did not take the message for now (HTTP 429, daily_quota_exceeded)".to_owned(),
+            "Resend did not take the message for now (HTTP 409, concurrent_idempotent_requests)"
+                .to_owned(),
             "Resend did not take the message for now (HTTP 502)".to_owned(),
             "Resend did not take the message for now (HTTP 503, service_unavailable)".to_owned(),
         ])
@@ -581,8 +594,9 @@ async fn a_refused_key_is_logged_loudly_without_the_key_and_retried() {
         (delivered.sent, delivered.failed, delivered.given_up),
         (0, 4, 0)
     );
+    // Not counted as tries: nothing about these messages failed.
     for (_, attempts, _, error) in outbox(&app).await {
-        assert_eq!(attempts, 1);
+        assert_eq!(attempts, 0);
         assert_eq!(
             error.as_deref(),
             Some("Resend refused the API key or the sender (HTTP 403, validation_error)")
@@ -593,6 +607,205 @@ async fn a_refused_key_is_logged_loudly_without_the_key_and_retried() {
     assert!(logged.contains("check RESEND_API_KEY"), "{logged}");
     assert!(!logged.contains(wrong), "{logged}");
     assert!(!logged.contains("re_wrong"), "{logged}");
+}
+
+#[tokio::test]
+async fn an_outage_is_retried_for_a_day_without_counting_the_tries_then_given_up_loudly() {
+    let (log, _guard) = Log::capture();
+    let (app, _turn) = app().await;
+    app.active().await;
+    let (resend, addr) = StandIn::start().await;
+    let rules = DeliveryRules::default();
+    let quota = || {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            json!({"statusCode": 429, "name": "daily_quota_exceeded", "message": "quota"}),
+        )
+    };
+    let now = OffsetDateTime::now_utc();
+
+    // Far more tries than the limit, an hour or so apart, as a long outage
+    // makes: none is counted, and none gives a message up.
+    let tries = rules.max_attempts + 4;
+    for hour in 0..tries {
+        resend.script(vec![quota(); 4]);
+        let delivered = deliver_due(
+            &app.db,
+            &delivery(sender(addr)),
+            now + time::Duration::minutes(61 * i64::from(hour)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (delivered.sent, delivered.failed, delivered.given_up),
+            (0, 4, 0),
+            "hour {hour}"
+        );
+    }
+    for (_, attempts, completed, error) in outbox(&app).await {
+        assert_eq!((attempts, completed), (0, false));
+        assert_eq!(
+            error.as_deref(),
+            Some("Resend's sending quota is spent (HTTP 429, daily_quota_exceeded)")
+        );
+    }
+    // Each waits as long again as it has waited, up to an hour.
+    let early = deliver_due(
+        &app.db,
+        &delivery(sender(addr)),
+        now + time::Duration::minutes(61 * (i64::from(tries) - 1)) + time::Duration::minutes(30),
+    )
+    .await
+    .unwrap();
+    assert!(early.is_empty());
+    let logged = log.text();
+    assert!(logged.contains("sending quota is spent"), "{logged}");
+    assert!(logged.contains("not counting the try"), "{logged}");
+
+    // Once a message is older than a day, the next refusal gives it up, at
+    // ERROR, saying why.
+    resend.script(vec![quota(); 4]);
+    let delivered = deliver_due(
+        &app.db,
+        &delivery(sender(addr)),
+        now + rules.outage_max_age + time::Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        (delivered.sent, delivered.failed, delivered.given_up),
+        (0, 4, 4)
+    );
+    for (_, attempts, completed, _) in outbox(&app).await {
+        assert_eq!((attempts, completed), (rules.max_attempts, false));
+    }
+    let logged = log.text();
+    let given_up: Vec<&str> = logged
+        .lines()
+        .filter(|line| line.contains("notification given up on"))
+        .collect();
+    assert_eq!(given_up.len(), 4, "{logged}");
+    for line in given_up {
+        assert!(line.contains("ERROR"), "{line}");
+        assert!(
+            line.contains("refused everything for longer than a message waits"),
+            "{line}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_outage_that_ends_sends_everything_that_waited() {
+    let (app, _turn) = app().await;
+    app.active().await;
+    let (resend, addr) = StandIn::start().await;
+    resend.script(vec![
+        (
+            StatusCode::UNAUTHORIZED,
+            json!({"statusCode": 401, "name": "missing_api_key", "message": "m"}),
+        );
+        4
+    ]);
+    let now = OffsetDateTime::now_utc();
+    let delivered = deliver_due(&app.db, &delivery(sender(addr)), now)
+        .await
+        .unwrap();
+    assert_eq!((delivered.failed, delivered.given_up), (4, 0));
+    let delivered = deliver_due(
+        &app.db,
+        &delivery(sender(addr)),
+        now + time::Duration::hours(5),
+    )
+    .await
+    .unwrap();
+    assert_eq!((delivered.sent, delivered.failed), (4, 0));
+    for (_, attempts, completed, error) in outbox(&app).await {
+        // The one try that went is the only one counted.
+        assert_eq!((attempts, completed, error), (1, true, None));
+    }
+}
+
+#[tokio::test]
+async fn a_key_resend_holds_with_other_content_is_given_up_on_as_its_own_case() {
+    let (log, _guard) = Log::capture();
+    let (app, _turn) = app().await;
+    app.active().await;
+    let (resend, addr) = StandIn::start().await;
+    resend.script(vec![
+        (
+            StatusCode::CONFLICT,
+            json!({"statusCode": 409, "name": "invalid_idempotent_request", "message": "m"}),
+        );
+        4
+    ]);
+    let rules = DeliveryRules::default();
+    let now = OffsetDateTime::now_utc();
+    let delivered = deliver_due(&app.db, &delivery(sender(addr)), now)
+        .await
+        .unwrap();
+    assert_eq!(
+        (delivered.sent, delivered.failed, delivered.given_up),
+        (0, 4, 4)
+    );
+    for (_, attempts, completed, error) in outbox(&app).await {
+        assert_eq!((attempts, completed), (rules.max_attempts, false));
+        assert_eq!(
+            error.as_deref(),
+            Some(
+                "Resend already took this message, with other content, under the same key \
+                 (HTTP 409, invalid_idempotent_request)"
+            )
+        );
+    }
+    let logged = log.text();
+    let conflicts: Vec<&str> = logged
+        .lines()
+        .filter(|line| line.contains("idempotency_conflict=true"))
+        .collect();
+    assert_eq!(conflicts.len(), 4, "{logged}");
+    assert!(
+        conflicts.iter().all(|line| line.contains("ERROR")),
+        "{logged}"
+    );
+}
+
+#[tokio::test]
+async fn outbox_ids_that_start_again_never_repeat_a_key() {
+    let (app, _turn) = app().await;
+    // One Resend team for both: as after a reset or a restore, or with
+    // another environment sending through the same team.
+    let (resend, addr) = StandIn::start().await;
+    app.active().await;
+    let first = keys(&app).await;
+    let delivered = deliver_due(&app.db, &delivery(sender(addr)), OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert_eq!(delivered.sent, 4);
+
+    // The same IDs again, for other messages.
+    sqlx::query("DELETE FROM outbox")
+        .execute(&app.db)
+        .await
+        .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "ALTER TABLE outbox ALTER COLUMN id RESTART WITH {}",
+        first[0].0
+    )))
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    app.active().await;
+    let second = keys(&app).await;
+    let ids = |rows: &[(i64, Uuid)]| rows.iter().map(|row| row.0).collect::<Vec<_>>();
+    assert_eq!(ids(&second), ids(&first));
+    let delivered = deliver_due(&app.db, &delivery(sender(addr)), OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert_eq!((delivered.sent, delivered.failed), (4, 0));
+    assert_eq!(resend.sent().len(), 8);
+    for (_, key) in &second {
+        assert!(first.iter().all(|(_, earlier)| earlier != key));
+    }
 }
 
 #[tokio::test]

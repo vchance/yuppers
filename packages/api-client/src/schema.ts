@@ -1284,12 +1284,22 @@ export interface components {
         InvitationIssued: {
             invitation_token: string;
         };
+        /**
+         * @description Who an invitation link is for, said outright: one of `bound_to` and
+         *     `for_anyone: true`, never both and never neither. A link anyone holding
+         *     it can claim is never what a request gets by leaving something out.
+         */
         InvitationOptions: {
             /**
              * @description Names who the invitation is for: only an account that has verified
              *     this email address or phone number can claim it.
              */
             bound_to?: string | null;
+            /**
+             * @description `true` for a link anyone who has it can claim. Required, as `true`,
+             *     when `bound_to` is not given.
+             */
+            for_anyone?: boolean;
         };
         /** @description What someone holding an invitation link sees before signing in. */
         InvitationPreview: {
@@ -2839,6 +2849,15 @@ export interface operations {
             };
             /** @description Someone is in the invited party's place */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Neither or both of `bound_to` and `for_anyone: true` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -232,4 +232,72 @@ async fn rotating_re_encrypts_everything_and_leaves_every_index_as_it_was() {
             ..
         })
     ));
+
+    // An unreadable value is counted once, however often its row moves
+    // while the rotation runs. Here every value re-encrypted in a record of
+    // consent also touches the unreadable one, as another process writing
+    // to that row between two batches would: it is then somewhere else in
+    // the table, and a rotation that remembered where it was would take it
+    // again in the next batch and count it twice.
+    let stray_id: i64 = sqlx::query_scalar("SELECT nextval('sms_consent_id_seq')")
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO sms_consent (id, action, phone_encrypted, phone_index, source, keyword)
+         OVERRIDING SYSTEM VALUE
+         VALUES ($1, 'STOP', $2, $3, 'SMS_REPLY', 'STOP')",
+    )
+    .bind(stray_id)
+    .bind(stray.seal(Field::SMS_CONSENT_PHONE.row(stray_id), &phone))
+    .bind(old.index(Kind::Phone, &phone).as_slice())
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    // More than one batch of values under the old key, readable with it.
+    let ids: Vec<i64> =
+        sqlx::query_scalar("SELECT nextval('sms_consent_id_seq') FROM generate_series(1, 250)")
+            .fetch_all(&app.owner)
+            .await
+            .unwrap();
+    for id in &ids {
+        sqlx::query(
+            "INSERT INTO sms_consent (id, action, phone_encrypted, phone_index, source, keyword)
+             OVERRIDING SYSTEM VALUE
+             VALUES ($1, 'STOP', $2, $3, 'SMS_REPLY', 'STOP')",
+        )
+        .bind(id)
+        .bind(old.seal(Field::SMS_CONSENT_PHONE.row(*id), &phone))
+        .bind(old.index(Kind::Phone, &phone).as_slice())
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "CREATE FUNCTION move_stray() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+             UPDATE sms_consent SET keyword = keyword WHERE id = {stray_id};
+             RETURN NULL;
+         END $$"
+    )))
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER move_stray AFTER UPDATE OF phone_encrypted ON sms_consent
+         FOR EACH ROW EXECUTE FUNCTION move_stray()",
+    )
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    let (ok, said) = contact_data(&app, &["rotate"], NEW_KEY, common::CONTACT_DATA_KEY);
+    assert!(!ok, "{said}");
+    let line = said
+        .lines()
+        .find(|line| line.starts_with("sms_consent.phone_encrypted"))
+        .unwrap_or_else(|| panic!("{said}"));
+    assert!(line.contains("re-encrypted    250"), "{said}");
+    assert!(line.ends_with("unreadable    1"), "{said}");
+    // That one, and the record of consent above.
+    assert!(said.contains("2 values decrypt under neither"), "{said}");
 }

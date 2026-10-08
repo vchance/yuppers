@@ -236,6 +236,30 @@ export interface Wording {
     /** `INVALID_IDENTIFIER`, where only email addresses are taken. */
     invalidEmail: string
   }
+  /**
+   * The web app's note, on the sign-in form, for a page open in another
+   * app's built-in browser, which may not keep the person signed in
+   * (`apps/web/src/lib/in-app-browser.ts`).
+   */
+  inAppBrowser: {
+    /** On iOS, where the way out is Safari. `{app}` is the app's name, or `someApp`. */
+    noteIos: string
+    /** Elsewhere, where it is the person's own browser. */
+    noteOther: string
+    /** `{app}` where the app does not say which it is. */
+    someApp: string
+    /** The button that opens the page in Safari (iOS 17 and later). */
+    openSafari: string
+    /** The button that opens the page in the default browser (Android). */
+    openBrowser: string
+    /** The other way out: the app's own menu, or the copied link. */
+    menu: string
+    copy: string
+    copied: string
+    copyFailed: string
+    /** Hides the note until the page is loaded again. */
+    hide: string
+  }
   profile: {
     firstTitle: string
     firstIntro: string

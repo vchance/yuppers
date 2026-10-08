@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
 import { ConsentCheckbox } from '../components/ConsentCheckbox'
+import { InAppBrowserNote } from '../components/InAppBrowserNote'
 import { LegalLink } from '../components/LegalLink'
 import { ErrorNote, Failure, Field, Notice } from '../components/ui'
 import { api, failureCode } from '../lib/api'
@@ -34,6 +35,10 @@ import { api, failureCode } from '../lib/api'
  * While the code is on its way, the form says to look in the spam folder
  * too, for an email from the address the service names, and offers another
  * code only half a minute after the last (`useResendReady`).
+ *
+ * In another app's built-in browser, which may not keep anyone signed in,
+ * both steps start with a note saying so, and how to open the page in the
+ * person's own browser instead (`InAppBrowserNote`).
  */
 export function SignIn() {
   const { wording, fmt, language } = useI18n()
@@ -129,6 +134,7 @@ export function SignIn() {
           void requestCode(identifier.trim(), false)
         }}
       >
+        <InAppBrowserNote />
         <p>{text.intro}</p>
         <Field
           label={text.label}
@@ -200,6 +206,7 @@ export function SignIn() {
   const wait = codeWaitText(w, sentTo, channels, fmt)
   return (
     <form key="code" noValidate onSubmit={signIn}>
+      <InAppBrowserNote />
       <p>{fmt(w.codeSent, { identifier: sentTo })}</p>
       {wait && <p>{wait}</p>}
       <Field label={w.codeLabel} hint={w.codeHint} required problem={failure ? failureId : null}>

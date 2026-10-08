@@ -4,6 +4,7 @@ import {
   fromMinorUnits,
   paymentNote,
   payOptions,
+  type PaymentHandleChanges,
   type PaymentHandles,
   type PayOption,
 } from '@yuppers/shared'
@@ -48,12 +49,15 @@ export function PaySheet({ exchange, contribution, otherName, onClose, onPaid }:
   const [handles, setHandles] = useState<PaymentHandles | null | undefined>(
     exchange.payment_options?.theirs,
   )
+  const [changes, setChanges] = useState<PaymentHandleChanges | null | undefined>(
+    exchange.payment_options?.theirs_changed,
+  )
 
   const amountMinor = contribution.amount_minor ?? 0
   const amount = money(amountMinor, exchange.currency)
   const plainAmount = fromMinorUnits(amountMinor, fractionDigitsOf(exchange.currency))
   const note = paymentNote(w.note, contribution.description, exchange.display_code)
-  const options = payOptions(handles, amountMinor, exchange.currency, note)
+  const options = payOptions(handles, amountMinor, exchange.currency, note, changes)
   const title = fmt(w.sheetTitle, { name: otherName, amount })
 
   useEffect(() => {
@@ -72,6 +76,7 @@ export function PaySheet({ exchange, contribution, otherName, onClose, onPaid }:
         if (cancelled) return
         setFound(fresh)
         setHandles(fresh.payment_options?.theirs)
+        setChanges(fresh.payment_options?.theirs_changed)
       },
       // Unread, the sheet keeps what the page showed.
       () => {},
@@ -137,7 +142,7 @@ export function PaySheet({ exchange, contribution, otherName, onClose, onPaid }:
           <ul className="pay-options">
             {options.map((option) => (
               <li key={option.app}>
-                <Option option={option} amount={amount} />
+                <Option option={option} amount={amount} otherName={otherName} />
               </li>
             ))}
           </ul>
@@ -164,15 +169,31 @@ export function PaySheet({ exchange, contribution, otherName, onClose, onPaid }:
   )
 }
 
-function Option({ option, amount }: { option: PayOption; amount: string }) {
-  const { wording, fmt } = useI18n()
+function Option({
+  option,
+  amount,
+  otherName,
+}: {
+  option: PayOption
+  amount: string
+  otherName: string
+}) {
+  const { wording, fmt, moment } = useI18n()
   const w = wording.payments
   const id = useId()
+  // Changed while money is owed: the way a payment is stolen after an
+  // account is taken over. Said before the button, never the old value.
+  const changed = option.changedAt ? (
+    <p className="notice notice-error pay-changed" id={`${id}-changed`}>
+      {fmt(w.changed[option.app], { name: otherName, date: moment(option.changedAt) })}
+    </p>
+  ) : null
 
   if (option.app === 'zelle') {
     return (
       <>
         <h3>{w.zelleHeading}</h3>
+        {changed}
         <p>{w.zelleNoLinks}</p>
         <p className="pay-handle">
           <span dir="ltr">{option.shown}</span>
@@ -190,12 +211,13 @@ function Option({ option, amount }: { option: PayOption; amount: string }) {
       : fmt(w.prefillsAmount, { amount })
   return (
     <>
+      {changed}
       <a
         className="button pay-app"
         href={option.url}
         target="_blank"
         rel="noopener noreferrer"
-        aria-describedby={`${id}-handle ${id}-told`}
+        aria-describedby={`${changed ? `${id}-changed ` : ''}${id}-handle ${id}-told`}
       >
         {w.open[option.app]}
         <span className="visually-hidden"> {wording.help.newTab}</span>

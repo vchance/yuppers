@@ -32,6 +32,7 @@ export type SmsCodeConsent = Schemas['SmsCodeConsent']
 export type SetSmsUpdates = Schemas['SetSmsUpdates']
 export type WalletPlatform = Schemas['WalletPlatform']
 export type PaymentHandles = Schemas['PaymentHandles']
+export type PaymentHandleChanges = Schemas['PaymentHandleChanges']
 export type PaymentOptionsShown = Schemas['PaymentOptionsShown']
 export type PaymentOptionsView = Schemas['PaymentOptionsView']
 

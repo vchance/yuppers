@@ -1,7 +1,12 @@
 import type { ErrorCode, ExchangeView } from '@yuppers/api-client'
 import { useCallback, useEffect, useState } from 'react'
 
-import { failureCode, type ExchangeApi, type PaymentHandles } from './api'
+import {
+  failureCode,
+  type ExchangeApi,
+  type PaymentHandleChanges,
+  type PaymentHandles,
+} from './api'
 import { fractionDigitsOf, fromMinorUnits } from './decimal'
 import { usPhone } from './sms-updates'
 
@@ -214,8 +219,10 @@ export type PayOption =
       amountFilled: boolean
       /** Whether the link fills in the note too. */
       noteFilled: boolean
+      /** When the payee changed it, RFC 3339, if recently enough to warn the payer. */
+      changedAt: string | null
     }
-  | { app: 'zelle'; handle: string; shown: string }
+  | { app: 'zelle'; handle: string; shown: string; changedAt: string | null }
 
 /** The payee's options, in the apps' order, each with its link. */
 export function payOptions(
@@ -223,8 +230,10 @@ export function payOptions(
   amountMinor: number,
   currency: string,
   note: string,
+  changes?: PaymentHandleChanges | null,
 ): PayOption[] {
   if (!handles) return []
+  const changedAt = (app: PaymentApp) => changes?.[app] ?? null
   const amount = linkAmount(amountMinor, currency)
   const options: PayOption[] = []
   if (handles.venmo) {
@@ -234,6 +243,7 @@ export function payOptions(
       url: venmoUrl(handles.venmo, amount, note),
       amountFilled: amount !== null,
       noteFilled: true,
+      changedAt: changedAt('venmo'),
     })
   }
   if (handles.cash_app) {
@@ -243,6 +253,7 @@ export function payOptions(
       url: cashAppUrl(handles.cash_app, amount),
       amountFilled: amount !== null,
       noteFilled: false,
+      changedAt: changedAt('cash_app'),
     })
   }
   if (handles.paypal) {
@@ -252,10 +263,16 @@ export function payOptions(
       url: paypalUrl(handles.paypal, amount),
       amountFilled: amount !== null,
       noteFilled: false,
+      changedAt: changedAt('paypal'),
     })
   }
   if (handles.zelle) {
-    options.push({ app: 'zelle', handle: handles.zelle, shown: zelleShown(handles.zelle) })
+    options.push({
+      app: 'zelle',
+      handle: handles.zelle,
+      shown: zelleShown(handles.zelle),
+      changedAt: changedAt('zelle'),
+    })
   }
   return options
 }

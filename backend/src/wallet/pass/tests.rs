@@ -115,6 +115,7 @@ fn view() -> ExchangeView {
                 paypal: Some("AnaPayPal".to_owned()),
                 zelle: Some("ana@zelle.test".to_owned()),
             }),
+            theirs_changed: Default::default(),
         },
     }
 }

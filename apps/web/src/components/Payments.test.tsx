@@ -191,3 +191,27 @@ test('options the payee stopped showing are not offered once the sheet opens', a
     'Pay to go',
   )
 })
+
+test('an option the payee changed recently is warned about beside its button, without the old value', async () => {
+  const { wording } = await start(`/exchanges/${DISPUTED}`, ben, 'en', (fake) => {
+    fake.theirs = { ...DANA }
+    fake.theirsChanged = { venmo: '2026-10-07T15:30:00Z', cash_app: null, paypal: null, zelle: null }
+  })
+  const w = wording.payments
+  const pay = 'Pay Ana Ruiz $450.00'
+  await until(() => [...document.querySelectorAll('button')].some((b) => b.textContent === pay), 'Pay')
+  await press(button(pay))
+  await until(() => document.querySelectorAll('a.pay-app').length === 3, 'the links')
+  const warnings = [...document.querySelectorAll('dialog .pay-changed')]
+  expect(warnings).toHaveLength(1)
+  expect(warnings[0].classList.contains('notice-error')).toBe(true)
+  expect(warnings[0].textContent).toMatch(
+    /^Ana Ruiz changed this Venmo username on .*2026.*\. Check with Ana Ruiz another way before you pay\.$/,
+  )
+  // Before the button it is about, and read with it.
+  const venmo = document.querySelector<HTMLAnchorElement>('a.pay-app')!
+  expect(warnings[0].nextElementSibling).toBe(venmo)
+  expect(venmo.getAttribute('aria-describedby')!.split(' ')).toContain(warnings[0].id)
+  expect(w.changed.venmo).toContain('{date}')
+  expect(await violations()).toEqual([])
+})

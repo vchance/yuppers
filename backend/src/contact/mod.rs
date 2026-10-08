@@ -334,13 +334,16 @@ impl Drop for IndexKey {
 
 /// A column that holds encrypted contact details: its table and column are
 /// the associated data of every value in it, and for the records of consent
-/// the row's ID too ([`Field::row`]).
+/// the row's ID too ([`Field::row`]), and for payment options the account
+/// they belong to ([`Field::owned_by`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Field {
     pub table: &'static str,
     pub column: &'static str,
     /// The row a value belongs to, where it is bound to it.
     pub row: Option<i64>,
+    /// The account a value belongs to, where it is bound to it.
+    pub owner: Option<uuid::Uuid>,
 }
 
 impl Field {
@@ -356,6 +359,7 @@ impl Field {
             table,
             column,
             row: None,
+            owner: None,
         }
     }
 
@@ -369,10 +373,23 @@ impl Field {
         }
     }
 
+    /// The same column, for the value of this account. Payment options
+    /// bind each value to their account, so a ciphertext copied into another
+    /// account's row does not decrypt there.
+    pub const fn owned_by(self, account: uuid::Uuid) -> Self {
+        Self {
+            owner: Some(account),
+            ..self
+        }
+    }
+
     fn associated_data(self) -> Vec<u8> {
         let mut data = format!("yuppers contact v1\0{}.{}", self.table, self.column);
         if let Some(id) = self.row {
             data.push_str(&format!("\0row {id}"));
+        }
+        if let Some(account) = self.owner {
+            data.push_str(&format!("\0account {account}"));
         }
         data.into_bytes()
     }

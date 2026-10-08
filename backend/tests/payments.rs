@@ -116,8 +116,14 @@ async fn options_are_saved_normalized_encrypted_and_can_be_removed() {
             "{plain} is stored in the clear"
         );
     }
-    assert_eq!(common::open(Field::PAYMENT_VENMO, &row.0), "Ana-Fixes");
-    assert_eq!(common::open(Field::PAYMENT_ZELLE, &row.3), "+12025550142");
+    assert_eq!(
+        common::open(Field::PAYMENT_VENMO.owned_by(ana.id), &row.0),
+        "Ana-Fixes"
+    );
+    assert_eq!(
+        common::open(Field::PAYMENT_ZELLE.owned_by(ana.id), &row.3),
+        "+12025550142"
+    );
 
     // Saving again replaces: one left out is removed.
     let some = save(&app, &ana, json!({ "zelle": "Ana@Example.com" }))
@@ -452,4 +458,70 @@ async fn reading_and_writing_needs_a_session() {
             .await
             .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
     }
+}
+
+fn changed(view: &Value) -> Value {
+    view["payment_options"]["theirs_changed"].clone()
+}
+
+#[tokio::test]
+async fn a_payer_is_warned_beside_an_option_changed_since_the_agreement_came_into_force() {
+    let app = App::start(DATABASE).await;
+    let ana = app.user("Ana").await;
+    // Saved before the agreement: nothing to warn about.
+    save(&app, &ana, handles()).await.ok();
+    let deal = app.active_between(ana, app.user("Ben").await).await;
+    let (ana, ben, exchange) = (&deal.ana, &deal.ben, deal.exchange.as_str());
+    show(&app, ana, exchange, true).await.ok();
+    let nothing = json!({ "venmo": null, "cash_app": null, "paypal": null, "zelle": null });
+    assert_eq!(changed(&app.view(ben, exchange).await), nothing);
+
+    // Saving the same again changes nothing.
+    save(&app, ana, handles()).await.ok();
+    assert_eq!(changed(&app.view(ben, exchange).await), nothing);
+
+    // The Venmo username changes while Ben owes the payment: said beside
+    // it, with when, and never what it was.
+    let mut new = handles();
+    new["venmo"] = json!("someone-else");
+    save(&app, ana, new.clone()).await.ok();
+    let view = app.view(ben, exchange).await;
+    let said = changed(&view);
+    assert!(
+        said["venmo"]
+            .as_str()
+            .is_some_and(|at| at.starts_with("20")),
+        "{said}"
+    );
+    assert_eq!(
+        (&said["cash_app"], &said["paypal"], &said["zelle"]),
+        (&Value::Null, &Value::Null, &Value::Null)
+    );
+    assert_eq!(view["payment_options"]["theirs"]["venmo"], "someone-else");
+    assert!(!view.to_string().contains("Ana-Fixes"), "{view}");
+    // Ana's own view says nothing of it.
+    assert_eq!(changed(&app.view(ana, exchange).await), nothing);
+
+    // Older than the warning window: no longer said.
+    sqlx::query(
+        "UPDATE payment_handle
+         SET venmo_changed_at = now() - make_interval(days => $2 + 1)
+         WHERE account_id = $1",
+    )
+    .bind(ana.id)
+    .bind(yuppers_backend::payments::CHANGE_WARNING_DAYS as i32)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(changed(&app.view(ben, exchange).await), nothing);
+
+    // Removed, then added again: a change too.
+    save(&app, ana, json!({ "cash_app": "AnaFixes" }))
+        .await
+        .ok();
+    save(&app, ana, new).await.ok();
+    let said = changed(&app.view(ben, exchange).await);
+    assert!(said["venmo"].is_string(), "{said}");
+    assert!(said["paypal"].is_string(), "{said}");
+    assert!(said["cash_app"].is_null(), "{said}");
 }

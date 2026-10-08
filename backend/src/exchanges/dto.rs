@@ -441,6 +441,12 @@ pub struct PaymentOptionsView {
     /// this agreement, it is in force, and the viewer owes them money on it
     /// that is neither marked paid, accepted nor waived. Null otherwise.
     pub theirs: Option<crate::payments::PaymentHandles>,
+    /// When each of `theirs` changed, for those that changed after the
+    /// agreement came into force and within `payments::CHANGE_WARNING_DAYS`
+    /// days: the payer is warned beside them to check with the payee
+    /// another way. Never the old value. All null when `theirs` is.
+    #[schema(required = false)]
+    pub theirs_changed: crate::payments::PaymentHandleChanges,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

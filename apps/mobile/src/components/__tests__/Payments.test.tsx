@@ -38,7 +38,13 @@ const DANA: Handles = {
 };
 const NONE: Handles = { venmo: null, cash_app: null, paypal: null, zelle: null };
 
-function exchange(theirs: Handles | null, shown = false): ExchangeView {
+const NO_CHANGES = { venmo: null, cash_app: null, paypal: null, zelle: null };
+
+function exchange(
+  theirs: Handles | null,
+  shown = false,
+  theirsChanged: Record<keyof Handles, string | null> = NO_CHANGES,
+): ExchangeView {
   return {
     id: '0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70',
     version: 4,
@@ -73,7 +79,7 @@ function exchange(theirs: Handles | null, shown = false): ExchangeView {
       },
     },
     contributions: [{ id: PAYMENT, status: 'PENDING' }],
-    payment_options: { shown, theirs },
+    payment_options: { shown, theirs, theirs_changed: theirsChanged },
   };
 }
 
@@ -237,4 +243,30 @@ test('nothing is offered to a party who pays and receives no money', async () =>
     wrap(<ShowPaymentOptions exchange={exchange(null)} otherName="Ana Ruiz" reload={async () => null} client={client} />),
   );
   await waitFor(() => expect(screen.queryByText(w.showHeading)).toBeNull());
+});
+
+test('an option the payee changed recently is warned about beside its button', async () => {
+  const view = exchange(DANA, false, { ...NO_CHANGES, zelle: '2026-10-07T15:30:00Z' });
+  await render(
+    wrap(
+      <PaySheet
+        exchange={view}
+        contribution={view.in_force_revision!.terms.contributions[0]}
+        otherName="Ana Ruiz"
+        onClose={() => {}}
+        onPaid={() => {}}
+        client={{ getExchange: async () => view }}
+        open={() => {}}
+      />,
+    ),
+  );
+  const warning = await screen.findByText(
+    /^Ana Ruiz changed this Zelle email or phone number on .*2026.*\. Check with Ana Ruiz another way before you pay\.$/,
+  );
+  expect(warning).toBeTruthy();
+  expect(screen.queryAllByText(/changed this Venmo username/)).toHaveLength(0);
+  // Unchanged options say nothing more.
+  expect(screen.getByRole('button', { name: w.open.venmo }).props.accessibilityHint).toBe(
+    'Venmo @dana-fixes. Opens with $100.50 and the note filled in. Check both before you send.',
+  );
 });

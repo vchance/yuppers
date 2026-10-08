@@ -15,11 +15,17 @@
 --                       is only shown.
 --
 -- Each encrypted as an email address is (0025): XChaCha20-Poly1305 under a
--- key derived from CONTACT_DATA_KEY, with the table and column as
--- associated data. One byte naming the key, the 24-byte nonce, the text
--- (a username of at most 30 bytes, a $Cashtag or a PayPal.Me name of at
--- most 20, an email address of at most 254) and the 16-byte tag. Nothing
--- looks them up, so there is no blind index.
+-- key derived from CONTACT_DATA_KEY, with the table, the column and the
+-- row's account as associated data, so that a value copied into another
+-- account's row does not decrypt there. One byte naming the key, the
+-- 24-byte nonce, the text (a username of at most 30 bytes, a $Cashtag or a
+-- PayPal.Me name of at most 20, an email address of at most 254) and the
+-- 16-byte tag. Nothing looks them up, so there is no blind index.
+--
+-- `*_changed_at`: when each was last set to a value it did not have
+-- before, empty while there is none. A payer is warned beside a payment
+-- option that changed recently, while they owe money (`payments::
+-- CHANGE_WARNING_DAYS`); the old value is never kept.
 --
 -- `writes_in_window` and `write_window_started_at` count the changes the
 -- account made to its payment options, saving them or showing them on an
@@ -32,9 +38,18 @@ CREATE TABLE payment_handle (
     cash_app_encrypted      bytea CHECK (octet_length(cash_app_encrypted) BETWEEN 42 AND 61),
     paypal_encrypted        bytea CHECK (octet_length(paypal_encrypted) BETWEEN 42 AND 61),
     zelle_encrypted         bytea CHECK (octet_length(zelle_encrypted) BETWEEN 44 AND 295),
+    venmo_changed_at        timestamptz,
+    cash_app_changed_at     timestamptz,
+    paypal_changed_at       timestamptz,
+    zelle_changed_at        timestamptz,
     updated_at              timestamptz NOT NULL DEFAULT now(),
     writes_in_window        integer NOT NULL DEFAULT 0 CHECK (writes_in_window >= 0),
-    write_window_started_at timestamptz NOT NULL DEFAULT now()
+    write_window_started_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT payment_handle_changed_with_value CHECK (
+        (venmo_changed_at IS NULL) = (venmo_encrypted IS NULL)
+        AND (cash_app_changed_at IS NULL) = (cash_app_encrypted IS NULL)
+        AND (paypal_changed_at IS NULL) = (paypal_encrypted IS NULL)
+        AND (zelle_changed_at IS NULL) = (zelle_encrypted IS NULL))
 );
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON payment_handle TO exchange_app;

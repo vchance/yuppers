@@ -451,3 +451,71 @@ async fn payment_options_are_never_logged() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_payment_option_copied_into_another_account_fails_closed_and_is_logged_without_it() {
+    let _turn = TURN.lock().await;
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber =
+        telemetry::subscriber(LogFormat::Json, EnvFilter::new("trace"), false, move || {
+            writer.clone()
+        });
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let app = App::start(DATABASE).await;
+    let deal = app.active().await;
+    for (who, venmo) in [(&deal.ana, "copied-venmo"), (&deal.ben, "bens-own")] {
+        app.call(
+            Some(who),
+            Method::PUT,
+            "/v1/me/payment-handles",
+            Some(json!({ "venmo": venmo, "zelle": "copycheck@zelle.test" })),
+            &[],
+        )
+        .await
+        .ok();
+    }
+    // Someone with the database copies Ben's ciphertexts into Ana's row,
+    // hoping Ben's money goes to them.
+    sqlx::query(
+        "UPDATE payment_handle a
+         SET venmo_encrypted = b.venmo_encrypted
+         FROM payment_handle b
+         WHERE a.account_id = $1 AND b.account_id = $2",
+    )
+    .bind(deal.ana.id)
+    .bind(deal.ben.id)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    app.call(
+        Some(&deal.ana),
+        Method::PUT,
+        &format!("/v1/exchanges/{}/payment-options", deal.exchange),
+        Some(json!({ "on": true })),
+        &[],
+    )
+    .await
+    .ok();
+
+    // Not shown to the payer, nor to its owner; the rest still is.
+    let seen = app.view(&deal.ben, &deal.exchange).await;
+    assert_eq!(seen["payment_options"]["theirs"]["venmo"], Value::Null);
+    assert_eq!(
+        seen["payment_options"]["theirs"]["zelle"],
+        "copycheck@zelle.test"
+    );
+    let own = app.get(&deal.ana, "/v1/me/payment-handles").await.ok();
+    assert_eq!(own["venmo"], Value::Null);
+
+    let text = log.text();
+    assert!(
+        text.contains("a stored payment option does not decrypt for its account"),
+        "{text}"
+    );
+    assert!(text.contains("venmo_encrypted"), "{text}");
+    for value in ["bens-own", "copied-venmo", "copycheck"] {
+        assert!(!text.contains(value), "the log holds {value}:\n{text}");
+    }
+}

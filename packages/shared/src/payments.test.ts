@@ -121,7 +121,27 @@ test('the sheet offers what the payee saved, in order, and says when it cannot f
   expect(options.map((option) => option.app)).toEqual(['venmo', 'cash_app', 'paypal', 'zelle'])
   expect(options[0]).toMatchObject({ amountFilled: true, noteFilled: true })
   expect(options[1]).toMatchObject({ url: 'https://cash.app/$DanaFixes/100.50', noteFilled: false })
-  expect(options[3]).toEqual({ app: 'zelle', handle: '+12025550142', shown: '(202) 555-0142' })
+  expect(options[3]).toEqual({
+    app: 'zelle',
+    handle: '+12025550142',
+    shown: '(202) 555-0142',
+    changedAt: null,
+  })
+  expect(options.every((option) => option.changedAt === null)).toBe(true)
+
+  // An option the payee changed recently carries when, to warn beside it.
+  const changed = payOptions(handles, 10050, 'USD', note, {
+    venmo: '2026-10-07T12:00:00Z',
+    cash_app: null,
+    paypal: null,
+    zelle: '2026-10-06T12:00:00Z',
+  })
+  expect(changed.map((option) => option.changedAt)).toEqual([
+    '2026-10-07T12:00:00Z',
+    null,
+    null,
+    '2026-10-06T12:00:00Z',
+  ])
 
   const euros = payOptions(handles, 10050, 'EUR', note)
   expect(euros[0]).toMatchObject({ amountFilled: false })

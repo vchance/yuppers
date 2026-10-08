@@ -96,6 +96,8 @@ test('the payee shows payment options; the payer pays in the app and says so the
   await expect(sheet).toBeVisible()
   await expect(sheet.getByText(fill(w.addedBy, { name: 'Ana' }))).toBeVisible()
   await expect(sheet.getByText(w.appTerms, { exact: false })).toBeVisible()
+  // Saved before the agreement came into force: nothing to warn about.
+  await expect(sheet.locator('.pay-changed')).toHaveCount(0)
 
   // Text-only links, each opening its app in a new tab, prefilled.
   const venmo = sheet.getByRole('link', { name: new RegExp(`^${w.open.venmo}`) })
@@ -171,6 +173,24 @@ test('turned off, or never turned on, nothing shows and the claim works as befor
   await expect(ana.page.getByText(fill(w.shownNow, { name: 'Bruno' }))).toBeVisible()
   await bruno.page.reload()
   await expect(payButton(bruno.page)).toBeVisible()
+
+  // Ana's Venmo username changes while Bruno owes her: the sheet warns
+  // beside it, and never shows the old one. (Her options were all saved
+  // after the agreement came into force, so each is warned about.)
+  await ana.page.goto('/account')
+  await ana.page.getByLabel(w.venmoLabel).fill('someone-else')
+  await ana.page.getByRole('button', { name: w.save, exact: true }).click()
+  await expect(ana.page.getByText(w.saved)).toBeVisible()
+  await bruno.page.reload()
+  await payButton(bruno.page).click()
+  const sheet = bruno.page.getByRole('dialog')
+  await expect(sheet.locator('.pay-changed')).toHaveCount(4)
+  await expect(
+    sheet.locator('.pay-changed').filter({ hasText: 'Ana changed this Venmo username on' }),
+  ).toHaveCount(1)
+  await expect(sheet).not.toContainText('ana-fixes')
+  await sheet.getByRole('button', { name: w.close, exact: true }).click()
+  await ana.page.goto(bruno.page.url())
   await toggle.uncheck()
   await expect(ana.page.getByText(w.hiddenNow)).toBeVisible()
   await bruno.page.reload()

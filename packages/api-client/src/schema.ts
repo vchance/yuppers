@@ -1456,6 +1456,17 @@ export interface components {
             B: string;
         };
         /**
+         * @description When each of the payee's payment options changed, as RFC 3339, for those
+         *     that changed recently enough to warn the payer about
+         *     ([`CHANGE_WARNING_DAYS`]); null for the others. Never the old value.
+         */
+        PaymentHandleChanges: {
+            cash_app?: string | null;
+            paypal?: string | null;
+            venmo?: string | null;
+            zelle?: string | null;
+        };
+        /**
          * @description A person's payment options, each optional. In a request, what to save;
          *     in a reply, what is saved, as stored: a Venmo username without its `@`,
          *     a $Cashtag without its `$`, a PayPal.Me name, and for Zelle a lower-case
@@ -1496,6 +1507,13 @@ export interface components {
              */
             shown: boolean;
             theirs?: components["schemas"]["PaymentHandles"] | null;
+            /**
+             * @description When each of `theirs` changed, for those that changed after the
+             *     agreement came into force and within `payments::CHANGE_WARNING_DAYS`
+             *     days: the payer is warned beside them to check with the payee
+             *     another way. Never the old value. All null when `theirs` is.
+             */
+            theirs_changed?: components["schemas"]["PaymentHandleChanges"];
         };
         /**
          * Format: binary

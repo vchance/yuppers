@@ -918,6 +918,12 @@
     "prefillsAmountAndNote": "Opens with {amount} and the note filled in. Check both before you send.",
     "prefillsAmount": "Opens with {amount} filled in. Check it, and add the note if you like.",
     "enterAmount": "Enter {amount} in the app.",
+    "changed": {
+      "venmo": "{name} changed this Venmo username on {date}. Check with {name} another way before you pay.",
+      "cash_app": "{name} changed this $Cashtag on {date}. Check with {name} another way before you pay.",
+      "paypal": "{name} changed this PayPal.Me name on {date}. Check with {name} another way before you pay.",
+      "zelle": "{name} changed this Zelle email or phone number on {date}. Check with {name} another way before you pay."
+    },
     "zelleHeading": "Zelle",
     "zelleNoLinks": "Zelle doesn’t support links. Send it from your bank’s app to:",
     "amountLabel": "Amount",

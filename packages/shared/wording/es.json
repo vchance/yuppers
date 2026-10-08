@@ -918,6 +918,12 @@
     "prefillsAmountAndNote": "Se abre con {amount} y la nota ya escritos. Revisa ambos antes de enviar.",
     "prefillsAmount": "Se abre con {amount} ya escrito. Revísalo y agrega la nota si quieres.",
     "enterAmount": "Escribe {amount} en la app.",
+    "changed": {
+      "venmo": "{name} cambió este usuario de Venmo el {date}. Confírmalo con {name} por otro medio antes de pagar.",
+      "cash_app": "{name} cambió este $Cashtag el {date}. Confírmalo con {name} por otro medio antes de pagar.",
+      "paypal": "{name} cambió este nombre de PayPal.Me el {date}. Confírmalo con {name} por otro medio antes de pagar.",
+      "zelle": "{name} cambió este correo o teléfono de Zelle el {date}. Confírmalo con {name} por otro medio antes de pagar."
+    },
     "zelleHeading": "Zelle",
     "zelleNoLinks": "Zelle no admite enlaces. Envíalo desde la app de tu banco a:",
     "amountLabel": "Monto",

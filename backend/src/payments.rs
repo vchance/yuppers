@@ -24,10 +24,11 @@
 
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
+use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::contact::{self, Field, Unreadable};
+use crate::contact::{self, Field};
 use crate::error::{ApiError, ErrorCode};
 
 /// Changes one account may make to its payment options in an hour: saving
@@ -177,34 +178,109 @@ pub const COLUMNS: [(&str, Field); 4] = [
     ("zelle_encrypted", Field::PAYMENT_ZELLE),
 ];
 
-type SealedRow = (
+/// How recently a payment option must have changed for a payer to be warned
+/// beside it: within this many days, and after the agreement came into
+/// force, whichever is later. A changed name while money is owed is how a
+/// payment is stolen after an account is taken over.
+pub const CHANGE_WARNING_DAYS: i64 = 7;
+
+/// When each of the payee's payment options changed, as RFC 3339, for those
+/// that changed recently enough to warn the payer about
+/// ([`CHANGE_WARNING_DAYS`]); null for the others. Never the old value.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, ToSchema)]
+pub struct PaymentHandleChanges {
+    pub venmo: Option<String>,
+    pub cash_app: Option<String>,
+    pub paypal: Option<String>,
+    pub zelle: Option<String>,
+}
+
+impl PaymentHandleChanges {
+    pub fn is_empty(&self) -> bool {
+        self.venmo.is_none()
+            && self.cash_app.is_none()
+            && self.paypal.is_none()
+            && self.zelle.is_none()
+    }
+}
+
+/// A row as stored: each column's ciphertext, then when each was changed.
+type StoredRow = (
     Option<Vec<u8>>,
     Option<Vec<u8>>,
     Option<Vec<u8>>,
     Option<Vec<u8>>,
+    Option<OffsetDateTime>,
+    Option<OffsetDateTime>,
+    Option<OffsetDateTime>,
+    Option<OffsetDateTime>,
 );
 
-fn open(row: SealedRow) -> Result<PaymentHandles, Unreadable> {
+const STORED_COLUMNS: &str = "h.venmo_encrypted, h.cash_app_encrypted, h.paypal_encrypted,
+     h.zelle_encrypted, h.venmo_changed_at, h.cash_app_changed_at, h.paypal_changed_at,
+     h.zelle_changed_at";
+
+/// The four options of a row, each with when it was changed.
+struct Stored {
+    values: [Option<String>; 4],
+    changed: [Option<OffsetDateTime>; 4],
+}
+
+impl Stored {
+    fn handles(&self) -> PaymentHandles {
+        let [venmo, cash_app, paypal, zelle] = self.values.clone();
+        PaymentHandles {
+            venmo,
+            cash_app,
+            paypal,
+            zelle,
+        }
+    }
+}
+
+/// Decrypts a row of `account`'s. A value that does not decrypt, under a key
+/// not configured, after tampering, or copied from another account's row,
+/// fails closed: it is left out, as if there were none, and the failure is
+/// logged with its column and never its content.
+fn open(account: Uuid, row: StoredRow) -> Stored {
     let keys = contact::keys();
-    let (venmo, cash_app, paypal, zelle) = row;
-    Ok(PaymentHandles {
-        venmo: keys.reveal(Field::PAYMENT_VENMO, venmo.as_deref())?,
-        cash_app: keys.reveal(Field::PAYMENT_CASH_APP, cash_app.as_deref())?,
-        paypal: keys.reveal(Field::PAYMENT_PAYPAL, paypal.as_deref())?,
-        zelle: keys.reveal(Field::PAYMENT_ZELLE, zelle.as_deref())?,
-    })
+    let (v, c, p, z, vc, cc, pc, zc) = row;
+    let mut values: [Option<String>; 4] = Default::default();
+    let mut changed = [vc, cc, pc, zc];
+    for (index, sealed) in [v, c, p, z].into_iter().enumerate() {
+        let (column, field) = COLUMNS[index];
+        match keys.reveal(field.owned_by(account), sealed.as_deref()) {
+            Ok(value) => values[index] = value,
+            Err(unreadable) => {
+                tracing::error!(
+                    %unreadable,
+                    table = "payment_handle",
+                    column,
+                    "a stored payment option does not decrypt for its account; it is not shown"
+                );
+                changed[index] = None;
+            }
+        }
+    }
+    Stored { values, changed }
+}
+
+async fn stored(conn: &mut PgConnection, account: Uuid) -> Result<Option<Stored>, ApiError> {
+    let row: Option<StoredRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {STORED_COLUMNS} FROM payment_handle h WHERE h.account_id = $1"
+    )))
+    .bind(account)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.map(|row| open(account, row)))
 }
 
 /// The account's own payment options, decrypted for it.
 pub async fn load(conn: &mut PgConnection, account: Uuid) -> Result<PaymentHandles, ApiError> {
-    let row: Option<SealedRow> = sqlx::query_as(
-        "SELECT venmo_encrypted, cash_app_encrypted, paypal_encrypted, zelle_encrypted
-         FROM payment_handle WHERE account_id = $1",
-    )
-    .bind(account)
-    .fetch_optional(&mut *conn)
-    .await?;
-    Ok(row.map(open).transpose()?.unwrap_or_default())
+    Ok(stored(conn, account)
+        .await?
+        .map(|stored| stored.handles())
+        .unwrap_or_default())
 }
 
 /// Counts one change to the account's payment options against
@@ -234,9 +310,10 @@ async fn count_write(conn: &mut PgConnection, account: Uuid) -> Result<(), ApiEr
 }
 
 /// Saves the account's payment options, replacing what it had: an option
-/// left out is removed. With none left, every agreement it showed them on
-/// stops showing them, so that options saved again later are not shown
-/// anywhere until the person says so.
+/// left out is removed. Each one set to a value it did not have is marked
+/// changed now; one left as it was keeps its time. With none left, every
+/// agreement it showed them on stops showing them, so that options saved
+/// again later are not shown anywhere until the person says so.
 pub async fn save(
     conn: &mut PgConnection,
     account: Uuid,
@@ -244,21 +321,46 @@ pub async fn save(
 ) -> Result<PaymentHandles, ApiError> {
     let handles = handles.normalized()?;
     count_write(conn, account).await?;
+    // Held by `count_write` to the end of the transaction.
+    let before = stored(conn, account).await?;
+    let now = OffsetDateTime::now_utc();
     let keys = contact::keys();
-    let seal = |field: Field, value: &Option<String>| {
-        value.as_deref().map(|value| keys.seal(field, value))
-    };
+    let new = [
+        handles.venmo.clone(),
+        handles.cash_app.clone(),
+        handles.paypal.clone(),
+        handles.zelle.clone(),
+    ];
+    let mut sealed: [Option<Vec<u8>>; 4] = Default::default();
+    let mut changed: [Option<OffsetDateTime>; 4] = Default::default();
+    for (index, value) in new.iter().enumerate() {
+        let Some(value) = value else { continue };
+        sealed[index] = Some(keys.seal(COLUMNS[index].1.owned_by(account), value));
+        changed[index] = match &before {
+            Some(before) if before.values[index].as_ref() == Some(value) => {
+                before.changed[index].or(Some(now))
+            }
+            _ => Some(now),
+        };
+    }
+    let [venmo, cash_app, paypal, zelle] = sealed;
+    let [venmo_at, cash_app_at, paypal_at, zelle_at] = changed;
     sqlx::query(
         "UPDATE payment_handle
          SET venmo_encrypted = $2, cash_app_encrypted = $3, paypal_encrypted = $4,
-             zelle_encrypted = $5, updated_at = now()
+             zelle_encrypted = $5, venmo_changed_at = $6, cash_app_changed_at = $7,
+             paypal_changed_at = $8, zelle_changed_at = $9, updated_at = now()
          WHERE account_id = $1",
     )
     .bind(account)
-    .bind(seal(Field::PAYMENT_VENMO, &handles.venmo))
-    .bind(seal(Field::PAYMENT_CASH_APP, &handles.cash_app))
-    .bind(seal(Field::PAYMENT_PAYPAL, &handles.paypal))
-    .bind(seal(Field::PAYMENT_ZELLE, &handles.zelle))
+    .bind(venmo)
+    .bind(cash_app)
+    .bind(paypal)
+    .bind(zelle)
+    .bind(venmo_at)
+    .bind(cash_app_at)
+    .bind(paypal_at)
+    .bind(zelle_at)
     .execute(&mut *conn)
     .await?;
     if handles.is_empty() {
@@ -333,30 +435,55 @@ pub async fn shown(
     .await
 }
 
+/// From when a change to a payment option is warned about on an agreement
+/// that came into force at `in_force`: the later of that moment and
+/// [`CHANGE_WARNING_DAYS`] before `now`.
+pub fn warn_since(in_force: OffsetDateTime, now: OffsetDateTime) -> OffsetDateTime {
+    in_force.max(now - time::Duration::days(CHANGE_WARNING_DAYS))
+}
+
 /// The payee's payment options as the person who owes them money on an
 /// agreement sees them: only while the payee shows them on this agreement
-/// and their account is active, and `None` when they have none. Whether the
-/// viewer owes money still to be paid is the caller's to decide.
+/// and their account is active, and `None` when they have none; with when
+/// each changed, for those changed after `since`. Whether the viewer owes
+/// money still to be paid is the caller's to decide.
 pub async fn for_payer(
     conn: &mut PgConnection,
     payee: Uuid,
     exchange: Uuid,
-) -> Result<Option<PaymentHandles>, ApiError> {
-    let row: Option<SealedRow> = sqlx::query_as(
-        "SELECT h.venmo_encrypted, h.cash_app_encrypted, h.paypal_encrypted, h.zelle_encrypted
+    since: OffsetDateTime,
+) -> Result<Option<(PaymentHandles, PaymentHandleChanges)>, ApiError> {
+    let row: Option<StoredRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {STORED_COLUMNS}
          FROM payment_offer o
          JOIN payment_handle h ON h.account_id = o.account_id
          JOIN account a ON a.id = o.account_id AND a.status = 'ACTIVE'
-         WHERE o.exchange_id = $1 AND o.account_id = $2",
-    )
+         WHERE o.exchange_id = $1 AND o.account_id = $2"
+    )))
     .bind(exchange)
     .bind(payee)
     .fetch_optional(&mut *conn)
     .await?;
-    Ok(row
-        .map(open)
-        .transpose()?
-        .filter(|handles| !handles.is_empty()))
+    let Some(stored) = row.map(|row| open(payee, row)) else {
+        return Ok(None);
+    };
+    let handles = stored.handles();
+    if handles.is_empty() {
+        return Ok(None);
+    }
+    let recent = |index: usize| {
+        stored.values[index].as_ref()?;
+        stored.changed[index]
+            .filter(|at| *at > since)
+            .map(crate::exchanges::dto::rfc3339)
+    };
+    let changes = PaymentHandleChanges {
+        venmo: recent(0),
+        cash_app: recent(1),
+        paypal: recent(2),
+        zelle: recent(3),
+    };
+    Ok(Some((handles, changes)))
 }
 
 /// Everything of an account's payment options, for deleting the account:
@@ -376,6 +503,7 @@ pub async fn forget(conn: &mut PgConnection, account: Uuid) -> Result<(), sqlx::
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contact::Unreadable;
 
     #[test]
     fn a_venmo_username_is_5_to_30_letters_digits_hyphens_or_underscores() {
@@ -517,18 +645,42 @@ mod tests {
     }
 
     #[test]
-    fn an_option_does_not_decrypt_in_another_column() {
+    fn an_option_does_not_decrypt_in_another_column_or_another_account() {
         let keys = contact::Keys::first(
             &contact::KeyConfig::new(contact::Key::from_bytes([7; 32]), None).unwrap(),
         );
-        let sealed = keys.seal(Field::PAYMENT_VENMO, "dana-fixes");
+        let (ana, ben) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let sealed = keys.seal(Field::PAYMENT_VENMO.owned_by(ana), "dana-fixes");
         for (_, other) in COLUMNS.iter().skip(1) {
-            assert_eq!(keys.open(*other, &sealed), Err(Unreadable), "{other:?}");
+            assert_eq!(
+                keys.open(other.owned_by(ana), &sealed),
+                Err(Unreadable),
+                "{other:?}"
+            );
         }
         assert_eq!(keys.open(Field::ACCOUNT_EMAIL, &sealed), Err(Unreadable));
+        // Bound to Ana's account: not Ben's, and not unbound.
         assert_eq!(
-            keys.open(Field::PAYMENT_VENMO, &sealed).unwrap(),
+            keys.open(Field::PAYMENT_VENMO.owned_by(ben), &sealed),
+            Err(Unreadable)
+        );
+        assert_eq!(keys.open(Field::PAYMENT_VENMO, &sealed), Err(Unreadable));
+        assert_eq!(
+            keys.open(Field::PAYMENT_VENMO.owned_by(ana), &sealed)
+                .unwrap(),
             "dana-fixes"
         );
+    }
+
+    #[test]
+    fn a_change_is_warned_about_from_the_later_of_coming_into_force_and_the_last_days() {
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let week = time::Duration::days(CHANGE_WARNING_DAYS);
+        // In force a month ago: only the last seven days count.
+        let month_ago = now - time::Duration::days(30);
+        assert_eq!(warn_since(month_ago, now), now - week);
+        // In force two days ago: everything since then.
+        let two_days_ago = now - time::Duration::days(2);
+        assert_eq!(warn_since(two_days_ago, now), two_days_ago);
     }
 }

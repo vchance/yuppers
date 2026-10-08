@@ -1,5 +1,11 @@
 import type { Account, ErrorCode, ExchangeSummary, ExchangeView } from '@yuppers/api-client'
-import type { HistoryPage, PaymentHandles, RecordDocument, RevisionView } from '@yuppers/shared'
+import type {
+  HistoryPage,
+  PaymentHandleChanges,
+  PaymentHandles,
+  RecordDocument,
+  RevisionView,
+} from '@yuppers/shared'
 
 /*
  * A stand-in for the service, for rendering the web app's screens in a test
@@ -538,6 +544,8 @@ export interface FakeService {
    * agreement in force where the reader owes money still to be paid.
    */
   theirs: PaymentHandles | null
+  /** When each of `theirs` changed, where recent enough to warn about. */
+  theirsChanged: PaymentHandleChanges
   fetch: typeof fetch
 }
 
@@ -555,6 +563,7 @@ export function fakeService(account: Account | null): FakeService {
     handles: { venmo: null, cash_app: null, paypal: null, zelle: null },
     shown: new Set(),
     theirs: null,
+    theirsChanged: { venmo: null, cash_app: null, paypal: null, zelle: null },
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -721,6 +730,9 @@ function withPayments(service: FakeService, exchange: ExchangeView): ExchangeVie
     payment_options: {
       shown: service.shown.has(exchange.id),
       theirs: owes ? service.theirs : null,
+      theirs_changed: owes
+        ? service.theirsChanged
+        : { venmo: null, cash_app: null, paypal: null, zelle: null },
     },
   }
 }

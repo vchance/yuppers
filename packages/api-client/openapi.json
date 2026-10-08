@@ -4277,6 +4277,36 @@
           }
         }
       },
+      "PaymentHandleChanges": {
+        "type": "object",
+        "description": "When each of the payee's payment options changed, as RFC 3339, for those\nthat changed recently enough to warn the payer about\n([`CHANGE_WARNING_DAYS`]); null for the others. Never the old value.",
+        "properties": {
+          "cash_app": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paypal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "venmo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zelle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "PaymentHandles": {
         "type": "object",
         "description": "A person's payment options, each optional. In a request, what to save;\nin a reply, what is saved, as stored: a Venmo username without its `@`,\na $Cashtag without its `$`, a PayPal.Me name, and for Zelle a lower-case\nemail address or a US number in international form (`+12025550142`).",
@@ -4344,6 +4374,10 @@
                 "type": "null"
               }
             ]
+          },
+          "theirs_changed": {
+            "$ref": "#/components/schemas/PaymentHandleChanges",
+            "description": "When each of `theirs` changed, for those that changed after the\nagreement came into force and within `payments::CHANGE_WARNING_DAYS`\ndays: the payer is warned beside them to check with the payee\nanother way. Never the old value. All null when `theirs` is."
           }
         }
       },

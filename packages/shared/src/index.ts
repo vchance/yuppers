@@ -185,6 +185,7 @@ export type {
   WalletLink,
   WalletPlatform,
   PaymentHandles,
+  PaymentHandleChanges,
   PaymentOptionsShown,
   PaymentOptionsView,
 } from './api'

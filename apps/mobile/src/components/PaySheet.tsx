@@ -5,6 +5,7 @@ import {
   paymentNote,
   payOptions,
   type ExchangeApi,
+  type PaymentHandleChanges,
   type PaymentHandles,
   type PayOption,
 } from '@yuppers/shared';
@@ -17,7 +18,7 @@ import { focusOn } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 import { radius, space, type, useColors } from '../lib/theme';
-import { Actions, Button, Heading, Hint, Label, Notice, P } from './ui';
+import { Actions, Button, ErrorNote, Heading, Hint, Label, Notice, P } from './ui';
 
 type Contribution = components['schemas']['ContributionDto'];
 
@@ -69,12 +70,15 @@ export function PaySheet({
   const [handles, setHandles] = useState<PaymentHandles | null | undefined>(
     exchange.payment_options?.theirs,
   );
+  const [changes, setChanges] = useState<PaymentHandleChanges | null | undefined>(
+    exchange.payment_options?.theirs_changed,
+  );
 
   const amountMinor = contribution.amount_minor ?? 0;
   const amount = money(amountMinor, exchange.currency);
   const plainAmount = fromMinorUnits(amountMinor, fractionDigitsOf(exchange.currency));
   const note = paymentNote(w.note, contribution.description, exchange.display_code);
-  const options = payOptions(handles, amountMinor, exchange.currency, note);
+  const options = payOptions(handles, amountMinor, exchange.currency, note, changes);
   const title = fmt(w.sheetTitle, { name: otherName, amount });
 
   useEffect(() => {
@@ -84,6 +88,7 @@ export function PaySheet({
         if (cancelled) return;
         setFound(fresh);
         setHandles(fresh.payment_options?.theirs);
+        setChanges(fresh.payment_options?.theirs_changed);
       },
       () => {},
     );
@@ -132,7 +137,13 @@ export function PaySheet({
                 <Fact label={w.amountLabel} value={amount} copy={plainAmount} />
                 <Fact label={w.noteLabel} value={note} copy={note} />
                 {options.map((option) => (
-                  <Option key={option.app} option={option} amount={amount} open={open} />
+                  <Option
+                    key={option.app}
+                    option={option}
+                    amount={amount}
+                    otherName={otherName}
+                    open={open}
+                  />
                 ))}
               </>
             )}
@@ -172,21 +183,30 @@ function Fact({ label, value, copy }: { label: string; value: string; copy: stri
 function Option({
   option,
   amount,
+  otherName,
   open,
 }: {
   option: PayOption;
   amount: string;
+  otherName: string;
   open(url: string): void;
 }) {
-  const { wording, fmt } = useI18n();
+  const { wording, fmt, moment } = useI18n();
   const colors = useColors();
   const w = wording.payments;
+  // Changed while money is owed: the way a payment is stolen after an
+  // account is taken over. Said before the button, never the old value.
+  const warning = option.changedAt
+    ? fmt(w.changed[option.app], { name: otherName, date: moment(option.changedAt) })
+    : null;
+  const changed = warning ? <ErrorNote>{warning}</ErrorNote> : null;
   const boxStyle = [styles.option, { borderColor: colors.divider, backgroundColor: colors.surfaceRaised }];
 
   if (option.app === 'zelle') {
     return (
       <View style={boxStyle} testID="pay-option-zelle">
         <Heading level={3}>{w.zelleHeading}</Heading>
+        {changed}
         <P>{w.zelleNoLinks}</P>
         <View style={styles.row}>
           <Text
@@ -209,11 +229,12 @@ function Option({
       : fmt(w.prefillsAmount, { amount });
   return (
     <View style={boxStyle} testID={`pay-option-${option.app}`}>
+      {changed}
       <Actions>
         <Button
           testID={`pay-open-${option.app}`}
           label={w.open[option.app]}
-          hint={`${handle}. ${told}`}
+          hint={[warning, `${handle}.`, told].filter(Boolean).join(' ')}
           onPress={() => open(option.url)}
         />
       </Actions>

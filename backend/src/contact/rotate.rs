@@ -19,8 +19,40 @@ pub struct Column {
     pub table: &'static str,
     pub column: &'static str,
     pub field: Field,
-    /// Each value is also bound to its row's `id` ([`Field::row`]).
-    pub by_row: bool,
+    /// What else each value is bound to besides its column.
+    pub bound: Bound,
+}
+
+/// What a value is bound to besides its table and column.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    /// Nothing more.
+    Column,
+    /// Its row's `id` ([`Field::row`]): the records of consent.
+    Row,
+    /// Its row's `account_id` ([`Field::owned_by`]): payment options.
+    Account,
+}
+
+impl Bound {
+    /// What a query selects to bind a value, as text.
+    fn select(self) -> &'static str {
+        match self {
+            Bound::Column => "NULL::text",
+            Bound::Row => "id::text",
+            Bound::Account => "account_id::text",
+        }
+    }
+
+    /// The field a value of `column` is bound to, from what [`select`] read.
+    fn field(self, column: Field, key: Option<&str>) -> Option<Field> {
+        match (self, key) {
+            (Bound::Column, _) => Some(column),
+            (Bound::Row, Some(id)) => id.parse().ok().map(|id| column.row(id)),
+            (Bound::Account, Some(id)) => id.parse().ok().map(|id| column.owned_by(id)),
+            _ => None,
+        }
+    }
 }
 
 impl Column {
@@ -37,49 +69,49 @@ pub const COLUMNS: [Column; 8] = [
         table: "account",
         column: "email_encrypted",
         field: Field::ACCOUNT_EMAIL,
-        by_row: false,
+        bound: Bound::Column,
     },
     Column {
         table: "account",
         column: "phone_encrypted",
         field: Field::ACCOUNT_PHONE,
-        by_row: false,
+        bound: Bound::Column,
     },
     Column {
         table: "sms_consent",
         column: "phone_encrypted",
         field: Field::SMS_CONSENT_PHONE,
-        by_row: true,
+        bound: Bound::Row,
     },
     Column {
         table: "sms_code_consent",
         column: "phone_encrypted",
         field: Field::SMS_CODE_CONSENT_PHONE,
-        by_row: true,
+        bound: Bound::Row,
     },
     Column {
         table: "payment_handle",
         column: "venmo_encrypted",
         field: Field::PAYMENT_VENMO,
-        by_row: false,
+        bound: Bound::Account,
     },
     Column {
         table: "payment_handle",
         column: "cash_app_encrypted",
         field: Field::PAYMENT_CASH_APP,
-        by_row: false,
+        bound: Bound::Account,
     },
     Column {
         table: "payment_handle",
         column: "paypal_encrypted",
         field: Field::PAYMENT_PAYPAL,
-        by_row: false,
+        bound: Bound::Account,
     },
     Column {
         table: "payment_handle",
         column: "zelle_encrypted",
         field: Field::PAYMENT_ZELLE,
-        by_row: false,
+        bound: Bound::Account,
     },
 ];
 
@@ -139,13 +171,13 @@ pub async fn rotate(owner: &PgPool, keys: &Keys) -> Result<Rotation, store::Open
     let mut rotation = Rotation::default();
     for target in COLUMNS {
         let Column { table, column, .. } = target;
-        let id = if target.by_row { "id" } else { "NULL::bigint" };
+        let id = target.bound.select();
         let current = i16::from(keys.current_id());
         let mut done = Rotated::default();
         let mut skipped: Vec<String> = Vec::new();
         loop {
             let mut tx = owner.begin().await?;
-            let rows: Vec<(String, Option<i64>, Vec<u8>)> =
+            let rows: Vec<(String, Option<String>, Vec<u8>)> =
                 sqlx::query_as(sqlx::AssertSqlSafe(format!(
                     "SELECT ctid::text, {id}, {column} FROM {table}
                      WHERE {column} IS NOT NULL AND get_byte({column}, 0) <> $1
@@ -159,10 +191,16 @@ pub async fn rotate(owner: &PgPool, keys: &Keys) -> Result<Rotation, store::Open
                 .fetch_all(&mut *tx)
                 .await?;
             let taken = rows.len();
-            for (tid, row, sealed) in rows {
-                let field = row.map_or(target.field, |row| target.field.row(row));
-                match keys.open(field, &sealed) {
-                    Ok(value) => {
+            for (tid, key, sealed) in rows {
+                let opened = target
+                    .bound
+                    .field(target.field, key.as_deref())
+                    .map(|field| (field, keys.open(field, &sealed)));
+                match opened
+                    .ok_or(Unreadable)
+                    .and_then(|(field, value)| Ok((field, value?)))
+                {
+                    Ok((field, value)) => {
                         sqlx::query(sqlx::AssertSqlSafe(format!(
                             "UPDATE {table} SET {column} = $2 WHERE ctid = $1::tid"
                         )))

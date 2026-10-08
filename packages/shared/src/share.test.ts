@@ -7,6 +7,7 @@ import {
   boundToProblem,
   boundToProblemText,
   invitationBoundTo,
+  invitationOptions,
   invitationForProblem,
   NAMED_INVITATION,
   shareAddresses,
@@ -136,4 +137,10 @@ test('someone has to be named, unless a link for anyone is chosen on purpose', (
   const anyone = { anyone: true, to: 'carla@' }
   expect(invitationForProblem(anyone, both)).toBeNull()
   expect(invitationBoundTo(anyone)).toBeNull()
+})
+
+test('the service is told outright who a link is for: the person named, or anyone', () => {
+  expect(invitationOptions(' carla@example.test ')).toEqual({ bound_to: 'carla@example.test' })
+  expect(invitationOptions(null)).toEqual({ for_anyone: true })
+  expect(invitationOptions('  ')).toEqual({ for_anyone: true })
 })

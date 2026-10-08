@@ -61,7 +61,7 @@ async fn new_link(app: &App, deal: &Deal) -> Reply {
     app.post(
         &deal.ana,
         &format!("/v1/exchanges/{}/invitation", deal.exchange),
-        json!({}),
+        json!({ "for_anyone": true }),
     )
     .await
 }
@@ -112,8 +112,12 @@ async fn every_way_in(app: &App, user: &User, deal: &Deal) -> Vec<Reply> {
         )
         .await,
         leave(app, user, &deal.exchange).await,
-        app.post(user, &format!("{path}/invitation"), json!({}))
-            .await,
+        app.post(
+            user,
+            &format!("{path}/invitation"),
+            json!({ "for_anyone": true }),
+        )
+        .await,
         app.post(
             user,
             &format!("{path}/reports"),

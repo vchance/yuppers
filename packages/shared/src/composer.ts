@@ -15,6 +15,7 @@ import {
   type Problem,
 } from './draft'
 import { formatMessage } from './message'
+import { invitationOptions } from './share'
 import type { Wording } from './wording/types'
 
 type ContributionType = components['schemas']['ContributionType']
@@ -120,7 +121,7 @@ export function revisionToSend(
     terms: built.terms,
     note: built.note,
     consent: consentShown(language),
-    invitation: composerKind(exchange) === 'first' ? { bound_to: boundTo.trim() || null } : null,
+    invitation: composerKind(exchange) === 'first' ? invitationOptions(boundTo) : null,
   }
 }
 

@@ -11,6 +11,7 @@ import type {
 
 import { clientHeader, parseVersion, type ClientIdentity } from './client-version'
 import { idempotencyKeys } from './idempotency'
+import { invitationOptions } from './share'
 import type { ReportReason } from './safety'
 
 type Schemas = components['schemas']
@@ -356,7 +357,7 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
         client.POST('/v1/exchanges/{id}/invitation', {
           headers: headers(),
           params: { path: { id } },
-          body: { bound_to: boundTo },
+          body: invitationOptions(boundTo),
         }),
       )
       return issued.invitation_token

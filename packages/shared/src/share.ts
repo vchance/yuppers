@@ -149,6 +149,19 @@ export function invitationBoundTo(choice: InvitationChoice): string | null {
 }
 
 /**
+ * Who an invitation is for, as the service must be told it outright: the
+ * person named, or `for_anyone` for a link anyone who has it can claim. The
+ * service refuses a request that says neither, so a link for anyone is
+ * never what leaving something out gets.
+ */
+export function invitationOptions(
+  boundTo: string | null,
+): { bound_to: string } | { for_anyone: true } {
+  const named = boundTo?.trim()
+  return named ? { bound_to: named } : { for_anyone: true }
+}
+
+/**
  * Checks who an invitation is for before anything is signed, gently: only
  * what is plainly not an email address or phone number, or one the person
  * could never sign in with here. Empty is fine; it names nobody. Where the

@@ -131,6 +131,7 @@ export class ApiPerson {
         terms,
         consent: CONSENT,
         note: options.note ?? null,
+        invitation: { for_anyone: true },
       },
       true,
     )) as { invitation_token: string }

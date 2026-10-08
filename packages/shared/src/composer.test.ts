@@ -168,8 +168,8 @@ describe('the revision to send', () => {
   })
 
   test('a first proposal issues the invitation, bound to someone only if named', () => {
-    expect(revisionToSend(draft, built(), 'en', '').invitation).toEqual({ bound_to: null })
-    expect(revisionToSend(draft, built(), 'en', '  ').invitation).toEqual({ bound_to: null })
+    expect(revisionToSend(draft, built(), 'en', '').invitation).toEqual({ for_anyone: true })
+    expect(revisionToSend(draft, built(), 'en', '  ').invitation).toEqual({ for_anyone: true })
     expect(revisionToSend(draft, built(), 'en', ' ben@example.test ').invitation).toEqual({
       bound_to: 'ben@example.test',
     })

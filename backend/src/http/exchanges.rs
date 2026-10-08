@@ -262,6 +262,7 @@ pub async fn leave(
     request_body = InvitationOptions,
     responses(
         (status = 200, description = "The new link token, shown once", body = InvitationIssued),
+        (status = 422, description = "Neither or both of `bound_to` and `for_anyone: true`", body = ErrorBody),
         (status = 403, description = "Only the initiator can invite", body = ErrorBody),
         (status = 409, description = "Someone is in the invited party's place", body = ErrorBody)
     )

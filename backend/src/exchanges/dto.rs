@@ -215,11 +215,18 @@ pub struct SaveDraft {
     pub body: serde_json::Value,
 }
 
+/// Who an invitation link is for, said outright: one of `bound_to` and
+/// `for_anyone: true`, never both and never neither. A link anyone holding
+/// it can claim is never what a request gets by leaving something out.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct InvitationOptions {
     /// Names who the invitation is for: only an account that has verified
     /// this email address or phone number can claim it.
     pub bound_to: Option<String>,
+    /// `true` for a link anyone who has it can claim. Required, as `true`,
+    /// when `bound_to` is not given.
+    #[serde(default)]
+    pub for_anyone: bool,
 }
 
 /// Sending a revision signs it.
@@ -231,7 +238,8 @@ pub struct SendRevision {
     /// A message to the other party. Not part of what is signed.
     pub note: Option<String>,
     pub consent: Consent,
-    /// Used when this is the first revision, which also issues the invitation.
+    /// Required when this is the first revision, which also issues the
+    /// invitation; ignored after.
     pub invitation: Option<InvitationOptions>,
 }
 

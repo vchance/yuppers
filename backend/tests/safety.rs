@@ -574,7 +574,7 @@ async fn a_dead_link_takes_no_report_and_says_nothing_about_why() {
     app.post(
         &revoked.ana,
         &format!("/v1/exchanges/{}/invitation", revoked.exchange),
-        json!({}),
+        json!({ "for_anyone": true }),
     )
     .await
     .ok();
@@ -1043,7 +1043,7 @@ async fn a_block_by_someone_not_yet_confirmed_takes_them_out_of_the_exchange() {
         .post(
             &ana,
             &format!("/v1/exchanges/{exchange}/invitation"),
-            json!({}),
+            json!({ "for_anyone": true }),
         )
         .await
         .ok()["invitation_token"]
@@ -1385,7 +1385,7 @@ async fn every_dead_link_is_refused_after_the_same_round_trips_as_a_made_up_one(
     app.post(
         ana,
         &format!("/v1/exchanges/{replaced}/invitation"),
-        json!({}),
+        json!({ "for_anyone": true }),
     )
     .await
     .ok();

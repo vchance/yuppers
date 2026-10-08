@@ -13,8 +13,11 @@
 //! **Repeats.** A notification is queued once and delivered at least once:
 //! a worker that dies after Resend took a message, or a send that timed out
 //! after it did, tries again. Each try carries the same `Idempotency-Key`,
-//! made from the outbox ID, and for 24 hours Resend answers a repeat with
-//! its first answer instead of sending again
+//! made from the outbox row's own random key (`outbox.delivery_key`, never
+//! its ID, which starts again from 1 after a reset or a restore, or in
+//! another environment sending through the same Resend team), and for 24
+//! hours Resend answers a repeat with its first answer instead of sending
+//! again
 //! (<https://resend.com/docs/dashboard/emails/idempotency-keys>). A
 //! one-time code has no outbox row and no key: asking again is asking for
 //! another code.
@@ -25,9 +28,10 @@
 //! | Answer | Means | Here |
 //! |---|---|---|
 //! | `400`, `422` | the request is wrong: an address Resend will not take, a missing field | [`Undeliverable`]: given up on at once |
-//! | `409 invalid_idempotent_request` | this outbox row was already sent with other content (its language changed between tries) | [`Undeliverable`]: one copy is enough |
-//! | `401`, `403` | the key is missing, wrong, revoked or restricted, or the From domain is not verified | a configuration error, logged as one, and retried like a wrong SMTP password |
-//! | `409` (other), `429`, `5xx`, anything else | busy, over the rate (10 a second per team) or the quota, or down | retried |
+//! | `409 invalid_idempotent_request` | this outbox row was already sent with other content (its language changed between tries) | [`KeyConflict`]: one copy is enough; given up on and logged as its own case |
+//! | `401`, `403` | the key is missing, wrong, revoked or restricted, the From domain is not verified, or the account is over its quota (`email_above_quota`) | [`Outage`]: a configuration error, logged as one; the try is not counted, and the message waits up to an hour between tries for a day |
+//! | `429 daily_quota_exceeded`, `429 monthly_quota_exceeded` | the plan's quota is spent | [`Outage`], as above |
+//! | `409` (other), `429` (other), `5xx`, anything else | busy, over the rate (10 a second per team), or down | retried |
 //! | no answer in time, no connection | | retried |
 //!
 //! What this file never does: write the key, the recipient, the subject or
@@ -44,7 +48,7 @@ use serde_json::json;
 
 use super::smtp::Secret;
 use super::wording::Wording;
-use super::{Email, EmailSender, Undeliverable};
+use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
 use crate::auth::{CodeMessage, CodeSender, SendFuture, SignInChannel};
 use crate::build_info::BuildInfo;
 use crate::domain::identity::Identifier;
@@ -99,9 +103,10 @@ impl ResendSender {
         })
     }
 
-    /// The key a queued message is sent under, the same on every try.
-    pub fn idempotency_key(reference: i64) -> String {
-        format!("yuppers-outbox/{reference}")
+    /// The key a queued message is sent under, the same on every try:
+    /// its outbox row's own random key.
+    pub fn idempotency_key(key: uuid::Uuid) -> String {
+        format!("yuppers-outbox/{key}")
     }
 
     /// The request's body.
@@ -207,7 +212,7 @@ pub fn accepted(answer: &Answer) -> anyhow::Result<()> {
             Err(Undeliverable(format!("Resend refused the message ({described})")).into())
         }
         StatusCode::CONFLICT if name.as_deref() == Some("invalid_idempotent_request") => {
-            Err(Undeliverable(format!(
+            Err(KeyConflict(format!(
                 "Resend already took this message, with other content, under the same key \
                  ({described})"
             ))
@@ -220,9 +225,25 @@ pub fn accepted(answer: &Answer) -> anyhow::Result<()> {
                 status = status.as_u16(),
                 name = name.as_deref().unwrap_or("none"),
                 "Resend refused the API key or the sender: check RESEND_API_KEY, its sending \
-                 access, and that EMAIL_FROM's domain is verified in Resend"
+                 access, that EMAIL_FROM's domain is verified in Resend, and the account's quota"
             );
-            anyhow::bail!("Resend refused the API key or the sender ({described})")
+            Err(Outage(format!(
+                "Resend refused the API key or the sender ({described})"
+            ))
+            .into())
+        }
+        StatusCode::TOO_MANY_REQUESTS
+            if matches!(
+                name.as_deref(),
+                Some("daily_quota_exceeded" | "monthly_quota_exceeded")
+            ) =>
+        {
+            tracing::error!(
+                status = status.as_u16(),
+                name = name.as_deref().unwrap_or("none"),
+                "Resend's sending quota is spent: nothing goes until it renews or the plan changes"
+            );
+            Err(Outage(format!("Resend's sending quota is spent ({described})")).into())
         }
         _ => anyhow::bail!("Resend did not take the message for now ({described})"),
     }
@@ -236,7 +257,7 @@ impl EmailSender for ResendSender {
                 &email.subject,
                 &email.body,
                 email.html.as_deref(),
-                Some(Self::idempotency_key(email.reference)),
+                Some(Self::idempotency_key(email.key)),
             )
             .await
         })
@@ -322,30 +343,47 @@ mod tests {
     }
 
     #[test]
-    fn the_idempotency_key_is_the_outbox_row_and_within_resends_limit() {
-        let key = ResendSender::idempotency_key(i64::MAX);
-        assert_eq!(key, format!("yuppers-outbox/{}", i64::MAX));
+    fn the_idempotency_key_is_the_outbox_rows_own_and_within_resends_limit() {
+        let row = uuid::Uuid::new_v4();
+        let key = ResendSender::idempotency_key(row);
+        assert_eq!(key, format!("yuppers-outbox/{row}"));
         assert!((1..=256).contains(&key.len()));
-        assert_eq!(key, ResendSender::idempotency_key(i64::MAX));
+        assert_eq!(key, ResendSender::idempotency_key(row));
+        assert_ne!(key, ResendSender::idempotency_key(uuid::Uuid::new_v4()));
     }
 
     #[test]
     fn refusals_are_classified_and_name_the_status_and_error_name_only() {
         assert!(accepted(&answer(200, r#"{"id":"x"}"#)).is_ok());
         let quoting = r#"{"statusCode":422,"name":"validation_error","message":"Invalid `to` field: ana@example.test"}"#;
-        for (status, body, permanent) in [
-            (422, quoting, true),
-            (400, r#"{"name":"validation_error","message":"m"}"#, true),
-            (409, r#"{"name":"invalid_idempotent_request"}"#, true),
-            (409, r#"{"name":"concurrent_idempotent_requests"}"#, false),
-            (401, r#"{"name":"missing_api_key"}"#, false),
-            (403, r#"{"name":"validation_error"}"#, false),
-            (429, r#"{"name":"rate_limit_exceeded"}"#, false),
-            (500, "<html>oops</html>", false),
-            (503, "", false),
+        // What each is: given up on at once (U), a key conflict (K), an
+        // outage (O), or retried (R).
+        for (status, body, kind) in [
+            (422, quoting, 'U'),
+            (400, r#"{"name":"validation_error","message":"m"}"#, 'U'),
+            (409, r#"{"name":"invalid_idempotent_request"}"#, 'K'),
+            (409, r#"{"name":"concurrent_idempotent_requests"}"#, 'R'),
+            (401, r#"{"name":"missing_api_key"}"#, 'O'),
+            (403, r#"{"name":"validation_error"}"#, 'O'),
+            (403, r#"{"name":"email_above_quota"}"#, 'O'),
+            (429, r#"{"name":"daily_quota_exceeded"}"#, 'O'),
+            (429, r#"{"name":"monthly_quota_exceeded"}"#, 'O'),
+            (429, r#"{"name":"rate_limit_exceeded"}"#, 'R'),
+            (429, "", 'R'),
+            (500, "<html>oops</html>", 'R'),
+            (503, "", 'R'),
         ] {
             let error = accepted(&answer(status, body)).unwrap_err();
-            assert_eq!(error.is::<Undeliverable>(), permanent, "{status} {body}");
+            let found = if error.is::<Undeliverable>() {
+                'U'
+            } else if error.is::<KeyConflict>() {
+                'K'
+            } else if error.is::<Outage>() {
+                'O'
+            } else {
+                'R'
+            };
+            assert_eq!(found, kind, "{status} {body}");
             let text = format!("{error:#}");
             assert!(text.contains(&format!("HTTP {status}")), "{text}");
             assert!(!text.contains("ana@"), "{text}");

@@ -73,6 +73,8 @@ enum Behavior {
     /// Speaks SMTP and refuses every recipient, quoting the address back
     /// the way real servers do.
     Reject,
+    /// Speaks SMTP and refuses the credentials.
+    WrongPassword,
 }
 
 struct Server {
@@ -94,11 +96,8 @@ impl Server {
                 let store = store.clone();
                 tokio::spawn(async move {
                     match behavior {
-                        Behavior::Serve => {
-                            let _ = converse(stream, store, false).await;
-                        }
-                        Behavior::Reject => {
-                            let _ = converse(stream, store, true).await;
+                        Behavior::Serve | Behavior::Reject | Behavior::WrongPassword => {
+                            let _ = converse(stream, store, behavior).await;
                         }
                         Behavior::Hang => {
                             // Hold the connection open and silent.
@@ -134,8 +133,9 @@ fn angle(line: &str) -> String {
 async fn converse(
     stream: TcpStream,
     store: Arc<Mutex<Vec<Received>>>,
-    reject: bool,
+    behavior: Behavior,
 ) -> std::io::Result<()> {
+    let reject = matches!(behavior, Behavior::Reject);
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
     writer.write_all(b"220 test.invalid ESMTP\r\n").await?;
@@ -145,6 +145,8 @@ async fn converse(
         let reply: &[u8] = if upper.starts_with("EHLO") || upper.starts_with("HELO") {
             // No STARTTLS: a client that insists on it must give up here.
             b"250-test.invalid\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n"
+        } else if line.starts_with("AUTH PLAIN ") && matches!(behavior, Behavior::WrongPassword) {
+            b"535 5.7.8 Authentication credentials invalid\r\n"
         } else if let Some(credential) = line.strip_prefix("AUTH PLAIN ") {
             current.auth = Some(credential.to_owned());
             b"235 2.7.0 ok\r\n"
@@ -220,6 +222,7 @@ fn email(to: &str, reference: i64) -> Email {
         body: "Nothing to see.".to_owned(),
         html: None,
         reference,
+        key: uuid::Uuid::new_v4(),
     }
 }
 
@@ -323,6 +326,10 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
     .await
     .unwrap();
     assert_eq!((delivered.sent, delivered.failed), (4, 0));
+    let keys: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT delivery_key FROM outbox")
+        .fetch_all(&app.db)
+        .await
+        .unwrap();
 
     let received = server.received();
     let got: BTreeSet<(String, String)> = received
@@ -371,11 +378,13 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
             "{}",
             message.body()
         );
+        // The outbox row's own random key, never its ID.
         let id = parsed.message_id().unwrap();
-        assert!(
-            id.starts_with("outbox-") && id.ends_with("@example.test"),
-            "{id}"
-        );
+        let key = id
+            .strip_prefix("outbox-")
+            .and_then(|rest| rest.strip_suffix("@example.test"))
+            .unwrap_or_else(|| panic!("{id}"));
+        assert!(keys.contains(&key.parse().unwrap()), "{id}");
         // The credentials went to the server, in the one place they belong.
         assert_eq!(
             message.auth.as_deref(),
@@ -626,6 +635,54 @@ impl std::io::Write for Log {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[tokio::test]
+async fn refused_credentials_are_an_outage_not_counted_against_the_message() {
+    let turn = TURN.lock().await;
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber =
+        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
+            writer.clone()
+        });
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let (app, _turn) = app_in_turn(turn).await;
+    app.active().await;
+    let server = Server::start(Behavior::WrongPassword).await;
+    let rules = DeliveryRules::default();
+    let now = OffsetDateTime::now_utc();
+    let delivered = deliver_due(
+        &app.db,
+        &delivery(sender(server.addr, TlsMode::None), rules.clone()),
+        now,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        (delivered.sent, delivered.failed, delivered.given_up),
+        (0, 4, 0)
+    );
+    for (attempts, error) in outbox(&app).await {
+        assert_eq!(attempts, 0);
+        assert!(error.unwrap().contains("reply code 535"));
+    }
+    let log = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
+    assert!(log.contains("refused the credentials"), "{log}");
+    assert!(!log.contains(PASSWORD), "{log}");
+
+    // A day on, given up.
+    let delivered = deliver_due(
+        &app.db,
+        &delivery(sender(server.addr, TlsMode::None), rules.clone()),
+        now + rules.outage_max_age + time::Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(delivered.given_up, 4);
+    for (attempts, _) in outbox(&app).await {
+        assert_eq!(attempts, rules.max_attempts);
     }
 }
 

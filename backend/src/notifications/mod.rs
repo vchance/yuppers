@@ -33,10 +33,15 @@ pub struct Email {
     /// The same message as HTML, sent beside the text as
     /// `multipart/alternative`. Without it the message is the text alone.
     pub html: Option<String>,
-    /// The queued message this is. Delivery is at least once: a worker that
-    /// dies after sending and before recording it will send again, so a
-    /// provider that can drop repeats should be handed this to do it with.
+    /// The queued message this is (its outbox ID), for the log.
     pub reference: i64,
+    /// The queued message's own random key (`outbox.delivery_key`), the
+    /// same on every try of it and never used for another. Delivery is at
+    /// least once: a worker that dies after sending and before recording it
+    /// will send again, so a provider that can drop repeats is handed this
+    /// to do it with. Not the ID, which starts again from 1 in a database
+    /// made afresh or restored, or in another environment.
+    pub key: uuid::Uuid,
 }
 
 /// Delivers an email. An error is retried by the outbox, unless it is
@@ -60,6 +65,43 @@ impl std::fmt::Display for Undeliverable {
 
 impl std::error::Error for Undeliverable {}
 
+/// A refusal that says the provider will take nothing from this service
+/// until someone changes something: a key or password it does not accept,
+/// a sender domain it has not verified, a quota that is spent. Trying again
+/// within minutes changes nothing, and counting each try would give every
+/// message up within the hour such an outage lasts. The outbox does not
+/// count the try: it waits longer each time, up to
+/// [`outbox::DeliveryRules::retry_ceiling`], and gives the message up only
+/// once it is older than [`outbox::DeliveryRules::outage_max_age`]. Its text
+/// names no address.
+#[derive(Debug)]
+pub struct Outage(pub String);
+
+impl std::fmt::Display for Outage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Outage {}
+
+/// The provider already holds another message under this one's key
+/// ([`Email::key`]): the same queued message, sent before with other
+/// content, such as in a language the person changed between two tries.
+/// One copy went out, so it is not sent again, and the message is given up
+/// on and logged as its own case for someone to look at: with a random key
+/// per message, it should not happen.
+#[derive(Debug)]
+pub struct KeyConflict(pub String);
+
+impl std::fmt::Display for KeyConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for KeyConflict {}
+
 /// Development delivery: writes the message to the worker's log, which is
 /// where you read it. Never configured in production, where it would mean
 /// nobody is ever told anything.
@@ -77,6 +119,7 @@ impl EmailSender for LogEmailSender {
                 body = email.body,
                 html_bytes = email.html.as_ref().map_or(0, String::len),
                 reference = email.reference,
+                key = %email.key,
                 "notification email (development delivery)"
             );
             Ok(())

@@ -18,8 +18,13 @@
 //! * `completed_at` empty and `attempts` at the limit: given up on, and left
 //!   as it is for someone to look at, with the last failure in `last_error`.
 //!   A refusal that trying again cannot change ([`super::Undeliverable`],
-//!   such as an address the provider will not take) is given up on at once:
-//!   `attempts` goes straight to the limit;
+//!   such as an address the provider will not take, or
+//!   [`super::KeyConflict`]) is given up on at once: `attempts` goes
+//!   straight to the limit. A refusal of everything this service sends
+//!   ([`super::Outage`]: credentials, an unverified sender, a spent quota)
+//!   does not count as a try; the message waits longer each time, up to the
+//!   hourly ceiling, and is given up on, `attempts` to the limit, once it is
+//!   older than [`DeliveryRules::outage_max_age`];
 //! * `completed_at` set and `last_error` empty: sent;
 //! * `completed_at` set and `last_error` set: closed without sending, because
 //!   there was no longer anyone to send it to or, for a reminder, because
@@ -34,7 +39,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use super::wording::{Links, Wording};
-use super::{Email, EmailSender, Undeliverable};
+use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
 use crate::contact::{self, Field};
 use crate::domain::notification::Notice;
 use crate::domain::reminder;
@@ -53,6 +58,11 @@ pub struct DeliveryRules {
     pub retry_after: Duration,
     /// The longest wait between two tries.
     pub retry_ceiling: Duration,
+    /// How old a message may grow while the provider refuses everything
+    /// ([`Outage`]) before it is given up on. Such tries are not counted
+    /// against [`DeliveryRules::max_attempts`], which an outage of an hour
+    /// would otherwise spend.
+    pub outage_max_age: Duration,
     /// How long one send may take before it counts as failed.
     pub send_timeout: std::time::Duration,
     /// Messages one pass delivers at most, so a backlog cannot keep the
@@ -72,6 +82,7 @@ impl Default for DeliveryRules {
             max_attempts: 8,
             retry_after: Duration::minutes(1),
             retry_ceiling: Duration::hours(1),
+            outage_max_age: Duration::hours(24),
             send_timeout: std::time::Duration::from_secs(30),
             batch: 100,
             batch_budget: std::time::Duration::from_secs(20),
@@ -86,6 +97,14 @@ impl DeliveryRules {
         let doublings = earlier_failures.clamp(0, 20);
         let wait: Duration = self.retry_after * (1_i32 << doublings);
         wait.min(self.retry_ceiling)
+    }
+
+    /// How long to wait after an [`Outage`], for a message queued `age`
+    /// ago: as long again as it has waited so far, so the waits double
+    /// without a count of tries, between [`DeliveryRules::retry_after`] and
+    /// [`DeliveryRules::retry_ceiling`].
+    pub(crate) fn outage_backoff(&self, age: Duration) -> Duration {
+        age.clamp(self.retry_after, self.retry_ceiling.max(self.retry_after))
     }
 }
 
@@ -217,12 +236,24 @@ enum Attempt {
     Failed(String),
     /// Refused for good: not tried again.
     Undeliverable(String),
+    /// The provider holds another message under this one's key.
+    Conflict(String),
+    /// The provider refuses everything for now: not counted as a try.
+    Outage(String),
     Dropped(&'static str),
 }
 
-/// A row taken for sending: id, recipient, exchange, payload, and the tries
-/// made before this one.
-type Claimed = (i64, Option<Uuid>, Option<Uuid>, Value, i32);
+/// A row taken for sending: id, recipient, exchange, payload, the tries
+/// made before this one, its own key, and when it was queued.
+type Claimed = (
+    i64,
+    Option<Uuid>,
+    Option<Uuid>,
+    Value,
+    i32,
+    Uuid,
+    OffsetDateTime,
+);
 
 /// Sends every email that is due at `at`, up to the batch size and within
 /// the batch's time budget. Safe to run from several workers at once.
@@ -310,7 +341,8 @@ async fn deliver_next(
     // timeout bounds.
     let mut tx = db.begin().await?;
     let claimed: Option<Claimed> = sqlx::query_as(
-        "SELECT id, recipient_account_id, exchange_id, payload, attempts FROM outbox
+        "SELECT id, recipient_account_id, exchange_id, payload, attempts, delivery_key, created_at
+         FROM outbox
          WHERE kind = 'EMAIL' AND completed_at IS NULL AND available_at <= $1 AND attempts < $2
          ORDER BY available_at, id
          LIMIT 1
@@ -320,12 +352,13 @@ async fn deliver_next(
     .bind(rules.max_attempts)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((id, recipient, exchange, payload, attempts)) = claimed else {
+    let Some((id, recipient, exchange, payload, attempts, key, created_at)) = claimed else {
         return Ok(false);
     };
 
     let row = Row {
         id,
+        key,
         recipient,
         exchange,
         payload: &payload,
@@ -338,6 +371,10 @@ async fn deliver_next(
                     let text = without_address(&format!("{error:#}"), &email.to);
                     if error.is::<Undeliverable>() {
                         Attempt::Undeliverable(text)
+                    } else if error.is::<KeyConflict>() {
+                        Attempt::Conflict(text)
+                    } else if error.is::<Outage>() {
+                        Attempt::Outage(text)
                     } else {
                         Attempt::Failed(text)
                     }
@@ -377,28 +414,71 @@ async fn deliver_next(
             delivered.failed += 1;
             if attempts + 1 >= rules.max_attempts {
                 delivered.given_up += 1;
-                tracing::error!(outbox = id, error, "notification given up on");
+                tracing::error!(
+                    outbox = id,
+                    error,
+                    reason = "out of tries",
+                    "notification given up on"
+                );
             } else {
                 tracing::warn!(outbox = id, error, "notification not sent; will retry");
             }
         }
+        Attempt::Outage(error) => {
+            let error: String = error.chars().take(500).collect();
+            let age = at - created_at;
+            if age >= rules.outage_max_age {
+                give_up(&mut tx, id, &error, rules.max_attempts).await?;
+                delivered.failed += 1;
+                delivered.given_up += 1;
+                tracing::error!(
+                    outbox = id,
+                    error,
+                    reason = "the provider refused everything for longer than a message waits",
+                    max_age_hours = rules.outage_max_age.whole_hours(),
+                    "notification given up on"
+                );
+            } else {
+                // The try is not counted: nothing about this message failed.
+                sqlx::query("UPDATE outbox SET last_error = $2, available_at = $3 WHERE id = $1")
+                    .bind(id)
+                    .bind(&error)
+                    .bind(at + rules.outage_backoff(age))
+                    .execute(&mut *tx)
+                    .await?;
+                delivered.failed += 1;
+                tracing::warn!(
+                    outbox = id,
+                    error,
+                    "notification not sent: the provider refuses everything for now; will retry, \
+                     not counting the try"
+                );
+            }
+        }
+        Attempt::Conflict(error) => {
+            let error: String = error.chars().take(500).collect();
+            give_up(&mut tx, id, &error, rules.max_attempts).await?;
+            delivered.failed += 1;
+            delivered.given_up += 1;
+            tracing::error!(
+                outbox = id,
+                error,
+                idempotency_conflict = true,
+                reason = "the provider already holds another message under this one's key; one \
+                          copy went out, so it is not sent again",
+                "notification given up on"
+            );
+        }
         Attempt::Undeliverable(error) => {
             let error: String = error.chars().take(500).collect();
-            sqlx::query(
-                "UPDATE outbox SET attempts = GREATEST(attempts + 1, $3), last_error = $2
-                 WHERE id = $1",
-            )
-            .bind(id)
-            .bind(&error)
-            .bind(rules.max_attempts)
-            .execute(&mut *tx)
-            .await?;
+            give_up(&mut tx, id, &error, rules.max_attempts).await?;
             delivered.failed += 1;
             delivered.given_up += 1;
             tracing::error!(
                 outbox = id,
                 error,
                 refused_for_good = true,
+                reason = "the provider refused this message for good",
                 "notification given up on"
             );
         }
@@ -416,9 +496,28 @@ async fn deliver_next(
     Ok(true)
 }
 
+/// Gives a message up: its tries go to the limit, with why.
+async fn give_up(
+    conn: &mut PgConnection,
+    id: i64,
+    error: &str,
+    max_attempts: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE outbox SET attempts = GREATEST(attempts + 1, $3), last_error = $2 WHERE id = $1",
+    )
+    .bind(id)
+    .bind(error)
+    .bind(max_attempts)
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
 /// What a claimed row holds.
 struct Row<'a> {
     id: i64,
+    key: Uuid,
     recipient: Option<Uuid>,
     exchange: Option<Uuid>,
     payload: &'a Value,
@@ -517,6 +616,7 @@ async fn prepare(
         body: rendered.body,
         html: Some(rendered.html),
         reference: row.id,
+        key: row.key,
     }))
 }
 
@@ -561,6 +661,7 @@ async fn staff_alert(
         body: rendered.body,
         html: Some(rendered.html),
         reference: row.id,
+        key: row.key,
     }))
 }
 
@@ -596,5 +697,22 @@ mod tests {
             .collect();
         assert_eq!(waits, [1, 2, 4, 8, 10, 10]);
         assert_eq!(rules.backoff(i32::MAX), Duration::minutes(10));
+    }
+
+    #[test]
+    fn an_outage_waits_as_long_again_as_the_message_has_up_to_the_ceiling() {
+        let rules = DeliveryRules::default();
+        let waits: Vec<i64> = [0, 1, 3, 20, 59, 61, 600, 1440]
+            .into_iter()
+            .map(|age| rules.outage_backoff(Duration::minutes(age)).whole_minutes())
+            .collect();
+        assert_eq!(waits, [1, 1, 3, 20, 59, 60, 60, 60]);
+        // Over a day, about thirty tries, not eight within the first hour.
+        let (mut age, mut tries) = (Duration::ZERO, 0);
+        while age < rules.outage_max_age {
+            age += rules.outage_backoff(age);
+            tries += 1;
+        }
+        assert!((25..=35).contains(&tries), "{tries}");
     }
 }

@@ -37,7 +37,7 @@ export type LegalDocument = (typeof LEGAL_DOCUMENTS)[number]
 /** The day each document as written took effect, as an ISO date. */
 export const LEGAL_EFFECTIVE_DATES: Record<LegalDocument, string> = {
   privacy: '2026-10-08',
-  terms: '2026-10-06',
+  terms: '2026-10-08',
 }
 
 /**
@@ -59,6 +59,12 @@ export const LEGAL_FIGURES = {
    * ended (`Rules::sms_consent_retention`), in years.
    */
   smsConsentYears: 4,
+  /** How long a session is kept once it ended (`sweep::ENDED_SESSION_RETENTION`). */
+  endedSessionDays: 30,
+  /** How long an idempotency key is kept (`sweep::IDEMPOTENCY_KEY_RETENTION`). */
+  idempotencyKeyDays: 30,
+  /** How long a finished notification is kept (`sweep::FINISHED_NOTIFICATION_RETENTION`). */
+  notificationDays: 90,
 } as const
 
 /**

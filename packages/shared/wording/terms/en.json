@@ -42,7 +42,7 @@
         {
           "ul": [
             "Yuppers.app is not a party to the agreements you make with Yuppers. An agreement is between the two people who sign it.",
-            "We don’t hold or move money. Any payment happens between you, outside Yuppers; Yuppers only records what each of you says about it.",
+            "We don’t hold or move money. Any payment happens between you, outside Yuppers; Yuppers only records what each of you says about it. Payment options (a Venmo username, a Cash App $Cashtag, a PayPal.Me name, a Zelle email address or phone number) are information each person adds for themselves; we don’t check them, and paying through those apps is under their own terms.",
             "We don’t decide disputes. When you disagree, we record what each of you says. We don’t decide who is right.",
             "We don’t guarantee that anyone delivers, and we can’t make anyone do their part.",
             "We don’t check what you record. Marking something delivered, confirming it, disputing it or waiving it, and every note you write, are your own statements.",
@@ -145,7 +145,7 @@
             "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
             "Turning text updates off for an agreement stops them for that agreement only.",
             "Message and data rates may apply.",
-            "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, until you reply START. You can still sign in with an email address.",
+            "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, until you reply START. You can still sign in with an email address, if your account has one.",
             "Support: write to {supportEmail}, or reply HELP to any agreement update.",
             "Carriers are not liable for delayed or undelivered messages.",
             "Phone numbers outside the United States are not texted: we send texts only to US numbers, which start with the country code +1 and the area code of one of the 50 states or Washington, D.C. Numbers in Canada, in the Caribbean and Pacific countries and the US territories that share +1, and toll-free numbers, are not texted.",
@@ -164,7 +164,7 @@
             "Message frequency: One message per code request.",
             "What the text says: Twilio Verify writes it from its own template, with our name. In English it reads “Your Yuppers.app verification code is: 123456”, with your code in place of 123456, and a code to confirm deleting your account comes from a Verify service of its own and reads “Your Yuppers.app account deletion verification code is: 123456”; in Spanish, Twilio sends its own Spanish version of the same message. Each code works for {codeMinutes} minutes from when it was first sent, and only once; asking again within that time resends the same code.",
             "Rates: message and data rates may apply to code texts too.",
-            "STOP: a number that replied STOP to our agreement updates is sent no codes either, until it replies START. A code comes from one of Twilio’s numbers, so a STOP or HELP sent in reply to it reaches Twilio, not us: it does not turn off agreement updates, and Twilio may stop sending codes to your number. For help with a code, write to {supportEmail}. You can always sign in with an email address instead."
+            "STOP: a number that replied STOP to our agreement updates is sent no codes either, until it replies START. A code comes from one of Twilio’s numbers, so a STOP or HELP sent in reply to it reaches Twilio, not us: it does not turn off agreement updates, and Twilio may stop sending codes to your number. For help with a code, write to {supportEmail}. You can always sign in with an email address instead, if your account has one."
           ]
         },
         {

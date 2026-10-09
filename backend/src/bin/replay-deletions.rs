@@ -35,7 +35,13 @@ use yuppers_backend::{db, deletion_log, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<ExitCode> {
-    telemetry::init()?;
+    let telemetry = telemetry::init("replay-deletions")?;
+    let outcome = run().await;
+    telemetry.shutdown().await;
+    outcome
+}
+
+async fn run() -> anyhow::Result<ExitCode> {
     dotenvy::dotenv().ok();
     // A deletion asks to close the account's agreements, which the other
     // party may have turned text updates on for.

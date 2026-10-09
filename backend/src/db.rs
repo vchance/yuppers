@@ -1,6 +1,22 @@
 use sqlx::migrate::Migrator;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
+use crate::otel::{SpanExt, SpanKind};
+
+/// A span for one database operation, named by what it does
+/// (`exchange.load`, `outbox.claim`), never by the SQL, let alone its
+/// parameters (`crate::otel`). Wrap the operation with
+/// `tracing::Instrument::instrument`. The span has no fields, so a line
+/// logged inside it carries no more than it did.
+pub fn span(operation: &'static str) -> tracing::Span {
+    let span = tracing::info_span!("db");
+    span.otel_name(operation);
+    span.otel_kind(SpanKind::Client);
+    span.otel_attr("db.system.name", "postgresql");
+    span.otel_attr("db.operation.name", operation);
+    span
+}
+
 /// Migrations embedded at build time. Applied by the `migrate` binary, which
 /// connects as the schema owner; the `api` and `worker` processes connect as
 /// the restricted application role and never run them (DESIGN.md §13.2).

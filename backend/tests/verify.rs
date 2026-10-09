@@ -1110,10 +1110,13 @@ async fn a_code_twilio_refuses_to_send_costs_no_place_and_is_logged_by_its_code_
     let turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Text,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     let _guard = tracing::subscriber::set_default(subscriber);
     let (twilio, addr) = StandIn::start().await;
     let one = AuthRules {
@@ -1165,10 +1168,13 @@ async fn in_development_the_code_is_written_to_the_log_and_counted_as_a_text() {
     let turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Text, EnvFilter::new("info"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Text,
+        EnvFilter::new("info"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     let _guard = tracing::subscriber::set_default(subscriber);
     // SMS_CODE_DELIVERY=log.
     let codes = Arc::new(CodeRouter::new(

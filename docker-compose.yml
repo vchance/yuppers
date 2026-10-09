@@ -40,6 +40,13 @@ x-app-environment: &app-environment
   # Metrics on a port of their own inside each container, published below
   # on this machine only (docs/operations.md, "Metrics").
   METRICS_ADDR: 0.0.0.0:9100
+  # An OpenTelemetry collector to push traces, logs and metrics to, if one
+  # is given: for a grafana/otel-lgtm container on this machine,
+  # http://host.docker.internal:4318 (docs/operations.md, "Telemetry").
+  # Empty means off.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-development}
 
 services:
   postgres:

@@ -643,10 +643,13 @@ async fn refused_credentials_are_an_outage_not_counted_against_the_message() {
     let turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Text,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     let _guard = tracing::subscriber::set_default(subscriber);
     let (app, _turn) = app_in_turn(turn).await;
     app.active().await;
@@ -691,10 +694,13 @@ async fn a_refused_recipient_leaves_no_part_of_their_address_in_the_outbox_or_th
     let turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Text,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     // A test runs on one thread, so this holds for everything it does.
     let _guard = tracing::subscriber::set_default(subscriber);
 

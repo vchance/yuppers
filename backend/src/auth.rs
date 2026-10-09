@@ -1035,6 +1035,7 @@ pub async fn request_code(
         }
         return Err(ErrorCode::ServiceUnavailable.into());
     }
+    crate::funnel::funnel().code_sent(crate::funnel::Channel::of(identifier));
     Ok(())
 }
 

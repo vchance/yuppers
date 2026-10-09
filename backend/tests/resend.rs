@@ -261,10 +261,13 @@ impl Log {
     fn capture() -> (Self, tracing::subscriber::DefaultGuard) {
         let log = Self::default();
         let writer = log.clone();
-        let subscriber =
-            telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
-                writer.clone()
-            });
+        let subscriber = telemetry::subscriber(
+            LogFormat::Text,
+            EnvFilter::new("trace"),
+            false,
+            move || writer.clone(),
+            None,
+        );
         (log, tracing::subscriber::set_default(subscriber))
     }
 }

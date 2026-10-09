@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Row};
 use time::{Date, OffsetDateTime};
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::domain::amendment::Statuses;
@@ -160,6 +161,16 @@ pub fn parse_state(state: &str, outcome: Option<&str>, reason: Option<&str>) -> 
 /// Loads an exchange. With `lock`, the row is locked until the transaction
 /// ends, which is what puts concurrent changes to one exchange in order.
 pub async fn load(
+    conn: &mut PgConnection,
+    id: Uuid,
+    lock: bool,
+) -> Result<Option<Aggregate>, sqlx::Error> {
+    load_in(conn, id, lock)
+        .instrument(crate::db::span("exchange.load"))
+        .await
+}
+
+async fn load_in(
     conn: &mut PgConnection,
     id: Uuid,
     lock: bool,
@@ -391,6 +402,15 @@ pub struct NewRevision<'a> {
 /// is new gets its stable row here; one that belongs to another exchange
 /// fails the foreign key.
 pub async fn insert_revision(
+    conn: &mut PgConnection,
+    new: NewRevision<'_>,
+) -> Result<(), sqlx::Error> {
+    insert_revision_in(conn, new)
+        .instrument(crate::db::span("revision.insert"))
+        .await
+}
+
+async fn insert_revision_in(
     conn: &mut PgConnection,
     new: NewRevision<'_>,
 ) -> Result<(), sqlx::Error> {
@@ -656,6 +676,26 @@ async fn vacate(
 /// `note` is what the actor wrote with the command (a dispute reason, a
 /// statement) and is kept on the first event.
 pub async fn persist(
+    conn: &mut PgConnection,
+    before: &Aggregate,
+    decision: &Decision,
+    actor: Actor,
+    note: Option<&str>,
+    now: OffsetDateTime,
+) -> Result<(), sqlx::Error> {
+    persist_in(conn, before, decision, actor, note, now)
+        .instrument(crate::db::span("exchange.persist"))
+        .await?;
+    // Every decision about an exchange is stored here, whichever service
+    // made it, so this is where the funnel reads what happened. Counted
+    // once the rows are written; a transaction that fails to commit after
+    // this counts one step too many, which is rare and does not matter to
+    // a funnel.
+    crate::funnel::funnel().events(before.exchange.state, &decision.events);
+    Ok(())
+}
+
+async fn persist_in(
     conn: &mut PgConnection,
     before: &Aggregate,
     decision: &Decision,

@@ -5,6 +5,7 @@ import {
   failureCode,
   invitationBoundTo,
   invitationForProblem,
+  isInvitationSpent,
   isUnconfirmedClaimant,
   labelText,
   moneyIds,
@@ -12,6 +13,7 @@ import {
   otherPartyName,
   paymentOptionsKey,
   remainingRequired,
+  sendReminder,
   statusesOf,
   troublePanel,
   troubleSituationOf,
@@ -21,6 +23,7 @@ import {
   type Actions as ExchangeActions,
   type ClosedReason,
   type InvitationChoice,
+  type IssuedInvitation,
   type RevisionView,
 } from '@yuppers/shared';
 import { useIsFocused, useRouter } from 'expo-router';
@@ -56,7 +59,7 @@ import { useI18n } from '../lib/context';
 import { showAfterSigning } from '../lib/payments';
 import { api } from '../lib/session';
 import { type, useColors } from '../lib/theme';
-import { ClaimantWaiting, ConfirmClaimant, NobodyYet } from './Claimant';
+import { ClaimantWaiting, ConfirmClaimant } from './Claimant';
 import { Ending } from './Ending';
 import { ExchangeSafety } from './ExchangeSafety';
 import { Fulfillment } from './Fulfillment';
@@ -69,9 +72,11 @@ const CHECK_EVERY_MS = 20_000;
 
 interface Props {
   exchange: Exchange;
-  /** A just-issued invitation token, to show once. */
-  issued: string | null;
-  onIssued(token: string | null): void;
+  /** A just-issued invitation, to show once. */
+  issued: IssuedInvitation | null;
+  onIssued(issued: IssuedInvitation | null): void;
+  /** The initiator opened a way to send the link they hold. */
+  onShared(): void;
   onChange(exchange: Exchange): void;
   reload(): Promise<Exchange | null>;
 }
@@ -83,7 +88,7 @@ interface Props {
  * what is allowed; this offers what should be, and shows the refusal if it
  * was wrong.
  */
-export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: Props) {
+export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, reload }: Props) {
   const { wording, fmt } = useI18n();
   const router = useRouter();
   const w = wording.exchange;
@@ -223,6 +228,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         actions={actions}
         issued={issued}
         onIssued={onIssued}
+        onShared={onShared}
         reload={reload}
       />
 
@@ -337,15 +343,17 @@ interface CounterpartyProps {
   exchange: Exchange;
   otherName: string;
   actions: ExchangeActions;
-  issued: string | null;
-  onIssued(token: string | null): void;
+  issued: IssuedInvitation | null;
+  onIssued(issued: IssuedInvitation | null): void;
+  onShared(): void;
   reload(): Promise<Exchange | null>;
 }
 
 /**
  * Who is on the other side (DESIGN.md §8). Until someone opens the link the
- * initiator can replace it; once someone has, the initiator confirms it is
- * who they meant before any signature takes effect.
+ * initiator is reminded to send it, and can replace it; once someone has,
+ * the initiator confirms it is who they meant before any signature takes
+ * effect.
  */
 function Counterparty({
   exchange,
@@ -353,9 +361,11 @@ function Counterparty({
   actions,
   issued,
   onIssued,
+  onShared,
   reload,
 }: CounterpartyProps) {
-  const { wording } = useI18n();
+  const { wording, fmt, moment } = useI18n();
+  const colors = useColors();
   const link = wording.invitationLink;
   const initiator = exchange.you === 'A';
   const claimant = exchange.claimant ?? null;
@@ -363,11 +373,40 @@ function Counterparty({
   if (exchange.state !== 'NEGOTIATING') return null;
 
   if (initiator && exchange.counterparty === 'UNCLAIMED') {
+    // The link was used by someone who is gone again, or ran out: there is
+    // none to lose or to have sent to the wrong person, only one to make.
+    const spent = isInvitationSpent(exchange) && !issued;
+    // Yuppers never sends the link, so while nobody has joined the card is a
+    // reminder to send it: at once if no way to send it was ever opened,
+    // and again once that was long enough ago (`sendReminder`). The one
+    // card on the screen that asks for something, edged in the sender's colour.
+    const reminder = spent ? null : sendReminder(exchange);
+    const sharedAt = exchange.invitation_shared_at ?? null;
     return (
-      <Card>
-        <Heading level={2}>{link.heading}</Heading>
-        {issued ? <InvitationLink key={issued} token={issued} /> : <NobodyYet exchange={exchange} />}
-        <P>{link.reissueIntro}</P>
+      <Card style={reminder ? { borderColor: colors.partyYou, borderWidth: 2 } : undefined}>
+        <Heading level={2}>{fmt(link.notJoined, { name: labelText(otherName) })}</Heading>
+        {spent && <P>{wording.claimant.linkUsed}</P>}
+        {reminder === 'unsent' && (
+          <Notice tone="warning" quiet>
+            {fmt(link.notSentYet, { name: otherName })}
+          </Notice>
+        )}
+        {reminder === 'waiting' && sharedAt && (
+          <Notice tone="warning" quiet>
+            {fmt(link.sharedLongAgo, { date: moment(sharedAt), name: otherName })}
+          </Notice>
+        )}
+        {!reminder && !spent && sharedAt && <P>{fmt(link.sharedOn, { date: moment(sharedAt) })}</P>}
+        {!reminder && !spent && <P>{link.unclaimed}</P>}
+        {issued && (
+          <InvitationLink
+            key={issued.token}
+            token={issued.token}
+            boundTo={issued.boundTo}
+            onShared={onShared}
+          />
+        )}
+        {!spent && <P>{!issued && reminder ? link.sendAgain : link.reissueIntro}</P>}
         <Actions>
           <Button
             label={link.reissue}
@@ -403,7 +442,7 @@ function Counterparty({
 interface ReissueProps {
   exchange: string;
   actions: ExchangeActions;
-  onIssued(token: string | null): void;
+  onIssued(issued: IssuedInvitation | null): void;
   reload(): Promise<Exchange | null>;
 }
 
@@ -422,8 +461,9 @@ function Reissue({ exchange, actions, onIssued, reload }: ReissueProps) {
     if (invitationForProblem(invitee, channels)) return;
     setBusy(true);
     setFailure(null);
+    const bound = invitationBoundTo(invitee);
     try {
-      onIssued(await api.reissueInvitation(exchange, invitationBoundTo(invitee)));
+      onIssued({ token: await api.reissueInvitation(exchange, bound), boundTo: bound });
       actions.close();
     } catch (error) {
       const code = failureCode(error);

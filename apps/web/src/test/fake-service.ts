@@ -25,6 +25,8 @@ export const AMENDING = '9b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e'
 export const DISPUTED = 'ac3d4e5f-6a7b-4c8d-8e9f-1a2b3c4d5e6f'
 /** An exchange that ended by agreement. */
 export const ENDED = 'bd4e5f6a-7b8c-4d9e-9f0a-2b3c4d5e6f7a'
+/** A first proposal from the reader that nobody has joined through yet. */
+export const WAITING = 'ce5f6a7b-8c9d-4eaf-8a0b-3c4d5e6f7a8b'
 export const REPAIR = '11111111-1111-4111-8111-111111111111'
 export const PAYMENT = '22222222-2222-4222-8222-222222222222'
 export const GATE = '33333333-3333-4333-8333-333333333333'
@@ -224,14 +226,39 @@ export function draftExchange(): ExchangeView {
   }
 }
 
-/** The draft once its first proposal is sent: open, with nobody invited yet. */
-function sentExchange(): ExchangeView {
+/**
+ * The draft once its first proposal is sent: open, with nobody invited yet,
+ * and the link shared once the app has said so.
+ */
+function sentExchange(service: FakeService): ExchangeView {
   const { draft: _draft, ...sent } = draftExchange()
   return {
     ...sent,
     version: 2,
     state: 'NEGOTIATING',
     open_revision: { ...revision, accepted_by: ['A'] },
+    invitation_open: true,
+    invitation_shared_at: service.sharedAt,
+  }
+}
+
+/**
+ * A first proposal sent a while ago, by the reader, whose link nobody has
+ * joined through: shared when the stand-in says so, and never otherwise.
+ */
+export function waitingExchange(service: FakeService): ExchangeView {
+  return {
+    ...common,
+    id: WAITING,
+    version: 2,
+    state: 'NEGOTIATING',
+    you: 'A',
+    counterparty: 'UNCLAIMED',
+    display_code: 'WAIT-3N8D',
+    open_revision: { ...revision, accepted_by: ['A'] },
+    contributions: [],
+    invitation_open: true,
+    invitation_shared_at: service.waitingSharedAt,
   }
 }
 
@@ -327,7 +354,12 @@ function endedExchange(): ExchangeView {
   }
 }
 
-const exchanges = (): ExchangeView[] => [activeExchange(), offerExchange(), draftExchange()]
+const exchanges = (service: FakeService): ExchangeView[] => [
+  activeExchange(),
+  offerExchange(),
+  waitingExchange(service),
+  draftExchange(),
+]
 /** Exchanges that can be opened but are not in the list, so the list stays as it was. */
 const others = (): ExchangeView[] => [
   counterExchange(),
@@ -345,6 +377,8 @@ function summary(exchange: ExchangeView): ExchangeSummary {
     state: exchange.state,
     updated_at: '2026-10-02T06:30:00Z',
     you: exchange.you,
+    counterparty: exchange.counterparty,
+    invitation_shared_at: exchange.invitation_shared_at ?? null,
   }
 }
 
@@ -527,6 +561,10 @@ export interface FakeService {
   codeSender: string | null
   /** Whether the draft's first proposal has been sent. */
   proposed: boolean
+  /** When the app said the sent proposal's link was shared, once it has. */
+  sharedAt: string | null
+  /** When the link of the proposal waiting for someone (`WAITING`) was shared, if ever. */
+  waitingSharedAt: string | null
   /** The list of exchanges as someone new sees it: empty. */
   noExchanges: boolean
   /** A refusal for every request for a code from now on, such as a limit. */
@@ -590,6 +628,8 @@ export function fakeService(account: Account | null): FakeService {
     phone: true,
     codeSender: CODE_SENDER,
     proposed: false,
+    sharedAt: null,
+    waitingSharedAt: null,
     noExchanges: false,
     refuseCodes: null,
     texting: true,
@@ -933,7 +973,9 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     if (dismiss) service.account = { ...service.account, notice: null }
     return [200, service.account]
   }
-  if (call === 'GET /v1/exchanges') return [200, service.noExchanges ? [] : exchanges().map(summary)]
+  if (call === 'GET /v1/exchanges') {
+    return [200, service.noExchanges ? [] : exchanges(service).map(summary)]
+  }
   if (call === 'GET /v1/blocks') return [200, []]
   // To anyone but a reviewer, every staff path is not found.
   if (call.includes(' /v1/staff/')) {
@@ -942,10 +984,21 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (call === `POST /v1/exchanges/${DRAFT}/revisions`) {
     service.proposed = true
-    return [200, { exchange: sentExchange(), invitation_token: SENT_INVITATION }]
+    return [200, { exchange: sentExchange(service), invitation_token: SENT_INVITATION }]
   }
-  if (service.proposed && call === `GET /v1/exchanges/${DRAFT}`) return [200, sentExchange()]
-  for (const exchange of [...exchanges(), ...others()]) {
+  if (service.proposed && call === `GET /v1/exchanges/${DRAFT}`) {
+    return [200, sentExchange(service)]
+  }
+  // The initiator opened a way to send the link: the latest time is kept.
+  if (call === `POST /v1/exchanges/${DRAFT}/invitation/shared`) {
+    service.sharedAt = '2026-10-02T06:35:00Z'
+    return [204, null]
+  }
+  if (call === `POST /v1/exchanges/${WAITING}/invitation/shared`) {
+    service.waitingSharedAt = '2026-10-02T06:35:00Z'
+    return [204, null]
+  }
+  for (const exchange of [...exchanges(service), ...others()]) {
     const at = `/v1/exchanges/${exchange.id}`
     if (call === `GET ${at}`) return [200, withPayments(service, exchange)]
     if (call === `PUT ${at}/payment-options`) {

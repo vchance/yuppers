@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client';
-import { failureCode, groupExchanges, labelText } from '@yuppers/shared';
+import { failureCode, groupExchanges, invitationChip, labelText } from '@yuppers/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -21,6 +21,7 @@ import {
 import { CombinedNotice } from '../components/CombinedNotice';
 import { Mark } from '../components/Mark';
 import { NotificationsOffer } from '../components/Notifications';
+import { StatusChip } from '../components/StatusChip';
 import { useI18n } from '../lib/context';
 import { forgetInvitation } from '../lib/invitation';
 import { deviceTimezone } from '../lib/time-zone';
@@ -203,13 +204,25 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
     const spokenTitle = exchange.other_party_name
       ? fmt(w.withParty, { name: labelText(exchange.other_party_name) })
       : w.noParty;
+    // The initiator holds the link that brings the other party in, and
+    // Yuppers never sends it: until someone joins, the card says whether they
+    // have sent it (`invitationChip`), on a chip like an item's status.
+    const chip = invitationChip(exchange);
+    const chipText =
+      chip === 'notSent'
+        ? w.notSent
+        : chip === 'waiting'
+          ? fmt(w.waitingFor, { name: labelText(exchange.other_party_name) })
+          : null;
     return (
       // One button per exchange, read as one: where it stands, its reference
       // and when it changed, then who it is with, then that it opens.
       <Pressable
         key={exchange.id}
         accessibilityRole="button"
-        accessibilityLabel={[state, reference, updated, spokenTitle].join('. ')}
+        accessibilityLabel={[state, chipText, reference, updated, spokenTitle]
+          .filter(Boolean)
+          .join('. ')}
         accessibilityHint={wording.a11y.openExchange}
         onPress={() => router.push(`/exchanges/${exchange.id}`)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
@@ -217,6 +230,9 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
           {exchange.other_party_name ? <Written>{title}</Written> : <P>{title}</P>}
           <Tags>
             <Tag>{state}</Tag>
+            {chipText && (
+              <StatusChip status={chip === 'notSent' ? 'PENDING' : 'CLAIMED'}>{chipText}</StatusChip>
+            )}
           </Tags>
           <Hint>{reference}</Hint>
           <Hint>{updated}</Hint>

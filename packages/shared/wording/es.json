@@ -384,7 +384,9 @@
     "groupDrafts": "Borradores, sin enviar",
     "groupClosed": "Cerrados",
     "showClosed": "Mostrar los yups cerrados ({count})",
-    "hideClosed": "Ocultar los yups cerrados"
+    "hideClosed": "Ocultar los yups cerrados",
+    "notSent": "Sin enviar",
+    "waitingFor": "Esperando a {name}"
   },
   "states": {
     "DRAFT": "Borrador, sin enviar",
@@ -549,7 +551,6 @@
     "agree": "Leí estos términos y los firmo."
   },
   "invitationLink": {
-    "heading": "Enlace de invitación",
     "intro": "Yuppers no lo envía por ti. Comparte el enlace con la otra persona, y podrá leer la propuesta después de iniciar sesión.",
     "shownOnce": "Este enlace se muestra solo esta vez. Si lo pierdes, usa “Crear un enlace nuevo”: tendrás uno nuevo, y el anterior deja de funcionar.",
     "linkLabel": "Enlace",
@@ -564,7 +565,6 @@
     "shareWhatsApp": "WhatsApp",
     "shareQr": "Mostrar código QR",
     "hideQr": "Ocultar código QR",
-    "closeShare": "Cerrar",
     "qrLabel": "Código QR del enlace de invitación",
     "qrHint": "Alguien que esté contigo puede escanearlo con la cámara de su teléfono para abrir el enlace.",
     "qrFailed": "No se pudo mostrar el código QR. Copia el enlace.",
@@ -586,7 +586,21 @@
     "forNamed": "Indicar para quién es",
     "boundSummary": "Solo quien inicie sesión con {identifier} podrá usar el enlace.",
     "forAnyoneSummary": "Cualquiera a quien le des el enlace podrá abrirlo. Tendrás que confirmar quién lo abrió antes de que pueda proponer cambios o rechazarlo.",
-    "reissue": "Crear un enlace nuevo"
+    "reissue": "Crear un enlace nuevo",
+    "sendTitle": "Envíaselo a {name}",
+    "sendRule": "Yuppers no lo envía por ti. {name} no recibe nada hasta que compartas este enlace.",
+    "sendText": "Enviar el enlace por texto",
+    "sendEmail": "Enviar el enlace por correo",
+    "sendWhatsApp": "Enviar por WhatsApp",
+    "sharedNotice": "Una vez enviado, {name} podrá leer el yup después de iniciar sesión. En la página del yup verás cuando se una.",
+    "sendDone": "Listo, ver el yup",
+    "later": "Lo enviaré más tarde",
+    "laterHint": "Puedes enviarlo desde la página del yup. Te lo recordará hasta que {name} se una.",
+    "notJoined": "{name} aún no se ha unido",
+    "notSentYet": "No le has enviado el enlace. Yuppers no lo envía por ti: {name} no recibe nada hasta que lo hagas.",
+    "sharedOn": "Compartiste el enlace el {date}.",
+    "sharedLongAgo": "Compartiste el enlace el {date} y nadie se ha unido a través de él. Si {name} no lo ha visto, envíaselo de nuevo o crea un enlace nuevo.",
+    "sendAgain": "Para enviarlo ahora, crea un enlace nuevo. El anterior deja de funcionar."
   },
   "invitation": {
     "title": "Tienes un yup para revisar",

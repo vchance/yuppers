@@ -1,0 +1,14 @@
+-- When the initiator last opened a way to pass the invitation link on: the
+-- share sheet, a text message, an email, WhatsApp, copying it, or showing
+-- its QR code (`POST /v1/exchanges/{id}/invitation/shared`). Yuppers never
+-- sends an invitation itself (DESIGN.md §8), so this is the one thing the
+-- service can know about whether the link went anywhere: that the sender
+-- opened a way to send it, not that it arrived or was read. Null until they
+-- do, and on every link issued afterwards until that one is shared too.
+--
+-- The apps make sending the link a step of its own after signing, and
+-- remind the initiator on the exchange's page and in the list while nobody
+-- has joined and this is null or old.
+--
+-- The application role's grants on `invitation` already cover a new column.
+ALTER TABLE invitation ADD COLUMN shared_at timestamptz;

@@ -233,6 +233,10 @@ Combining two accounts and removing an email address or phone number (`backend/s
 
 `backend/tests/combine.rs` drives all of it through the API and the replay; `backend/tests/contact_scan.rs` that no address is anywhere in the clear afterwards. `scripts/restore-inventory.txt` holds the new grants and triggers.
 
+## 0029_invitation_shared
+
+`invitation.shared_at`: when the initiator last opened a way to pass the link on (the share sheet, a text message, an email, WhatsApp, a copy, its QR code), as the apps report it through `POST /v1/exchanges/{id}/invitation/shared`. Yuppers never sends an invitation itself (`DESIGN.md` §8), so this is the one thing the service can know about whether the link went anywhere: that the sender opened a way to send it, not that it arrived. The apps make sending the link a step of its own after signing, and remind the initiator on the exchange's page and in the list while nobody has joined and this is null or old. The application role's grants on `invitation` already cover the column. `backend/tests/exchanges.rs` records a share and reads it back on the view and in the list.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

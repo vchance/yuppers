@@ -27,7 +27,7 @@ const LINK = `${WEB_URL.replace(/\/+$/, '')}/en/i#${TOKEN}`;
 function show() {
   return render(
     <I18nContext value={i18n}>
-      <InvitationLink token={TOKEN} />
+      <InvitationLink token={TOKEN} boundTo={null} />
     </I18nContext>,
   );
 }

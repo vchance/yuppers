@@ -319,6 +319,7 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         record::history,
         record::record,
         exchanges::reissue_invitation,
+        exchanges::invitation_shared,
         exchanges::preview_invitation,
         exchanges::claim_invitation,
         safety::report_exchange,

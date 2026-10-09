@@ -11,6 +11,7 @@ import {
   otherPartyName,
   paymentOptionsKey,
   remainingRequired,
+  sendReminder,
   statusesOf,
   troublePanel,
   troubleSituationOf,
@@ -42,7 +43,7 @@ import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
 import { WalletButton } from '../components/WalletButton'
-import { Failure, Notice, PageHeading, Written } from '../components/ui'
+import { Failure, Notice, PageHeading, WithName, Written } from '../components/ui'
 import { restoreFocus, useActions, type Actions } from '../lib/actions'
 import { useAnnouncement } from '../lib/announce'
 import { focusLost } from '../lib/focus'
@@ -76,6 +77,8 @@ interface Props {
   /** A just-issued invitation, to show once. */
   issued: IssuedInvitation | null
   onIssued(issued: IssuedInvitation | null): void
+  /** The initiator opened a way to send the link they hold. */
+  onShared(): void
   onChange(exchange: Exchange): void
   reload(): Promise<Exchange | null>
 }
@@ -87,7 +90,7 @@ interface Props {
  * what is allowed; this offers what should be, and shows the refusal if it
  * was wrong.
  */
-export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: Props) {
+export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, reload }: Props) {
   const { wording, fmt } = useI18n()
   const w = wording.exchange
   const actions = useActions(exchange, onChange, reload)
@@ -228,6 +231,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         actions={actions}
         issued={issued}
         onIssued={onIssued}
+        onShared={onShared}
         reload={reload}
       />
 
@@ -342,14 +346,15 @@ interface CounterpartyProps {
   actions: Actions
   issued: IssuedInvitation | null
   onIssued(issued: IssuedInvitation | null): void
+  onShared(): void
   reload(): Promise<Exchange | null>
 }
 
 /**
  * Who is on the other side (DESIGN.md §8). Until someone opens the link the
- * initiator can replace it; once someone has, the initiator confirms it is
- * who they meant before any signature takes effect, or removes them and
- * makes a new link.
+ * initiator is reminded to send it, and can replace it; once someone has,
+ * the initiator confirms it is who they meant before any signature takes
+ * effect, or removes them and makes a new link.
  */
 function Counterparty({
   exchange,
@@ -357,9 +362,10 @@ function Counterparty({
   actions,
   issued,
   onIssued,
+  onShared,
   reload,
 }: CounterpartyProps) {
-  const { wording } = useI18n()
+  const { wording, fmt, moment } = useI18n()
   const link = wording.invitationLink
   const initiator = exchange.you === 'A'
   const claimant = exchange.claimant ?? null
@@ -373,16 +379,40 @@ function Counterparty({
     // The link was used by someone who is gone again, or ran out: there is
     // none to lose or to have sent to the wrong person, only one to make.
     const spent = isInvitationSpent(exchange) && !issued
+    // Yuppers never sends the link, so while nobody has joined the card is a
+    // reminder to send it: at once if no way to send it was ever opened,
+    // and again once that was long enough ago (`sendReminder`).
+    const reminder = spent ? null : sendReminder(exchange)
+    const sharedAt = exchange.invitation_shared_at ?? null
     return (
-      <section className="card" aria-labelledby="invitation-heading">
-        <h2 id="invitation-heading">{link.heading}</h2>
+      <section
+        className={reminder ? 'card card-reminder' : 'card'}
+        aria-labelledby="invitation-heading"
+      >
+        <h2 id="invitation-heading">
+          <WithName message={link.notJoined} name={otherName} />
+        </h2>
         {removed && !issued && <Notice>{wording.claimant.rejected}</Notice>}
-        {issued ? (
-          <InvitationLink key={issued.token} token={issued.token} boundTo={issued.boundTo} />
-        ) : (
-          <p>{spent ? wording.claimant.linkUsed : link.unclaimed}</p>
+        {spent && <p>{wording.claimant.linkUsed}</p>}
+        {reminder === 'unsent' && (
+          <p className="notice notice-warning">{fmt(link.notSentYet, { name: otherName })}</p>
         )}
-        {!spent && <p>{link.reissueIntro}</p>}
+        {reminder === 'waiting' && sharedAt && (
+          <p className="notice notice-warning">
+            {fmt(link.sharedLongAgo, { date: moment(sharedAt), name: otherName })}
+          </p>
+        )}
+        {!reminder && !spent && sharedAt && <p>{fmt(link.sharedOn, { date: moment(sharedAt) })}</p>}
+        {!reminder && !spent && <p>{link.unclaimed}</p>}
+        {issued && (
+          <InvitationLink
+            key={issued.token}
+            token={issued.token}
+            boundTo={issued.boundTo}
+            onShared={onShared}
+          />
+        )}
+        {!spent && <p>{!issued && reminder ? link.sendAgain : link.reissueIntro}</p>}
         <div className="actions">
           <button
             type="button"

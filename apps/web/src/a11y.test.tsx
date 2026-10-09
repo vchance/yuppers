@@ -212,7 +212,7 @@ describe('the composer', () => {
     expect(document.activeElement).toBe(field(w.forLabel))
   })
 
-  test('the invitation link once sent, its ways to share and its QR code', async () => {
+  test('the step that sends the link once signed, its ways to send it and its QR code', async () => {
     const { wording } = await start(`/exchanges/${DRAFT}`, ana)
     const w = wording.invitationLink
     await heading(wording.composer.titleFirst)
@@ -222,24 +222,60 @@ describe('the composer', () => {
     await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
     await press(button(wording.composer.signAndSend))
     await until(() => document.body.textContent!.includes(w.intro), 'the invitation link')
-    expect(await violations()).toEqual([])
 
-    // jsdom has no share sheet: the panel opens in place and takes the focus.
-    const share = button(w.share)
-    await press(share)
-    expect(document.activeElement?.getAttribute('role')).toBe('group')
-    expect(document.activeElement?.getAttribute('aria-labelledby')).toBeTruthy()
-    expect(share.getAttribute('aria-expanded')).toBe('true')
+    // A page of its own, headed with who the link is for, with the keyboard
+    // on the heading, and the one way that reaches them first.
+    const heading1 = document.querySelector('h1')!
+    expect(heading1.textContent).toBe('Send it to Ben Ortiz')
+    expect(document.activeElement).toBe(heading1)
+    expect(document.title).toBe(`Send it to Ben Ortiz · ${wording.productName}`)
+    const sendEmail = [...document.querySelectorAll('a')].find(
+      (link) => link.textContent === w.sendEmail,
+    )!
+    expect(sendEmail.className).toBe('button primary')
     expect(await violations()).toEqual([])
 
     await press(button(w.shareQr))
     await until(() => document.querySelector('svg[role="img"]') !== null, 'the QR code')
     expect(document.querySelector('svg')?.getAttribute('aria-label')).toBe(w.qrLabel)
+    expect(button(w.hideQr).getAttribute('aria-expanded')).toBe('true')
+    // Showing the code is a way of passing the link on: the way on appears
+    // and takes the keyboard.
+    expect(document.activeElement?.textContent).toBe(w.sendDone)
     expect(await violations()).toEqual([])
 
-    // Closed, the focus goes back to the button that opened it.
-    await press(button(w.closeShare))
-    expect(document.activeElement).toBe(share)
+    // On to the exchange, whose card says the link was shared.
+    await press(button(w.sendDone))
+    await until(() => document.querySelector('.history') !== null, 'the exchange')
+    expect(document.querySelector('h2')?.textContent).toBe('Ben Ortiz hasn’t joined yet')
+    expect(document.body.textContent).toContain('You shared the link on')
+    expect(await violations()).toEqual([])
+  })
+
+  test('“I’ll send it later” leaves the exchange with a reminder to send it', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.invitationLink
+    await heading(wording.composer.titleFirst)
+    await nameInvitee(wording.invitationLink.forLabel, 'carla@example.test')
+    await press(button(wording.composer.review))
+    await heading(wording.composer.signTitle)
+    await press(document.querySelector<HTMLInputElement>('.consent input[type=checkbox]')!)
+    await press(button(wording.composer.signAndSend))
+    await until(() => document.body.textContent!.includes(w.intro), 'the invitation link')
+
+    const later = button(w.later)
+    expect(later.className).toBe('link')
+    await press(later)
+    await until(() => document.querySelector('.history') !== null, 'the exchange')
+    const card = document.querySelector('.card-reminder')!
+    expect(card.getAttribute('aria-labelledby')).toBe('invitation-heading')
+    expect(card.querySelector('h2')?.textContent).toBe('Ben Ortiz hasn’t joined yet')
+    expect(card.textContent).toContain(
+      'You haven’t sent them the link. Yuppers doesn’t send it for you: Ben Ortiz gets nothing until you do.',
+    )
+    // The link is still at hand, with the ways to send it.
+    expect(card.querySelector('a.button.primary')?.textContent).toBe(w.sendEmail)
+    expect(await violations()).toEqual([])
   })
 
   test('writing a first proposal', async () => {

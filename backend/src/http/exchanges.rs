@@ -284,6 +284,34 @@ pub async fn reissue_invitation(
     Ok(Json(issued))
 }
 
+/// Records that the initiator opened a way to pass the invitation link on:
+/// the share sheet, a text message, an email, WhatsApp, a copy or its QR
+/// code. Yuppers never sends the link itself, so this is all the service can
+/// know about whether it went anywhere, and it says only that the sender
+/// opened a way to send it, not that it arrived. Shown back as
+/// `invitation_shared_at` on the exchange and in the list. Harmless to
+/// repeat: the latest time is kept.
+#[utoipa::path(
+    post,
+    path = "/v1/exchanges/{id}/invitation/shared",
+    params(("id" = String, Path, description = "Exchange ID")),
+    responses(
+        (status = 204, description = "Recorded"),
+        (status = 401, description = "Not signed in", body = ErrorBody),
+        (status = 403, description = "Only the initiator has a link to send", body = ErrorBody),
+        (status = 404, description = "No such exchange for this account", body = ErrorBody),
+        (status = 409, description = "Someone is in the invited party's place, or the exchange is not open", body = ErrorBody)
+    )
+)]
+pub async fn invitation_shared(
+    State(state): State<AppState>,
+    session: Session,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    service::invitation_shared(&state.db, &session, exchange_id(&id)?).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Shows the proposal behind an invitation link, to someone signed in. The
 /// token travels in the body so it never appears in a URL the service logs.
 ///

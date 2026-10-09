@@ -55,6 +55,10 @@ pub fn router() -> Router<AppState> {
             post(exchanges::reissue_invitation),
         )
         .route(
+            "/exchanges/{id}/invitation/shared",
+            post(exchanges::invitation_shared),
+        )
+        .route(
             "/exchanges/{id}/sms-updates",
             get(sms::sms_updates).put(sms::set_sms_updates),
         )

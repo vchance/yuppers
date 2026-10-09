@@ -399,6 +399,13 @@ pub struct ExchangeView {
     /// used. It is not once the link has been used, even by someone since
     /// removed, or has expired; a new one has to be issued.
     pub invitation_open: Option<bool>,
+    /// With `invitation_open`: when the initiator last opened a way to pass
+    /// the link on (RFC 3339), such as a text message or the share sheet,
+    /// as the apps report it (`POST /v1/exchanges/{id}/invitation/shared`).
+    /// Yuppers never sends the link itself, so this says the sender opened a
+    /// way to send it, not that it arrived. Null until they have, and for a
+    /// link that replaced an earlier one until that one is shared too.
+    pub invitation_shared_at: Option<String>,
     /// The other party has deleted their account and can no longer act in
     /// this exchange. Said only while the exchange is still open, which is
     /// when the viewer needs to know it. Always sent; a client may read its
@@ -480,6 +487,13 @@ pub struct ExchangeSummary {
     pub you: Slot,
     pub other_party_name: String,
     pub updated_at: String,
+    /// Who is in the invited party's place, as on the exchange's view, so
+    /// the initiator's list can say that nobody has joined yet.
+    pub counterparty: CounterpartyDto,
+    /// As on the exchange's view: only for the initiator while nobody is in
+    /// the invited party's place, when they last opened a way to pass the
+    /// link on, if they have.
+    pub invitation_shared_at: Option<String>,
 }
 
 /// What someone holding an invitation link sees before signing in.
@@ -560,6 +574,7 @@ impl RevisionView {
 pub struct ViewContext {
     pub claimant: Option<Claimant>,
     pub invitation_open: Option<bool>,
+    pub invitation_shared_at: Option<String>,
     pub other_party_left: bool,
     pub draft: Option<serde_json::Value>,
     /// When each contribution came to its current status.
@@ -591,6 +606,7 @@ impl ExchangeView {
         let ViewContext {
             claimant,
             invitation_open,
+            invitation_shared_at,
             other_party_left,
             draft,
             payment_options,
@@ -616,6 +632,7 @@ impl ExchangeView {
             },
             claimant,
             invitation_open,
+            invitation_shared_at,
             other_party_left,
             open_revision: aggregate.open.as_ref().map(RevisionView::from_record),
             in_force_revision: aggregate.in_force.as_ref().map(RevisionView::from_record),

@@ -145,7 +145,10 @@ export async function inviteFor(page: Page, address: string | null): Promise<voi
 
 /**
  * A first proposal, from a new exchange to the invitation link. The link is
- * for anyone, chosen on purpose, unless `invitee` names who it is for.
+ * for anyone, chosen on purpose, unless `invitee` names who it is for. The
+ * step that sends the link is left with "I’ll send it later", so the
+ * initiator ends on the exchange's page, with the link in hand here: in
+ * these tests the other person is given it directly.
  */
 export async function propose(
   initiator: Person,
@@ -159,9 +162,26 @@ export async function propose(
   await inviteFor(page, invitee)
   await addItems(page, items)
   await reviewAndSend(page)
+  await expect(
+    page.getByRole('heading', { name: fill(en.invitationLink.sendTitle, { name: other.name }) }),
+  ).toBeVisible()
   const field = page.getByLabel(en.invitationLink.linkLabel, { exact: true })
   await expect(field).toHaveValue(/\/en\/i#/)
-  return { id, link: await field.inputValue() }
+  const link = await field.inputValue()
+  await page.getByRole('button', { name: en.invitationLink.later, exact: true }).click()
+  await expect(invitationCard(page, other.name)).toBeVisible()
+  return { id, link }
+}
+
+/**
+ * The initiator's card about the invitation while nobody has joined through
+ * it, headed with who has not joined.
+ */
+export function invitationCard(page: Page, otherName: string): Locator {
+  return page.getByRole('region', {
+    name: fill(en.invitationLink.notJoined, { name: otherName }),
+    exact: true,
+  })
 }
 
 // ---- Joining -------------------------------------------------------------------

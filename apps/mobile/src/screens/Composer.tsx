@@ -80,7 +80,8 @@ type ContributionType = components['schemas']['ContributionType'];
 interface Props {
   exchange: Exchange;
   reload(): Promise<Exchange | null>;
-  onSent(sent: RevisionSent): void;
+  /** `boundTo` is who a first proposal's invitation was made for, as typed. */
+  onSent(sent: RevisionSent, boundTo: string | null): void;
   /** Leaving without sending. The working copy stays saved as a draft. */
   onLeave(): void;
 }
@@ -242,7 +243,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
       );
       saver.sent();
       await showAfterSigning(exchange.id, alsoShow);
-      onSent(result);
+      onSent(result, kind === 'first' ? invitationBoundTo(invitee) : null);
     } catch (error) {
       const code = failureCode(error);
       saver.resume();

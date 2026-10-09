@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
-import { failureCode, type RevisionSent } from '@yuppers/shared';
+import { failureCode, type IssuedInvitation, type RevisionSent } from '@yuppers/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 
@@ -8,6 +8,7 @@ import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 import { Composer } from './Composer';
 import { ExchangeView } from './ExchangeView';
+import { SendInvitation } from './SendInvitation';
 
 /** Loads one exchange, and again whenever its screen comes back to the front. */
 function useExchange(id: string) {
@@ -58,7 +59,8 @@ function Unavailable({ failure }: { failure: ErrorCode | null }) {
 }
 
 /**
- * One exchange. A draft is its composer; anything further along is the
+ * One exchange. A draft is its composer; a first proposal just sent is the
+ * step that sends its invitation link; anything further along is the
  * exchange view.
  */
 export function ExchangeScreen({ id }: { id: string }) {
@@ -66,7 +68,20 @@ export function ExchangeScreen({ id }: { id: string }) {
   const { exchange, setExchange, failure, reload } = useExchange(id);
   // The invitation token, held only while this screen stays open: it is shown
   // once and cannot be fetched again.
-  const [issued, setIssued] = useState<string | null>(null);
+  const [issued, setIssued] = useState<IssuedInvitation | null>(null);
+  // Whether the step that sends the link is the screen: from sending a
+  // first proposal until the person opens a way to send it and goes on, or
+  // says they will send it later.
+  const [sending, setSending] = useState(false);
+
+  // The person opened a way to send the link. The service is told, so the
+  // reminder on this screen and the chip in the list know; the screen
+  // itself knows at once, and a request that fails changes nothing it can show.
+  const shared = useCallback(() => {
+    const at = new Date().toISOString();
+    setExchange((current) => current && { ...current, invitation_shared_at: at });
+    api.markInvitationShared(id).catch(() => {});
+  }, [id, setExchange]);
 
   if (!exchange) return <Unavailable failure={failure} />;
 
@@ -76,12 +91,26 @@ export function ExchangeScreen({ id }: { id: string }) {
         exchange={exchange}
         reload={reload}
         onLeave={() => router.dismissTo('/')}
-        onSent={(sent: RevisionSent) => {
-          // The first thing on the exchange after a first proposal is the
-          // invitation link.
-          setIssued(sent.invitation_token ?? null);
+        onSent={(sent: RevisionSent, boundTo: string | null) => {
+          // A first proposal is not done until its link is sent: that step
+          // comes next, as the screen, before the exchange itself is shown.
+          const link = sent.invitation_token ? { token: sent.invitation_token, boundTo } : null;
+          setIssued(link);
+          setSending(link !== null);
           setExchange(sent.exchange);
         }}
+      />
+    );
+  }
+
+  if (sending && issued) {
+    return (
+      <SendInvitation
+        exchange={exchange}
+        issued={issued}
+        onShared={shared}
+        onDone={() => setSending(false)}
+        onLater={() => setSending(false)}
       />
     );
   }
@@ -91,6 +120,7 @@ export function ExchangeScreen({ id }: { id: string }) {
       exchange={exchange}
       issued={issued}
       onIssued={setIssued}
+      onShared={shared}
       onChange={setExchange}
       reload={reload}
     />

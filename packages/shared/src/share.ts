@@ -17,6 +17,8 @@
  * person picks would.
  */
 
+import type { ExchangeSummary, ExchangeView } from '@yuppers/api-client'
+
 import { identifierToSend, phoneProblem, readPhone } from './phone'
 import { phoneOffered, type SignInChannels } from './sign-in'
 import type { MessageValues } from './message'
@@ -66,6 +68,76 @@ export function shareAddresses({
     sms: `sms:${phone ?? ''}?body=${body}`,
     whatsApp: `https://wa.me/?text=${body}`,
   }
+}
+
+/**
+ * How who an invitation is for was named: by a phone number, by an email
+ * address, or not at all (a link for anyone). The step that sends the link
+ * leads with the way that reaches them: a text message to the number, an
+ * email to the address, or the device's share sheet.
+ */
+export type InviteeKind = 'phone' | 'email' | 'anyone'
+
+export function inviteeKind(boundTo: string | null): InviteeKind {
+  const bound = boundTo?.trim() ?? ''
+  if (!bound) return 'anyone'
+  if (bound.includes('@')) return validEmail(bound) ? 'email' : 'anyone'
+  return phoneNumber(bound) ? 'phone' : 'anyone'
+}
+
+/**
+ * How long after the sender opened a way to send the link the exchange's
+ * page asks them to send it again, while nobody has joined: long enough for
+ * the other person to have seen a message, and short enough that a link
+ * that never left the sender's phone is not waited on for a week.
+ */
+export const SHARE_REMINDER_AFTER_MS = 2 * 24 * 60 * 60 * 1000
+
+/**
+ * Why the initiator is reminded to send the link: `unsent` because no way to
+ * send it was ever opened, `waiting` because that was long ago and nobody
+ * has joined.
+ */
+export type SendReminder = 'unsent' | 'waiting'
+
+/**
+ * Whether the initiator is reminded to send the link (DESIGN.md §8). Only
+ * they hold one, and only while nobody is in the invited party's place and a
+ * link is out: a used or expired link needs replacing, which is said on its
+ * own. Yuppers never sends the link, so until the sender has opened a way to
+ * send it the other person has nothing; once they have, the reminder comes
+ * back only after `SHARE_REMINDER_AFTER_MS` without anyone joining.
+ */
+export function sendReminder(
+  exchange: Pick<
+    ExchangeView,
+    'you' | 'state' | 'counterparty' | 'invitation_open' | 'invitation_shared_at'
+  >,
+  now: Date = new Date(),
+): SendReminder | null {
+  if (exchange.you !== 'A') return null
+  if (exchange.state !== 'NEGOTIATING' || exchange.counterparty !== 'UNCLAIMED') return null
+  if (exchange.invitation_open === false) return null
+  const shared = exchange.invitation_shared_at
+  if (!shared) return 'unsent'
+  const at = Date.parse(shared)
+  if (Number.isNaN(at)) return 'unsent'
+  return now.getTime() - at >= SHARE_REMINDER_AFTER_MS ? 'waiting' : null
+}
+
+/**
+ * What the list says beside an exchange whose link the initiator holds and
+ * nobody has joined through: `notSent` while they have not opened a way to
+ * send it, `waiting` once they have.
+ */
+export type InvitationChip = 'notSent' | 'waiting'
+
+export function invitationChip(
+  summary: Pick<ExchangeSummary, 'you' | 'state' | 'counterparty' | 'invitation_shared_at'>,
+): InvitationChip | null {
+  if (summary.you !== 'A') return null
+  if (summary.state !== 'NEGOTIATING' || summary.counterparty !== 'UNCLAIMED') return null
+  return summary.invitation_shared_at ? 'waiting' : 'notSent'
 }
 
 /**

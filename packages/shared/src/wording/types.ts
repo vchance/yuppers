@@ -474,6 +474,13 @@ export interface Wording {
     groupClosed: string
     showClosed: string
     hideClosed: string
+    /**
+     * On the initiator's card while nobody has joined through their link:
+     * `notSent` while they have not opened a way to send it, `waitingFor`
+     * with `{name}` once they have.
+     */
+    notSent: string
+    waitingFor: string
   }
   states: Record<Schemas['StateDto'], string>
   outcomes: Record<Schemas['OutcomeDto'], string>
@@ -603,7 +610,6 @@ export interface Wording {
     agree: string
   }
   invitationLink: {
-    heading: string
     intro: string
     shownOnce: string
     linkLabel: string
@@ -624,7 +630,6 @@ export interface Wording {
     shareWhatsApp: string
     shareQr: string
     hideQr: string
-    closeShare: string
     /** The QR code's name for a screen reader, and what it is for. */
     qrLabel: string
     qrHint: string
@@ -669,6 +674,38 @@ export interface Wording {
     /** On the signing step, for a link for anyone. */
     forAnyoneSummary: string
     reissue: string
+    /**
+     * Sending the link, a step of its own after signing (DESIGN.md §8):
+     * `sendTitle` heads it, `sendRule` says that Yuppers does not send it
+     * and that `{name}` gets nothing until the person does. The primary
+     * action depends on who the link is for: `sendText` opens a text
+     * message to a phone number, `sendEmail` an email to an address,
+     * `share` the device's share sheet for a link for anyone;
+     * `sendWhatsApp` and `copy` stand beside them. `sharedNotice` follows
+     * any of them, with `sendDone` to go on. `later` is the way past the
+     * step without sending, and `laterHint` says what that leaves.
+     */
+    sendTitle: string
+    sendRule: string
+    sendText: string
+    sendEmail: string
+    sendWhatsApp: string
+    sharedNotice: string
+    sendDone: string
+    later: string
+    laterHint: string
+    /**
+     * The reminder on the exchange's page while nobody has joined:
+     * `notJoined` heads it; `notSentYet` while no way to send the link was
+     * ever opened, `sharedOn` with `{date}` once one was, `sharedLongAgo`
+     * when that was long enough ago to ask again, and `sendAgain` where the
+     * link is no longer at hand and a new one has to be made.
+     */
+    notJoined: string
+    notSentYet: string
+    sharedOn: string
+    sharedLongAgo: string
+    sendAgain: string
   }
   /**
    * The invitation page. Signed out it shows only `signedOutTitle` and

@@ -383,6 +383,21 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
       return issued.invitation_token
     },
 
+    /**
+     * Records that the initiator opened a way to send the current link: the
+     * share sheet, a text message, an email, WhatsApp, a copy or its QR
+     * code. Shown back as `invitation_shared_at`. Yuppers never sends the
+     * link, so this says only that, not that it arrived.
+     */
+    markInvitationShared(id: string): Promise<void> {
+      return send(() =>
+        client.POST('/v1/exchanges/{id}/invitation/shared', {
+          headers: headers(),
+          params: { path: { id } },
+        }),
+      )
+    },
+
     // The invitation token travels in the body, so it never appears in a URL
     // the service might log.
     previewInvitation(invitation: string): Promise<InvitationPreview> {

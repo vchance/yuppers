@@ -275,17 +275,24 @@ export {
   boundToProblem,
   boundToProblemText,
   invitationBoundTo,
+  invitationChip,
   invitationForProblem,
   invitationOptions,
+  inviteeKind,
   NAMED_INVITATION,
+  sendReminder,
+  SHARE_REMINDER_AFTER_MS,
   shareAddresses,
 } from './share'
 export { QR_QUIET_ZONE, qrRuns } from './qr'
 export type { QrModules, QrRun } from './qr'
 export type {
   BoundToProblem,
+  InvitationChip,
   InvitationChoice,
+  InviteeKind,
   IssuedInvitation,
+  SendReminder,
   ShareAddresses,
 } from './share'
 export {

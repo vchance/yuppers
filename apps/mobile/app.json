@@ -2,6 +2,8 @@
   "expo": {
     "name": "Yuppers",
     "slug": "yuppers",
+    "owner": "vchance",
+    "extra": { "eas": { "projectId": "56654593-934c-4b6e-af4f-d568cf6c417f" } },
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

@@ -7,6 +7,7 @@ mod common;
 use axum::http::{Method, StatusCode};
 use common::{App, Deal, User};
 use serde_json::{Value, json};
+use time::OffsetDateTime;
 use yuppers_backend::contact::Field;
 use yuppers_backend::payments::WRITES_PER_HOUR;
 
@@ -60,6 +61,29 @@ async fn put(app: &App, user: &User, path: &str, body: Value) -> common::Reply {
 
 async fn save(app: &App, user: &User, body: Value) -> common::Reply {
     put(app, user, "/v1/me/payment-handles", body).await
+}
+
+/// Saves one option on its own (`PUT /v1/me/payment-handles/{kind}`).
+async fn save_one(app: &App, user: &User, kind: &str, value: &str) -> common::Reply {
+    put(
+        app,
+        user,
+        &format!("/v1/me/payment-handles/{kind}"),
+        json!({ "value": value }),
+    )
+    .await
+}
+
+/// Removes one option on its own.
+async fn remove_one(app: &App, user: &User, kind: &str) -> common::Reply {
+    app.call(
+        Some(user),
+        Method::DELETE,
+        &format!("/v1/me/payment-handles/{kind}"),
+        None,
+        &[],
+    )
+    .await
 }
 
 async fn show(app: &App, user: &User, exchange: &str, on: bool) -> common::Reply {
@@ -431,6 +455,13 @@ async fn changes_are_limited_per_hour() {
         )
         .await;
     reply.refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    // One at a time counts the same.
+    save_one(&app, &deal.ana, "venmo", "ana-again")
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    remove_one(&app, &deal.ana, "zelle")
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
     // Reading is not limited.
     app.get(&deal.ana, "/v1/me/payment-handles").await.ok();
 
@@ -453,6 +484,8 @@ async fn reading_and_writing_needs_a_session() {
         (Method::GET, "/v1/me/payment-handles"),
         (Method::PUT, "/v1/me/payment-handles"),
         (Method::DELETE, "/v1/me/payment-handles"),
+        (Method::PUT, "/v1/me/payment-handles/venmo"),
+        (Method::DELETE, "/v1/me/payment-handles/venmo"),
     ] {
         app.call(None, method, path, Some(json!({})), &[])
             .await
@@ -555,4 +588,162 @@ async fn a_payer_is_warned_beside_an_option_changed_since_the_agreement_came_int
     assert!(said["venmo"].is_string(), "{said}");
     assert!(said["paypal"].is_string(), "{said}");
     assert!(said["cash_app"].is_null(), "{said}");
+}
+
+/// When each option last changed, as stored, in the columns' order.
+async fn changed_at(app: &App, user: &User) -> [Option<OffsetDateTime>; 4] {
+    let row: (
+        Option<OffsetDateTime>,
+        Option<OffsetDateTime>,
+        Option<OffsetDateTime>,
+        Option<OffsetDateTime>,
+    ) = sqlx::query_as(
+        "SELECT venmo_changed_at, cash_app_changed_at, paypal_changed_at, zelle_changed_at
+         FROM payment_handle WHERE account_id = $1",
+    )
+    .bind(user.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    [row.0, row.1, row.2, row.3]
+}
+
+#[tokio::test]
+async fn one_option_is_saved_changed_and_removed_on_its_own() {
+    let app = App::start(DATABASE).await;
+    let ana = app.user("Ana").await;
+
+    // Added one at a time, each normalized; the reply is everything saved.
+    assert_eq!(
+        save_one(&app, &ana, "venmo", "@Ana-Fixes").await.ok(),
+        json!({ "venmo": "Ana-Fixes", "cash_app": null, "paypal": null, "zelle": null })
+    );
+    let before = changed_at(&app, &ana).await;
+    assert!(before[0].is_some());
+    assert_eq!(
+        save_one(&app, &ana, "zelle", "(202) 555-0142").await.ok(),
+        json!({ "venmo": "Ana-Fixes", "cash_app": null, "paypal": null, "zelle": "+12025550142" })
+    );
+
+    // Encrypted at rest, bound to its column and account.
+    let zelle: Vec<u8> =
+        sqlx::query_scalar("SELECT zelle_encrypted FROM payment_handle WHERE account_id = $1")
+            .bind(ana.id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert!(!zelle.windows(10).any(|window| window == b"2025550142"));
+    assert_eq!(
+        common::open(Field::PAYMENT_ZELLE.owned_by(ana.id), &zelle),
+        "+12025550142"
+    );
+
+    // Saving Zelle left Venmo's time alone; saving Venmo as it was, too.
+    let after = changed_at(&app, &ana).await;
+    assert_eq!(after[0], before[0]);
+    assert!(after[3].is_some());
+    save_one(&app, &ana, "venmo", "Ana-Fixes").await.ok();
+    assert_eq!(changed_at(&app, &ana).await, after);
+    // A new value is a change, of that one only.
+    save_one(&app, &ana, "venmo", "ana-pays").await.ok();
+    let edited = changed_at(&app, &ana).await;
+    assert!(edited[0] > after[0]);
+    assert_eq!(edited[3], after[3]);
+
+    // Not one, empty, or no such kind: refused, and nothing changes.
+    for (kind, value, status, code) in [
+        ("venmo", "ana", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
+        ("venmo", "", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
+        ("cash_app", "$12345", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
+        ("zelle", "+1 416 555 0142", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
+        ("bank", "ana", StatusCode::NOT_FOUND, "NOT_FOUND"),
+        ("cash-app", "AnaFixes", StatusCode::NOT_FOUND, "NOT_FOUND"),
+    ] {
+        save_one(&app, &ana, kind, value).await.refused(status, code);
+    }
+    remove_one(&app, &ana, "bank")
+        .await
+        .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+    assert_eq!(
+        app.get(&ana, "/v1/me/payment-handles").await.ok(),
+        json!({ "venmo": "ana-pays", "cash_app": null, "paypal": null, "zelle": "+12025550142" })
+    );
+    assert_eq!(changed_at(&app, &ana).await, edited);
+
+    // Removed on its own: the other stays, with its time.
+    assert_eq!(
+        remove_one(&app, &ana, "venmo").await.ok(),
+        json!({ "venmo": null, "cash_app": null, "paypal": null, "zelle": "+12025550142" })
+    );
+    let removed = changed_at(&app, &ana).await;
+    assert_eq!(removed[0], None);
+    assert_eq!(removed[3], edited[3]);
+    // Removing one not saved changes nothing.
+    assert_eq!(
+        remove_one(&app, &ana, "paypal").await.ok()["zelle"],
+        "+12025550142"
+    );
+}
+
+#[tokio::test]
+async fn removing_the_last_one_stops_showing_them_everywhere() {
+    let app = App::start(DATABASE).await;
+    let ana = app.user("Ana").await;
+    save_one(&app, &ana, "venmo", "ana-fixes").await.ok();
+    save_one(&app, &ana, "zelle", "ana@example.com").await.ok();
+    let deal = app.active_between(ana, app.user("Ben").await).await;
+    let (ana, ben, exchange) = (&deal.ana, &deal.ben, deal.exchange.as_str());
+    show(&app, ana, exchange, true).await.ok();
+
+    // One of two removed: still shown, the one left.
+    remove_one(&app, ana, "venmo").await.ok();
+    assert_eq!(
+        options(&app.view(ben, exchange).await),
+        (
+            json!(false),
+            json!({ "venmo": null, "cash_app": null, "paypal": null, "zelle": "ana@example.com" })
+        )
+    );
+    assert_eq!(options(&app.view(ana, exchange).await).0, true);
+
+    // The last one: shown nowhere, and adding one again does not bring
+    // them back without Ana's say-so.
+    remove_one(&app, ana, "zelle").await.ok();
+    assert_eq!(options(&app.view(ana, exchange).await).0, false);
+    save_one(&app, ana, "paypal", "AnaFixes").await.ok();
+    assert_eq!(
+        options(&app.view(ben, exchange).await),
+        (json!(false), Value::Null)
+    );
+    assert_eq!(options(&app.view(ana, exchange).await).0, false);
+}
+
+#[tokio::test]
+async fn the_payer_is_warned_only_beside_the_one_that_changed() {
+    let app = App::start(DATABASE).await;
+    let ana = app.user("Ana").await;
+    save(&app, &ana, handles()).await.ok();
+    let deal = app.active_between(ana, app.user("Ben").await).await;
+    let (ana, ben, exchange) = (&deal.ana, &deal.ben, deal.exchange.as_str());
+    show(&app, ana, exchange, true).await.ok();
+    let nothing = json!({ "venmo": null, "cash_app": null, "paypal": null, "zelle": null });
+
+    // Saved again as it was, alone: nothing to warn about.
+    save_one(&app, ana, "cash_app", "$AnaFixes").await.ok();
+    assert_eq!(changed(&app.view(ben, exchange).await), nothing);
+
+    // Zelle changed, then PayPal removed: only Zelle is warned about.
+    save_one(&app, ana, "zelle", "ana@example.com").await.ok();
+    remove_one(&app, ana, "paypal").await.ok();
+    let view = app.view(ben, exchange).await;
+    let said = changed(&view);
+    assert!(said["zelle"].is_string(), "{said}");
+    assert_eq!(
+        (&said["venmo"], &said["cash_app"], &said["paypal"]),
+        (&Value::Null, &Value::Null, &Value::Null)
+    );
+    assert_eq!(
+        view["payment_options"]["theirs"],
+        json!({ "venmo": "Ana-Fixes", "cash_app": "AnaFixes", "paypal": null, "zelle": "ana@example.com" })
+    );
 }

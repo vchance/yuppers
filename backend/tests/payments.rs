@@ -651,15 +651,19 @@ async fn one_option_is_saved_changed_and_removed_on_its_own() {
     assert_eq!(edited[3], after[3]);
 
     // Not one, empty, or no such kind: refused, and nothing changes.
-    for (kind, value, status, code) in [
-        ("venmo", "ana", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
-        ("venmo", "", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
-        ("cash_app", "$12345", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
-        ("zelle", "+1 416 555 0142", StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST"),
-        ("bank", "ana", StatusCode::NOT_FOUND, "NOT_FOUND"),
-        ("cash-app", "AnaFixes", StatusCode::NOT_FOUND, "NOT_FOUND"),
+    let invalid = (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    let missing = (StatusCode::NOT_FOUND, "NOT_FOUND");
+    for (kind, value, (status, code)) in [
+        ("venmo", "ana", invalid),
+        ("venmo", "", invalid),
+        ("cash_app", "$12345", invalid),
+        ("zelle", "+1 416 555 0142", invalid),
+        ("bank", "ana", missing),
+        ("cash-app", "AnaFixes", missing),
     ] {
-        save_one(&app, &ana, kind, value).await.refused(status, code);
+        save_one(&app, &ana, kind, value)
+            .await
+            .refused(status, code);
     }
     remove_one(&app, &ana, "bank")
         .await

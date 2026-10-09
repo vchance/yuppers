@@ -187,19 +187,18 @@ test('options the payee stopped showing are not offered once the sheet opens', a
 
 /** A stand-in for the service's payment option calls, one app at a time. */
 function handlesClient(start: Handles = NONE) {
-  const client = {
-    saved: { ...start },
-    paymentHandles: jest.fn(async () => client.saved),
+  let saved: Handles = { ...start };
+  return {
+    paymentHandles: jest.fn(async () => saved),
     setPaymentHandle: jest.fn(async (kind: keyof Handles, value: string) => {
-      client.saved = { ...client.saved, [kind]: value };
-      return client.saved;
+      saved = { ...saved, [kind]: value };
+      return saved;
     }),
     removePaymentHandle: jest.fn(async (kind: keyof Handles) => {
-      client.saved = { ...client.saved, [kind]: null };
-      return client.saved;
+      saved = { ...saved, [kind]: null };
+      return saved;
     }),
   };
-  return client;
 }
 
 const fill = (message: string, app: string) => message.replace('{app}', app);

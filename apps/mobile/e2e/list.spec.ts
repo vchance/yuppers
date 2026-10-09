@@ -28,9 +28,11 @@ test('the list groups exchanges in progress, drafts and closed ones, with the cl
   // then who it is with: the name is the other party's own words, and is
   // never the first thing said.
   const exchanges = page.getByRole('button', { name: /\. Reference / })
+  // Cleo's link was issued through the API and never sent from here, which
+  // the card says before its reference (`home.notSent`).
   const inProgress = page.getByRole('button', {
     name: new RegExp(
-      `^${en.states.NEGOTIATING}\\. Reference .*\\. ${fill(en.home.withParty, { name: 'Cleo' })}$`,
+      `^${en.states.NEGOTIATING}\\. ${en.home.notSent}\\. Reference .*\\. ${fill(en.home.withParty, { name: 'Cleo' })}$`,
     ),
   })
   const draft = page.getByRole('button', {

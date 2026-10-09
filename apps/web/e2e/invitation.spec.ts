@@ -49,6 +49,9 @@ test('a replaced invitation link stops working, and the new one opens the propos
     await expect(
       page.getByRole('heading', { name: en.invitation.signedOutTitle, level: 1 }),
     ).toBeVisible()
+    // The form asks for what the service can send codes to once it has
+    // said (`GET /v1/meta`): read the page only once that has settled.
+    await expect(page.getByLabel(en.signIn.identifierLabel, { exact: true })).toBeVisible()
     return page.locator('main').innerHTML()
   }
   expect(await signedOut(first)).toBe(await signedOut(second))

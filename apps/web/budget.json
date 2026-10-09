@@ -1,8 +1,8 @@
 {
   "invitation": {
-    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%; raised for the Tandem design (its stylesheet, the mark, the appearance switch) at 109,319 gzip and 95,327 brotli (Spanish) plus about 10%. `fonts` is the bytes, as stored, of the two fonts the page preloads (Instrument Sans 400 and Gabarito 900, subset), set at 33,072 plus about 10%; the other fonts load when used (font-display: swap) and are not counted. How and when to raise it: scripts/check-budget.mjs.",
-    "gzip": 120000,
-    "brotli": 105000,
+    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%; raised for the Tandem design (its stylesheet, the mark, the appearance switch) at 109,319 gzip and 95,327 brotli (Spanish) plus about 10%; nudged for the wording of the step that sends the invitation (sixteen more messages in the one wording file the page loads) at 120,428 gzip and 105,008 brotli (Spanish), to leave the same small headroom. `fonts` is the bytes, as stored, of the two fonts the page preloads (Instrument Sans 400 and Gabarito 900, subset), set at 33,072 plus about 10%; the other fonts load when used (font-display: swap) and are not counted. How and when to raise it: scripts/check-budget.mjs.",
+    "gzip": 122000,
+    "brotli": 107000,
     "fonts": 36000
   }
 }

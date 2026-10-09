@@ -25,9 +25,10 @@ describe('signing in where the service has no text messages', () => {
     })
     const w = wording.signIn
     await until(() => service.sent.some((request) => request.call === 'GET /v1/meta'), 'meta')
-    await settle()
+    // The form is drawn once the page's own chunk and the answer are in,
+    // which takes a moment longer on a busy machine.
+    await until(() => document.body.textContent!.includes(w.introEmail), 'the email-only form')
 
-    expect(document.body.textContent).toContain(w.introEmail)
     expect(document.body.textContent).not.toContain(w.intro)
     expect(hasLabel(w.identifierLabel)).toBe(false)
     const email = field(w.emailLabel) as HTMLInputElement

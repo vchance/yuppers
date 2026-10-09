@@ -2728,6 +2728,148 @@
         }
       }
     },
+    "/v1/me/payment-handles/{kind}": {
+      "put": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Saves one of the account's payment options, adding it or changing it,\nand leaves the others as they are. It is marked changed only if its\nvalue is new, so the payer's warning beside it stays true.",
+        "operationId": "set_payment_handle",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`venmo`, `cash_app`, `paypal` or `zelle`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentHandleValue"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What is now saved, all of them, as stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentHandles"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such kind of payment option",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not a username, $Cashtag, PayPal.Me name, or email address or US phone number for Zelle; empty is not one either (remove it instead)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many changes to payment options this hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Removes one of the account's payment options, leaving the others as they\nare. Removing the last one stops showing them on every agreement, as\nremoving them all does. Removing one not saved changes nothing.",
+        "operationId": "remove_payment_handle",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`venmo`, `cash_app`, `paypal` or `zelle`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What is still saved, as stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentHandles"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such kind of payment option",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many changes to payment options this hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/meta": {
       "get": {
         "tags": [
@@ -5057,6 +5199,18 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "PaymentHandleValue": {
+        "type": "object",
+        "description": "One payment option to save, as typed: a Venmo username with or without\nits `@`, a $Cashtag with or without its `$`, a PayPal.Me name or its\nlink, or for Zelle an email address or a US phone number.",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "type": "string"
           }
         }
       },

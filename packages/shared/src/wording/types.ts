@@ -1088,7 +1088,10 @@ export interface Wording {
    * text, never logos.
    */
   payments: {
-    /** The account screen's section. */
+    /**
+     * The payment options screen, and its row on the account screen: the
+     * title of both, and what they are for (shown with none added).
+     */
     heading: string
     intro: string
     venmoLabel: string
@@ -1103,10 +1106,47 @@ export interface Wording {
     zelleLabel: string
     zelleHint: string
     zelleInvalid: string
-    save: string
-    saved: string
-    remove: string
-    removed: string
+    /** Each app's name, in plain text: in the list, the summary and `{app}` below. */
+    apps: {
+      venmo: string
+      cash_app: string
+      paypal: string
+      zelle: string
+    }
+    /** The account row's summary with none added; otherwise the apps' names. */
+    noneAdded: string
+    /** The screen with none added, above `intro`. */
+    empty: string
+    /** The button that starts adding one. */
+    add: string
+    /** In its place once every app has one. */
+    allAdded: string
+    /** Choosing which app to add, from those not added yet. */
+    pickHeading: string
+    pickIntro: string
+    /** The one field's step. `{app}`. */
+    addHeading: string
+    editHeading: string
+    /** Each row's buttons, and their accessible names with `{app}`. */
+    edit: string
+    editWhat: string
+    removeOne: string
+    removeWhat: string
+    saveOne: string
+    /** Once done. `{app}`. */
+    savedOne: string
+    removedOne: string
+    /** Once the last one is removed: it is shown on no yup now. `{app}`. */
+    removedLast: string
+    /** The confirmation before removing one. `{app}`. */
+    confirmTitle: string
+    confirmText: string
+    /** Instead of `confirmText` for the last one: it turns showing them off everywhere. */
+    confirmLast: string
+    /** Not removing it after all. */
+    keep: string
+    /** The web screen's way back to the account. */
+    back: string
     /** On a yup, for a party who receives money. */
     showHeading: string
     showLabel: string
@@ -1118,6 +1158,8 @@ export interface Wording {
     /** With nothing saved: the link to the account screen. */
     noneSaved: string
     addInAccount: string
+    /** With some saved: the link to the payment options screen, under the box. */
+    manage: string
     /** In the panel where terms are signed or sent. */
     showWhenSigning: string
     /** For the payer. `{name}`, `{amount}`. */

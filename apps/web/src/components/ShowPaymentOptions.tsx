@@ -58,10 +58,13 @@ export function ShowPaymentOptions({ exchange, otherName, reload }: Props) {
           </p>
           <Failure code={control.failure} />
           {said && <p className="notice">{said}</p>}
+          <p>
+            <Link to={paths.payments}>{w.manage}</Link>
+          </p>
         </>
       ) : (
         <p>
-          {w.noneSaved} <Link to={paths.account}>{w.addInAccount}</Link>
+          {w.noneSaved} <Link to={paths.payments}>{w.addInAccount}</Link>
         </p>
       )}
     </section>

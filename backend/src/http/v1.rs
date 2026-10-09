@@ -38,6 +38,10 @@ pub fn router() -> Router<AppState> {
                 .put(payments::set_payment_handles)
                 .delete(payments::remove_payment_handles),
         )
+        .route(
+            "/me/payment-handles/{kind}",
+            put(payments::set_payment_handle).delete(payments::remove_payment_handle),
+        )
         .route("/exchanges", get(exchanges::list).post(exchanges::create))
         .route("/exchanges/{id}", get(exchanges::get))
         .route("/exchanges/{id}/draft", put(exchanges::save_draft))

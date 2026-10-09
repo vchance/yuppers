@@ -303,6 +303,8 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         payments::payment_handles,
         payments::set_payment_handles,
         payments::remove_payment_handles,
+        payments::set_payment_handle,
+        payments::remove_payment_handle,
         payments::set_payment_options,
         sms::sms_updates,
         sms::set_sms_updates,

@@ -3,18 +3,20 @@ import { expect, test } from 'vitest'
 import en from '../wording/en.json'
 import es from '../wording/es.json'
 import {
+  addedApps,
+  appsToAdd,
   cashAppUrl,
   cashtag,
-  handleInputs,
+  handleShown,
   linkAmount,
   normalizeHandle,
   paymentNote,
   paymentOptionsKey,
+  paymentOptionsSummary,
   payOffered,
   payOptions,
   paypalName,
   paypalUrl,
-  readHandles,
   showOffered,
   venmoUrl,
   venmoUsername,
@@ -57,20 +59,30 @@ test('Zelle takes an email address or a US number, shown the way people write on
   expect(zelleShown('dana@example.com')).toBe('dana@example.com')
 })
 
-test('the form reads every option at once, empty is none, and names the wrong ones', () => {
+test('each option is read on its own, and shown to its owner as saved', () => {
   expect(normalizeHandle('venmo', '  ')).toBe('')
+  expect(normalizeHandle('venmo', '@dana-fixes')).toBe('dana-fixes')
+  expect(normalizeHandle('paypal', 'dana_x')).toBeNull()
+  expect(normalizeHandle('zelle', '2025550142')).toBe('+12025550142')
+  const saved = { venmo: 'dana-fixes', cash_app: null, paypal: null, zelle: '+12025550142' }
+  expect(handleShown('venmo', saved)).toBe('dana-fixes')
+  expect(handleShown('zelle', saved)).toBe('(202) 555-0142')
+  expect(handleShown('cash_app', saved)).toBe('')
+  expect(handleShown('venmo', null)).toBe('')
+})
+
+test('the apps added, those left to add, and the account row’s summary', () => {
+  const saved = { venmo: 'dana-fixes', cash_app: null, paypal: null, zelle: 'dana@example.com' }
+  expect(addedApps(saved)).toEqual(['venmo', 'zelle'])
+  expect(appsToAdd(saved)).toEqual(['cash_app', 'paypal'])
+  expect(appsToAdd(null)).toEqual(['venmo', 'cash_app', 'paypal', 'zelle'])
+  const w = en.payments
+  expect(paymentOptionsSummary(saved, w.apps, w.noneAdded)).toBe('Venmo, Zelle')
+  expect(paymentOptionsSummary(null, w.apps, w.noneAdded)).toBe('None added')
   expect(
-    readHandles({ venmo: '@dana-fixes', cash_app: '', paypal: 'dana_x', zelle: '2025550142' }),
-  ).toEqual({
-    handles: { venmo: 'dana-fixes', cash_app: null, paypal: null, zelle: '+12025550142' },
-    invalid: ['paypal'],
-  })
-  expect(handleInputs({ venmo: 'dana-fixes', cash_app: null, paypal: null, zelle: '+12025550142' })).toEqual({
-    venmo: 'dana-fixes',
-    cash_app: '',
-    paypal: '',
-    zelle: '(202) 555-0142',
-  })
+    paymentOptionsSummary({ ...saved, cash_app: 'x', paypal: 'y' }, es.payments.apps, es.payments.noneAdded),
+  ).toBe('Venmo, Cash App, PayPal, Zelle')
+  expect(appsToAdd({ ...saved, cash_app: 'x', paypal: 'y' })).toEqual([])
 })
 
 test('an amount goes in a link as plain dollars, with cents only when there are some', () => {

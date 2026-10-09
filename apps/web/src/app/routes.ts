@@ -18,6 +18,8 @@ export { invitationToken } from '@yuppers/shared'
 export type Route =
   | { name: 'home' }
   | { name: 'account' }
+  /** The account's payment options, each added, changed or removed on its own. */
+  | { name: 'payments' }
   /** `language` is the sender's: it chose which entry page the link previews with, nothing more. */
   | { name: 'invitation'; language: string }
   | { name: 'exchange'; id: string }
@@ -50,6 +52,7 @@ export function matchRoute(pathname: string): Route {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
   if (path === '/' || path === '') return { name: 'home' }
   if (path === '/account') return { name: 'account' }
+  if (path === '/account/payments') return { name: 'payments' }
   if (path === '/help') return { name: 'help', topic: null }
   const help = HELP_TOPIC.exec(path)
   if (help) return { name: 'help', topic: help[1] }
@@ -73,6 +76,7 @@ export function matchRoute(pathname: string): Route {
 export const paths = {
   home: '/',
   account: '/account',
+  payments: '/account/payments',
   exchange: (id: string) => `/exchanges/${id}`,
   revise: (id: string) => `/exchanges/${id}/revise`,
   record: (id: string) => `/exchanges/${id}/record`,

@@ -430,6 +430,17 @@ async fn payment_options_are_never_logged() {
         )
         .await;
     assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    // One at a time, saved and refused: the path names the app, never the value.
+    for value in ["LogcheckPayPal2", "Logcheck PayPal!"] {
+        app.call(
+            Some(&deal.ana),
+            Method::PUT,
+            "/v1/me/payment-handles/paypal",
+            Some(json!({ "value": value })),
+            &[],
+        )
+        .await;
+    }
     app.call(
         Some(&deal.ana),
         Method::PUT,

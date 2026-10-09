@@ -517,6 +517,28 @@ test('a notification email’s link to the record opens the record', async () =>
   await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}/record`));
 });
 
+test('the account’s payment options row opens their own screen, and back shows what changed', async () => {
+  const { app } = await open('/account', { signedIn: true });
+  const row = await screen.findByRole('button', { name: `${w.payments.heading}, ${w.payments.noneAdded}` });
+  await fireEvent.press(row);
+  await screen.findByText(w.payments.empty);
+  expect(app.getPathnameWithParams()).toBe('/account/payments');
+
+  await fireEvent.press(screen.getByRole('button', { name: w.payments.add }));
+  await fireEvent.press(await screen.findByRole('button', { name: w.payments.apps.venmo }));
+  await fireEvent.changeText(screen.getByLabelText(w.payments.venmoLabel), 'ana-pays');
+  await fireEvent.press(screen.getByRole('button', { name: w.payments.saveOne }));
+  await screen.findByText('ana-pays');
+  expect(service.sent.find((request) => request.path === '/v1/me/payment-handles/venmo')).toMatchObject({
+    method: 'PUT',
+    body: { value: 'ana-pays' },
+  });
+
+  await act(() => router.back());
+  await screen.findByRole('button', { name: `${w.payments.heading}, Venmo` });
+  expect(app.getPathnameWithParams()).toBe('/account');
+});
+
 test('with no link to open, an invitation can be pasted', async () => {
   await open('/invitation', { signedIn: false });
   const pasting = w.mobile.openInvitation;

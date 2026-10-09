@@ -178,6 +178,58 @@ pub const COLUMNS: [(&str, Field); 4] = [
     ("zelle_encrypted", Field::PAYMENT_ZELLE),
 ];
 
+/// When each column last changed, in the same order.
+const CHANGED_COLUMNS: [&str; 4] = [
+    "venmo_changed_at",
+    "cash_app_changed_at",
+    "paypal_changed_at",
+    "zelle_changed_at",
+];
+
+/// One kind of payment option: the app it is for. Named in a path as its
+/// field is named in [`PaymentHandles`]: `venmo`, `cash_app`, `paypal`,
+/// `zelle`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PaymentApp {
+    Venmo,
+    CashApp,
+    Paypal,
+    Zelle,
+}
+
+impl PaymentApp {
+    /// The app a path names, or `None` for one that is not one.
+    pub fn from_path(text: &str) -> Option<Self> {
+        match text {
+            "venmo" => Some(Self::Venmo),
+            "cash_app" => Some(Self::CashApp),
+            "paypal" => Some(Self::Paypal),
+            "zelle" => Some(Self::Zelle),
+            _ => None,
+        }
+    }
+
+    /// Its place in [`COLUMNS`] and in a stored row.
+    fn index(self) -> usize {
+        match self {
+            Self::Venmo => 0,
+            Self::CashApp => 1,
+            Self::Paypal => 2,
+            Self::Zelle => 3,
+        }
+    }
+
+    /// The option as it is stored, or `None` for one that is not one.
+    pub fn normalize(self, input: &str) -> Option<String> {
+        match self {
+            Self::Venmo => venmo(input),
+            Self::CashApp => cash_app(input),
+            Self::Paypal => paypal(input),
+            Self::Zelle => zelle(input),
+        }
+    }
+}
+
 /// When each of the payee's payment options changed, as RFC 3339, for those
 /// that changed after the agreement came into force, however long ago: the
 /// payer is warned beside each. A name changed while money is owed is how a
@@ -366,6 +418,74 @@ pub async fn save(
             .await?;
     }
     Ok(handles)
+}
+
+/// Saves one of the account's payment options, or removes it (`None`),
+/// leaving the others exactly as they are: their values, and when each
+/// changed. Saved as a value it did not have, it is marked changed now;
+/// saved as the same value, it keeps its time. With none left once it is
+/// removed, every agreement the account showed them on stops showing them,
+/// as when all are removed at once. Returns what is now saved.
+///
+/// Only its own column is written, so two devices changing different
+/// options at the same time each keep their change, and another option
+/// that does not decrypt (`open`) is left as it is rather than dropped.
+pub async fn save_one(
+    conn: &mut PgConnection,
+    account: Uuid,
+    app: PaymentApp,
+    value: Option<&str>,
+) -> Result<PaymentHandles, ApiError> {
+    // Checked before anything is counted or written.
+    let value = match value {
+        None => None,
+        Some(text) => Some(
+            app.normalize(text)
+                .ok_or_else(|| ApiError::from(ErrorCode::InvalidRequest))?,
+        ),
+    };
+    count_write(conn, account).await?;
+    // Held by `count_write` to the end of the transaction.
+    let before = stored(conn, account).await?;
+    let index = app.index();
+    let (column, field) = COLUMNS[index];
+    let changed_column = CHANGED_COLUMNS[index];
+    let (sealed, changed) = match &value {
+        None => (None, None),
+        Some(value) => {
+            let now = OffsetDateTime::now_utc();
+            let at = match &before {
+                Some(before) if before.values[index].as_ref() == Some(value) => {
+                    before.changed[index].unwrap_or(now)
+                }
+                _ => now,
+            };
+            let sealed = contact::keys().seal(field.owned_by(account), value);
+            (Some(sealed), Some(at))
+        }
+    };
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "UPDATE payment_handle SET {column} = $2, {changed_column} = $3, updated_at = now()
+         WHERE account_id = $1"
+    )))
+    .bind(account)
+    .bind(sealed)
+    .bind(changed)
+    .execute(&mut *conn)
+    .await?;
+    if value.is_none() {
+        sqlx::query(
+            "DELETE FROM payment_offer o
+             USING payment_handle h
+             WHERE o.account_id = $1 AND h.account_id = $1
+               AND num_nonnulls(h.venmo_encrypted, h.cash_app_encrypted, h.paypal_encrypted,
+                                h.zelle_encrypted) = 0",
+        )
+        .bind(account)
+        .execute(&mut *conn)
+        .await?;
+    }
+    load(conn, account).await
 }
 
 /// Removes all of the account's payment options, and stops showing them
@@ -576,6 +696,28 @@ mod tests {
         ] {
             assert_eq!(zelle(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn each_app_is_named_in_a_path_as_its_field_is() {
+        for (name, app) in [
+            ("venmo", PaymentApp::Venmo),
+            ("cash_app", PaymentApp::CashApp),
+            ("paypal", PaymentApp::Paypal),
+            ("zelle", PaymentApp::Zelle),
+        ] {
+            assert_eq!(PaymentApp::from_path(name), Some(app));
+            assert!(COLUMNS[app.index()].0.starts_with(name));
+            assert!(CHANGED_COLUMNS[app.index()].starts_with(name));
+        }
+        for bad in ["", "Venmo", "cash-app", "cashapp", "bank"] {
+            assert_eq!(PaymentApp::from_path(bad), None, "{bad}");
+        }
+        assert_eq!(
+            PaymentApp::Zelle.normalize("(202) 555-0142").as_deref(),
+            Some("+12025550142")
+        );
+        assert_eq!(PaymentApp::CashApp.normalize(""), None);
     }
 
     #[test]

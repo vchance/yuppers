@@ -526,6 +526,95 @@ textarea:disabled {
   margin-block: 0;
 }
 
+/* A row that opens another screen, such as payment options on the account
+   (`PaymentOptionsRow`): the link in its heading covers the whole row, so
+   it can be pressed anywhere, and the arrow says it leads on. */
+.nav-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 2.75rem;
+}
+
+.nav-row h2 {
+  margin-block-end: 0.25rem;
+}
+
+.nav-row h2 a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-row h2 a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.nav-row:hover h2 a {
+  text-decoration: underline;
+}
+
+.nav-row .hint {
+  margin-block-end: 0;
+}
+
+.nav-row-chevron {
+  margin-inline-start: auto;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+[dir='rtl'] .nav-row-chevron {
+  transform: scaleX(-1);
+}
+
+/* The payment options screen (`PaymentOptionsPage`): one card per app,
+   its name and what is saved, with Edit and Remove beside them, wrapping
+   under them on a narrow screen. */
+.payment-options-page .back {
+  margin-block-end: 0.5rem;
+}
+
+.payment-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.payment-row-text {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+}
+
+.payment-row-text h2 {
+  font-size: var(--type-heading);
+  margin-block-end: 0.125rem;
+}
+
+.payment-row-text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.payment-row .actions {
+  margin-block: 0;
+}
+
+.payment-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.payment-picks button {
+  min-inline-size: 8rem;
+}
+
 .field {
   margin-block-end: 1rem;
 }

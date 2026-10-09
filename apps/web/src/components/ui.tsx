@@ -95,13 +95,13 @@ export function WithName({
  * opens below what the person pressed and replaces it, such as signing in
  * on the invitation page.
  */
-export function StepHeading({ children }: { children: string }) {
+export function StepHeading({ children, id }: { children: string; id?: string }) {
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     heading.current?.focus()
   }, [])
   return (
-    <h2 ref={heading} tabIndex={-1}>
+    <h2 ref={heading} tabIndex={-1} id={id}>
       {children}
     </h2>
   )

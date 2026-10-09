@@ -818,6 +818,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/payment-handles/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Saves one of the account's payment options, adding it or changing it,
+         *     and leaves the others as they are. It is marked changed only if its
+         *     value is new, so the payer's warning beside it stays true.
+         */
+        put: operations["set_payment_handle"];
+        post?: never;
+        /**
+         * Removes one of the account's payment options, leaving the others as they
+         *     are. Removing the last one stops showing them on every agreement, as
+         *     removing them all does. Removing one not saved changes nothing.
+         */
+        delete: operations["remove_payment_handle"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta": {
         parameters: {
             query?: never;
@@ -1773,6 +1799,14 @@ export interface components {
             paypal?: string | null;
             venmo?: string | null;
             zelle?: string | null;
+        };
+        /**
+         * @description One payment option to save, as typed: a Venmo username with or without
+         *     its `@`, a $Cashtag with or without its `$`, a PayPal.Me name or its
+         *     link, or for Zelle an email address or a US phone number.
+         */
+        PaymentHandleValue: {
+            value: string;
         };
         /**
          * @description A person's payment options, each optional. In a request, what to save;
@@ -4769,6 +4803,119 @@ export interface operations {
             };
             /** @description Not signed in */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many changes to payment options this hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_payment_handle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `venmo`, `cash_app`, `paypal` or `zelle` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentHandleValue"];
+            };
+        };
+        responses: {
+            /** @description What is now saved, all of them, as stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentHandles"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such kind of payment option */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a username, $Cashtag, PayPal.Me name, or email address or US phone number for Zelle; empty is not one either (remove it instead) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many changes to payment options this hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_payment_handle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `venmo`, `cash_app`, `paypal` or `zelle` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What is still saved, as stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentHandles"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such kind of payment option */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

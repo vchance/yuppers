@@ -537,6 +537,8 @@ export interface FakeService {
   optedOut: boolean
   /** The account's own payment options. */
   handles: PaymentHandles
+  /** A refusal for every change to one payment option from now on, such as a limit. */
+  refuseHandles: ErrorCode | null
   /** The yups the account shows its payment options on. */
   shown: Set<string>
   /**
@@ -591,6 +593,7 @@ export function fakeService(account: Account | null): FakeService {
     textUpdates: new Set(),
     optedOut: false,
     handles: { venmo: null, cash_app: null, paypal: null, zelle: null },
+    refuseHandles: null,
     shown: new Set(),
     theirs: null,
     theirsChanged: { venmo: null, cash_app: null, paypal: null, zelle: null },
@@ -877,21 +880,19 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (call === 'GET /v1/me') return [200, service.account]
   if (call === 'GET /v1/me/payment-handles') return [200, service.handles]
-  if (call === 'PUT /v1/me/payment-handles') {
-    const given = body as PaymentHandles
-    service.handles = {
-      venmo: given.venmo?.replace(/^@/, '') || null,
-      cash_app: given.cash_app?.replace(/^\$/, '') || null,
-      paypal: given.paypal || null,
-      zelle: given.zelle || null,
+  const oneHandle = /^(PUT|DELETE) \/v1\/me\/payment-handles\/(venmo|cash_app|paypal|zelle)$/.exec(call)
+  if (oneHandle) {
+    if (service.refuseHandles) return [429, { code: service.refuseHandles }]
+    const kind = oneHandle[2] as keyof PaymentHandles
+    if (oneHandle[1] === 'PUT') {
+      const { value } = body as { value: string }
+      const stored = kind === 'venmo' ? value.replace(/^@/, '') : kind === 'cash_app' ? value.replace(/^\$/, '') : value
+      service.handles = { ...service.handles, [kind]: stored }
+    } else {
+      service.handles = { ...service.handles, [kind]: null }
+      if (!Object.values(service.handles).some(Boolean)) service.shown.clear()
     }
-    if (!Object.values(service.handles).some(Boolean)) service.shown.clear()
     return [200, service.handles]
-  }
-  if (call === 'DELETE /v1/me/payment-handles') {
-    service.handles = { venmo: null, cash_app: null, paypal: null, zelle: null }
-    service.shown.clear()
-    return [204, null]
   }
   if (call === 'GET /v1/me/deletion') {
     return [200, { drafts: 0, open_proposals: 0, agreements_in_force: 0 }]

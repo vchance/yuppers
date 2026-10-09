@@ -12,6 +12,7 @@ import { useCallback, useEffect } from 'react';
 import { announce } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
+import { useShownAgain } from './PaymentOptionsRow';
 import { Actions, Button, Card, Check, Failure, Heading, Hint, Notice, P } from './ui';
 
 interface Props {
@@ -34,7 +35,8 @@ export function ShowPaymentOptions({ exchange, otherName, reload, client = api }
   const router = useRouter();
   const w = wording.payments;
   const refresh = useCallback(() => void reload(), [reload]);
-  const control = useShowPaymentOptions(client, exchange, refresh);
+  // Read again on coming back, as from adding some on the payment options screen.
+  const control = useShowPaymentOptions(client, exchange, refresh, useShownAgain());
   const said =
     control.changed === 'shown'
       ? fmt(w.shownNow, { name: otherName })
@@ -64,12 +66,19 @@ export function ShowPaymentOptions({ exchange, otherName, reload, client = api }
           <Hint>{fmt(w.showHint, { name: otherName })}</Hint>
           <Failure code={control.failure} />
           {said ? <Notice>{said}</Notice> : null}
+          <Actions>
+            <Button
+              variant="link"
+              label={w.manage}
+              onPress={() => router.push('/account/payments')}
+            />
+          </Actions>
         </>
       ) : (
         <>
           <P>{w.noneSaved}</P>
           <Actions>
-            <Button variant="link" label={w.addInAccount} onPress={() => router.push('/account')} />
+            <Button variant="link" label={w.addInAccount} onPress={() => router.push('/account/payments')} />
           </Actions>
         </>
       )}

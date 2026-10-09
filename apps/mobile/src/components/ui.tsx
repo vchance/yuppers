@@ -97,17 +97,21 @@ export function Heading({
   children,
   level = 1,
   color,
+  headingRef,
 }: {
   children: string;
   level?: HeadingLevel;
   /** On a party's colour, that colour's own ink. */
   color?: string;
+  /** For moving a screen reader to it, as a step it names opens. */
+  headingRef?: Ref<Text>;
 }) {
   const colors = useColors();
   const { language } = useI18n();
   const size = level === 1 ? type.title : level === 2 ? type.heading : type.subheading;
   return (
     <Text
+      ref={headingRef}
       accessibilityRole="header"
       accessibilityLanguage={language}
       aria-level={level}
@@ -163,6 +167,8 @@ interface ButtonProps {
   /** Said after the label, when the label alone does not say what pressing does. */
   hint?: string;
   testID?: string;
+  /** For putting a screen reader back on it, after what it opened is closed. */
+  buttonRef?: (control: View | null) => void;
 }
 
 export function Button({
@@ -174,6 +180,7 @@ export function Button({
   accessibilityLabel,
   hint,
   testID,
+  buttonRef,
 }: ButtonProps) {
   const colors = useColors();
   const { language } = useI18n();
@@ -182,7 +189,10 @@ export function Button({
   const link = variant === 'link';
   return (
     <Pressable
-      ref={control}
+      ref={(node) => {
+        control.current = node;
+        buttonRef?.(node);
+      }}
       testID={testID}
       accessibilityRole={link ? 'link' : 'button'}
       accessibilityLabel={accessibilityLabel ?? label}

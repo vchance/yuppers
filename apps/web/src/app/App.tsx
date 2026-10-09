@@ -46,6 +46,7 @@ import { loadWording, rememberLanguage } from './wording'
 const AccountSetup = lazy(() => import('../screens/AccountSetup'))
 const HomePage = lazy(() => import('../screens/HomePage'))
 const AccountPage = lazy(() => import('../screens/AccountPage'))
+const PaymentOptionsPage = lazy(() => import('../screens/PaymentOptionsPage'))
 const DeleteAccount = lazy(() => import('../screens/DeleteAccount'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
 const RecordPage = lazy(() => import('../screens/RecordPage'))
@@ -216,6 +217,13 @@ function Shell({ outdated }: { outdated: boolean }) {
         </Gate>
       )
       break
+    case 'payments':
+      page = (
+        <Gate>
+          <PaymentOptionsPage />
+        </Gate>
+      )
+      break
     case 'exchange':
     case 'revise':
       page = (
@@ -270,7 +278,10 @@ function Shell({ outdated }: { outdated: boolean }) {
             <Link to={paths.home} aria-current={current('home')}>
               {wording.nav.exchanges}
             </Link>
-            <Link to={paths.account} aria-current={current('account')}>
+            <Link
+              to={paths.account}
+              aria-current={route.name === 'payments' ? 'true' : current('account')}
+            >
               {wording.nav.account}
             </Link>
           </nav>

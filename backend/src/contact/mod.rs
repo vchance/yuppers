@@ -362,6 +362,8 @@ pub struct Field {
     pub row: Option<i64>,
     /// The account a value belongs to, where it is bound to it.
     pub owner: Option<uuid::Uuid>,
+    /// The row a value belongs to, by its UUID, where it is bound to it.
+    pub record: Option<uuid::Uuid>,
 }
 
 impl Field {
@@ -369,6 +371,14 @@ impl Field {
     pub const ACCOUNT_PHONE: Field = Field::new("account", "phone");
     pub const SMS_CONSENT_PHONE: Field = Field::new("sms_consent", "phone");
     pub const SMS_CODE_CONSENT_PHONE: Field = Field::new("sms_code_consent", "phone");
+    /// Whom an invitation names (`crate::exchanges::service`), bound to the
+    /// invitation ([`Field::record`]).
+    pub const INVITATION_EMAIL: Field = Field::new("invitation", "bound_email");
+    pub const INVITATION_PHONE: Field = Field::new("invitation", "bound_phone");
+    /// Where the notice that two accounts were combined goes
+    /// (`crate::combine`), bound to its row ([`Field::row`]).
+    pub const COMBINE_NOTICE_EMAIL: Field = Field::new("combine_notice", "email");
+    pub const COMBINE_NOTICE_PHONE: Field = Field::new("combine_notice", "phone");
     /// The blind-index key itself, in `contact_key`.
     pub const INDEX_KEY: Field = Field::new("contact_key", "index_key");
 
@@ -378,6 +388,7 @@ impl Field {
             column,
             row: None,
             owner: None,
+            record: None,
         }
     }
 
@@ -401,6 +412,16 @@ impl Field {
         }
     }
 
+    /// The same column, for the value of the row with this UUID. An
+    /// invitation binds whom it names to itself, so a ciphertext copied from
+    /// another invitation does not decrypt.
+    pub const fn record(self, id: uuid::Uuid) -> Self {
+        Self {
+            record: Some(id),
+            ..self
+        }
+    }
+
     fn associated_data(self) -> Vec<u8> {
         let mut data = format!("yuppers contact v1\0{}.{}", self.table, self.column);
         if let Some(id) = self.row {
@@ -408,6 +429,9 @@ impl Field {
         }
         if let Some(account) = self.owner {
             data.push_str(&format!("\0account {account}"));
+        }
+        if let Some(record) = self.record {
+            data.push_str(&format!("\0record {record}"));
         }
         data.into_bytes()
     }

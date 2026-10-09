@@ -216,6 +216,21 @@ Payment options (`backend/src/payments.rs`; README, "Payment options"). `payment
 
 `outbox.delivery_key`: a random UUID for every row (`gen_random_uuid()`, unique), rows already queued included. It is what a provider that drops repeated requests is handed with each try of a message: Resend's `Idempotency-Key` (`yuppers-outbox/{key}`) and SMTP's `Message-ID` (`notifications::Email::key`). The row's ID was used until now, and IDs start again from 1 after a schema reset or a restore into a new database, or in another environment sending through the same Resend team; Resend refuses a new message under a key it saw within 24 hours with other content. The application role's grants on `outbox` already cover the column, so `scripts/restore-inventory.txt` is unchanged. `backend/tests/resend.rs` restarts the IDs and sends again.
 
+## 0028_combine_accounts
+
+Combining two accounts and removing an email address or phone number (`backend/src/combine.rs`; README, "Combining accounts").
+
+- **`account`**: the status `MERGED`, with `merged_into` and `merged_at`, set together. A combined account holds no address, number or index (`account_merged_unreachable`), and `account_reachable` lets it, as it lets a deleted one.
+- **A place passes to the account its holder was combined into.** `participant_holding` takes one more change of `participant.account_id`, from an account to another, only where the first is `MERGED` into the second (set first, in the same transaction): it ends the holding with `ended_by_merge` and opens the next for the second account. `slot_holding_follows_participant` allows that ending and nothing else new. `holding_void_since(exchange, slot, holding)` follows a chain of holdings ended by combining to the open one: a signature counts while it comes out null. The repository, the record and `exchange_in_force_signed` (which now counts each slot once) ask it instead of `ended_at`. Removing a claimant, or the claimant leaving, ends the chain as before.
+- **`account_merge`**: the audit of each combination, append-only (`account_merge_append_only`); the service reads and adds.
+- **`account_combine_offer`**: the offer's token as its hash, the two accounts, the kind and blind index of the identifier proved, its expiry and when it was used. Working data, read, added, changed and removed by the service; the worker removes those ended a day ago.
+- **`combine_notice`**: where the notice that two accounts were combined goes, encrypted with the row's ID as associated data (the service takes it from `combine_notice_id_seq`, on which it has `USAGE`), for 7 days. The service reads, adds and removes.
+- **`invitation.bound_email_encrypted`, `bound_phone_encrypted`**: whom an invitation names, encrypted with the invitation's ID as associated data, only beside its index (`invitation_bound_encrypted_indexed`), and only while it can be claimed: the claim empties it, and so does the worker once it is revoked or expired, and a deletion with the index.
+- **`deletion_log.merged_into`, `merged_by`**: a line for an account combined into another. The log's trigger takes such a line only for an account `MERGED` into that one; `restore_replay_done` counts it done once it is `MERGED`.
+- **`sms_consent.source`** takes `PHONE_REMOVED` and `ACCOUNTS_COMBINED`.
+
+`backend/tests/combine.rs` drives all of it through the API and the replay; `backend/tests/contact_scan.rs` that no address is anywhere in the clear afterwards. `scripts/restore-inventory.txt` holds the new grants and trigger.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

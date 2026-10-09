@@ -4,6 +4,7 @@
 # migration on. LINE is as scripts/restore-inventory.sql prints it.
 # backend/tests/inventory.rs checks this file after every migration, and
 # prints it as it should be when it is not.
+0028 grant function holding_void_since EXECUTE
 0019 grant function replay_lift_suspension EXECUTE
 0018 grant function restore_replay_done EXECUTE
 0001 grant relation acceptance INSERT
@@ -19,6 +20,12 @@
 0001 grant relation account_block INSERT
 0001 grant relation account_block SELECT
 0001 grant relation account_block UPDATE
+0028 grant relation account_combine_offer DELETE
+0028 grant relation account_combine_offer INSERT
+0028 grant relation account_combine_offer SELECT
+0028 grant relation account_combine_offer UPDATE
+0028 grant relation account_merge INSERT
+0028 grant relation account_merge SELECT
 0002 grant relation account_session DELETE
 0002 grant relation account_session INSERT
 0002 grant relation account_session SELECT
@@ -26,6 +33,10 @@
 0001 grant relation attachment INSERT
 0001 grant relation attachment SELECT
 0001 grant relation attachment UPDATE
+0028 grant relation combine_notice DELETE
+0028 grant relation combine_notice INSERT
+0028 grant relation combine_notice SELECT
+0028 grant relation combine_notice_id_seq USAGE
 0025 grant relation contact_key SELECT
 0001 grant relation contribution INSERT
 0001 grant relation contribution SELECT
@@ -144,6 +155,7 @@
 0001 grant schema public USAGE
 0001 trigger acceptance acceptance_append_only O
 0006 trigger acceptance acceptance_holding O
+0028 trigger account_merge account_merge_append_only O
 0001 trigger contribution_snapshot contribution_snapshot_append_only O
 0019 trigger deletion_log deletion_log_account_deleted O
 0006 trigger exchange exchange_in_force_signed O

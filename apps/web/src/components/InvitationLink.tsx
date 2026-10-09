@@ -1,6 +1,7 @@
 import {
   boundToLabel,
   invitationLink,
+  inviteeKind,
   phoneAsTyped,
   phoneOffered,
   shareAddresses,
@@ -11,7 +12,6 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { useI18n } from '../app/context'
 import { ErrorNote, Field, Notice } from './ui'
-import { Panel } from './Panel'
 
 /**
  * Who an invitation is for (DESIGN.md §8). Naming them is what is expected:
@@ -135,31 +135,40 @@ function nativeShare(data: ShareData): boolean {
   return typeof navigator.canShare !== 'function' || navigator.canShare(data)
 }
 
+interface ShareProps {
+  token: string
+  /** Who the invitation was made for, as typed, when it names someone. */
+  boundTo: string | null
+  /**
+   * Called when the person opens any way to pass the link on. The service
+   * is told, so the exchange's page and the list can say the link was sent,
+   * or that it was not.
+   */
+  onShared?: () => void
+}
+
 /**
- * The invitation link, shown once: only its hash is kept by the service, so
- * it cannot be shown again. The initiator sends it through a channel of
- * their own; the platform never does (DESIGN.md §8), and says so where the
- * link appears.
+ * The ways to send the link (DESIGN.md §8), led by the one that reaches the
+ * person it was made for. Yuppers never sends it; one of these has to be
+ * opened by the sender, so each is a real button or link, and the first of
+ * them is the primary action:
  *
- * "Share link" always does something. Where the browser has a share sheet,
- * as on a phone, it opens it, and copying the link and its QR code are
- * beside it. Where there is none, as in most desktop browsers, it opens a
- * panel of ways to start a message: copy the link, an email (to whom the
- * invitation is for, if that is an email address), a text message, WhatsApp,
- * or a QR code for someone in the room to scan. Each is opened by this
- * device; the token reaches no server of ours (`shareAddresses`).
+ *   - named by phone number: a text message to that number, with WhatsApp
+ *     and copying the link beside it;
+ *   - named by email address: an email to that address, with copying beside it;
+ *   - for anyone: the device's share sheet where the browser has one, and
+ *     otherwise copying the link, with a text message, WhatsApp and an email
+ *     to nobody in particular beside it;
  *
- * The link is in the sender's language, so the preview a messaging app builds
- * for it is too. What is shared alongside it is fixed wording with no name,
- * term or amount in it.
+ * and, for someone in the same room, the link as a QR code. Each message is
+ * started by this device, with the whole link inside it (`shareAddresses`);
+ * the token reaches no server of ours.
  */
-export function InvitationLink({ token, boundTo }: { token: string; boundTo: string | null }) {
+export function ShareActions({ token, boundTo, onShared }: ShareProps) {
   const { wording, language, fmt } = useI18n()
   const w = wording.invitationLink
   const [copied, setCopied] = useState<'yes' | 'failed' | null>(null)
-  const [menu, setMenu] = useState(false)
   const [qr, setQr] = useState(false)
-  const shareButton = useRef<HTMLButtonElement>(null)
   const link = invitationLink(window.location.origin, language, token)
   const data = { title: wording.linkPreview.title, text: w.shareText, url: link }
   const [native] = useState(() => nativeShare(data))
@@ -168,13 +177,17 @@ export function InvitationLink({ token, boundTo }: { token: string; boundTo: str
     subject: wording.linkPreview.title,
     boundTo,
   })
+  const kind = inviteeKind(boundTo)
 
   useEffect(() => {
     // Nothing to do if it fails now; showing the code asks again.
     loadQr().catch(() => {})
   }, [])
 
+  const shared = () => onShared?.()
+
   async function copy() {
+    shared()
     try {
       await navigator.clipboard.writeText(link)
       setCopied('yes')
@@ -184,27 +197,100 @@ export function InvitationLink({ token, boundTo }: { token: string; boundTo: str
   }
 
   function share() {
-    if (!native) {
-      // Pressed again, it closes what it opened.
-      if (menu) close()
-      else setMenu(true)
-      return
-    }
+    shared()
     // Dismissing the share sheet rejects; there is nothing to do about it.
     navigator.share(data).catch(() => {})
   }
 
-  function close() {
-    setMenu(false)
-    setQr(false)
-    shareButton.current?.focus()
+  function toggleQr() {
+    // Showing the code is a way of passing the link on; hiding it is not.
+    if (!qr) shared()
+    setQr((shown) => !shown)
   }
 
-  const qrToggle = (
-    <button type="button" aria-expanded={qr} onClick={() => setQr((shown) => !shown)}>
-      {qr ? w.hideQr : w.shareQr}
+  const cls = (primary: boolean) => (primary ? 'button primary' : 'button')
+  const sms = (label: string, primary = false) => (
+    <a className={cls(primary)} href={addresses.sms} onClick={shared}>
+      {label}
+    </a>
+  )
+  const email = (label: string, primary = false) => (
+    <a className={cls(primary)} href={addresses.email} onClick={shared}>
+      {label}
+    </a>
+  )
+  const whatsApp = (label: string) => (
+    <a
+      className="button"
+      href={addresses.whatsApp}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={shared}
+    >
+      {label}
+      <span className="visually-hidden"> {wording.help.newTab}</span>
+    </a>
+  )
+  const copyButton = (primary = false) => (
+    <button type="button" className={primary ? 'primary' : undefined} onClick={() => void copy()}>
+      {w.copy}
     </button>
   )
+
+  return (
+    <div className="share">
+      <div className="actions share-actions">
+        {kind === 'phone' && (
+          <>
+            {sms(w.sendText, true)}
+            {whatsApp(w.sendWhatsApp)}
+            {copyButton()}
+          </>
+        )}
+        {kind === 'email' && (
+          <>
+            {email(w.sendEmail, true)}
+            {copyButton()}
+          </>
+        )}
+        {kind === 'anyone' && (
+          <>
+            {native ? (
+              <button type="button" className="primary" onClick={share}>
+                {w.share}
+              </button>
+            ) : null}
+            {copyButton(!native)}
+            {sms(w.shareSms)}
+            {whatsApp(w.shareWhatsApp)}
+            {email(w.shareEmail)}
+          </>
+        )}
+        <button type="button" aria-expanded={qr} onClick={toggleQr}>
+          {qr ? w.hideQr : w.shareQr}
+        </button>
+      </div>
+      {qr && <QrPanel link={link} />}
+      {copied === 'yes' && <Notice>{w.copied}</Notice>}
+      {copied === 'failed' && <ErrorNote>{w.copyFailed}</ErrorNote>}
+    </div>
+  )
+}
+
+/**
+ * The invitation link, shown once: only its hash is kept by the service, so
+ * it cannot be shown again. The initiator sends it through a channel of
+ * their own; the platform never does (DESIGN.md §8), and says so where the
+ * link appears. Under it, the ways to send it (`ShareActions`).
+ *
+ * The link is in the sender's language, so the preview a messaging app builds
+ * for it is too. What is shared alongside it is fixed wording with no name,
+ * term or amount in it.
+ */
+export function InvitationLink({ token, boundTo, onShared }: ShareProps) {
+  const { wording, language } = useI18n()
+  const w = wording.invitationLink
+  const link = invitationLink(window.location.origin, language, token)
 
   return (
     <div className="invitation-link">
@@ -221,67 +307,7 @@ export function InvitationLink({ token, boundTo }: { token: string; boundTo: str
           />
         )}
       </Field>
-      <div className="actions">
-        <button
-          type="button"
-          className="primary"
-          ref={shareButton}
-          aria-expanded={native ? undefined : menu}
-          onClick={share}
-        >
-          {w.share}
-        </button>
-        {native && (
-          <>
-            <button type="button" onClick={() => void copy()}>
-              {w.copy}
-            </button>
-            {qrToggle}
-          </>
-        )}
-      </div>
-      {menu && (
-        <Panel title={w.share}>
-          <ul className="share-options">
-            <li>
-              <button type="button" onClick={() => void copy()}>
-                {w.copy}
-              </button>
-            </li>
-            <li>
-              <a className="button" href={addresses.email}>
-                {w.shareEmail}
-              </a>
-            </li>
-            <li>
-              <a className="button" href={addresses.sms}>
-                {w.shareSms}
-              </a>
-            </li>
-            <li>
-              <a
-                className="button"
-                href={addresses.whatsApp}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {w.shareWhatsApp}
-                <span className="visually-hidden"> {wording.help.newTab}</span>
-              </a>
-            </li>
-            <li>{qrToggle}</li>
-          </ul>
-          {qr && <QrPanel link={link} />}
-          <div className="actions">
-            <button type="button" onClick={close}>
-              {w.closeShare}
-            </button>
-          </div>
-        </Panel>
-      )}
-      {native && qr && <QrPanel link={link} />}
-      {copied === 'yes' && <Notice>{w.copied}</Notice>}
-      {copied === 'failed' && <ErrorNote>{w.copyFailed}</ErrorNote>}
+      <ShareActions token={token} boundTo={boundTo} onShared={onShared} />
     </div>
   )
 }

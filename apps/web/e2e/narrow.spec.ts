@@ -182,11 +182,14 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   await expect(page.getByLabel(es.invitationLink.linkLabel, { exact: true })).toHaveValue(
     /\/es\/i#/,
   )
-  await check('the invitation link')
-  await page.getByRole('button', { name: es.invitationLink.share, exact: true }).click()
+  await expect(page.getByRole('link', { name: es.invitationLink.sendEmail })).toBeVisible()
+  await check('the step that sends the link')
   await page.getByRole('button', { name: es.invitationLink.shareQr, exact: true }).click()
   await expect(page.getByRole('img', { name: es.invitationLink.qrLabel })).toBeVisible()
-  await check('the ways to share the link, with its QR code')
+  await check('the ways to send the link, with its QR code')
+  await page.getByRole('button', { name: es.invitationLink.sendDone, exact: true }).click()
+  await expect(page.getByText(/^Compartiste el enlace el /)).toBeVisible()
+  await check('the exchange, waiting for the person invited')
 
   // Help: the list of topics, and the longest topic with its contents.
   await page.goto('/help')

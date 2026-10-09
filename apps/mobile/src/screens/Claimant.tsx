@@ -1,6 +1,5 @@
 import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
-  isInvitationSpent,
   leaveExchange,
   verificationText,
   type Actions as ExchangeActions,
@@ -85,20 +84,6 @@ export function ConfirmClaimant({ exchange, claimant, actions, onRejected }: Con
         </Panel>
       )}
     </Card>
-  );
-}
-
-/**
- * What the initiator is told while nobody is in the invited party's place:
- * that nobody has opened the link yet, or that the link has been used by
- * someone who is gone again and a new one is needed.
- */
-export function NobodyYet({ exchange }: { exchange: Exchange }) {
-  const { wording } = useI18n();
-  return (
-    <P>
-      {isInvitationSpent(exchange) ? wording.claimant.linkUsed : wording.invitationLink.unclaimed}
-    </P>
   );
 }
 

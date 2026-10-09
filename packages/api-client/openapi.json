@@ -832,6 +832,71 @@
         }
       }
     },
+    "/v1/exchanges/{id}/invitation/shared": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Records that the initiator opened a way to pass the invitation link on:\nthe share sheet, a text message, an email, WhatsApp, a copy or its QR\ncode. Yuppers never sends the link itself, so this is all the service can\nknow about whether it went anywhere, and it says only that the sender\nopened a way to send it, not that it arrived. Shown back as\n`invitation_shared_at` on the exchange and in the list. Harmless to\nrepeat: the latest time is kept.",
+        "operationId": "invitation_shared",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Recorded"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the initiator has a link to send",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Someone is in the invited party's place, or the exchange is not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/exchanges/{id}/leave": {
       "post": {
         "tags": [
@@ -4431,7 +4496,8 @@
           "state",
           "you",
           "other_party_name",
-          "updated_at"
+          "updated_at",
+          "counterparty"
         ],
         "properties": {
           "closed_outcome": {
@@ -4444,12 +4510,23 @@
               }
             ]
           },
+          "counterparty": {
+            "$ref": "#/components/schemas/CounterpartyDto",
+            "description": "Who is in the invited party's place, as on the exchange's view, so\nthe initiator's list can say that nobody has joined yet."
+          },
           "display_code": {
             "type": "string"
           },
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "invitation_shared_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As on the exchange's view: only for the initiator while nobody is in\nthe invited party's place, when they last opened a way to pass the\nlink on, if they have."
           },
           "other_party_name": {
             "type": "string"
@@ -4587,6 +4664,13 @@
               "null"
             ],
             "description": "Only for the initiator, and only while nobody is in the invited\nparty's place: whether an invitation link is out that can still be\nused. It is not once the link has been used, even by someone since\nremoved, or has expired; a new one has to be issued."
+          },
+          "invitation_shared_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `invitation_open`: when the initiator last opened a way to pass\nthe link on (RFC 3339), such as a text message or the share sheet,\nas the apps report it (`POST /v1/exchanges/{id}/invitation/shared`).\nYuppers never sends the link itself, so this says the sender opened a\nway to send it, not that it arrived. Null until they have, and for a\nlink that replaced an earlier one until that one is shared too."
           },
           "open_revision": {
             "oneOf": [

@@ -72,10 +72,14 @@ const TIGHT = {
       'invitationLink.shareWhatsApp',
       'invitationLink.shareQr',
       'invitationLink.hideQr',
-      'invitationLink.closeShare',
       'invitationLink.reissue',
       'invitationLink.forAnyone',
       'invitationLink.forNamed',
+      'invitationLink.sendText',
+      'invitationLink.sendEmail',
+      'invitationLink.sendWhatsApp',
+      'invitationLink.sendDone',
+      'invitationLink.later',
       'composer.addYours',
       'composer.addTheirs',
       'composer.review',
@@ -154,13 +158,22 @@ const TIGHT = {
       'payments.heading',
     ],
   },
-  // The tag beside an exchange in the list and on its page. An item's own
+  // The tag beside an exchange in the list and on its page, and the chip
+  // beside it while the initiator has not sent the link. An item's own
   // status (contributionStatus, moneyStatus) is a sentence that wraps. A
   // Wallet pass's status is its largest field, on a card the width of a
   // phone (backend/src/wallet/pass.rs).
   'status tags': {
     max: 28,
-    keys: ['states.*', 'outcomes.*', 'wallet.status.*', 'staff.overdue', 'staff.standing.*'],
+    keys: [
+      'states.*',
+      'outcomes.*',
+      'wallet.status.*',
+      'staff.overdue',
+      'staff.standing.*',
+      'home.notSent',
+      'home.waitingFor',
+    ],
   },
   // A Wallet pass's labels, above their values in rows of two or three.
   'wallet pass labels': {

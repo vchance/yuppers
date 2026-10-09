@@ -12,6 +12,7 @@ function summary(id: string, state: ExchangeSummary['state'], closed?: ExchangeS
     you: 'A',
     other_party_name: '',
     updated_at: '2026-10-02T12:00:00Z',
+    counterparty: state === 'DRAFT' ? 'UNCLAIMED' : 'CONFIRMED',
   }
 }
 

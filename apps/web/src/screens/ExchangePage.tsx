@@ -9,12 +9,14 @@ import { paths } from '../app/routes'
 import { Failure, PageHeading } from '../components/ui'
 import { api, failureCode, type RevisionSent } from '../lib/api'
 import { ExchangeView } from './ExchangeView'
+import { SendInvitation } from './SendInvitation'
 
 // Most visits to an exchange are to read it or act on it, not to write terms.
 const Composer = lazy(() => import('./Composer'))
 
 /**
- * One exchange, at `/exchanges/{id}`. A draft is its composer; anything
+ * One exchange, at `/exchanges/{id}`. A draft is its composer; a first
+ * proposal just sent is the step that sends its invitation link; anything
  * further along is the exchange view. `/exchanges/{id}/revise` is the
  * composer again, for a counteroffer or an amendment.
  */
@@ -25,6 +27,10 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
   // The invitation token, held only while this page stays open: it is shown
   // once and cannot be fetched again.
   const [issued, setIssued] = useState<IssuedInvitation | null>(null)
+  // Whether the step that sends the link is the page: from sending a first
+  // proposal until the person opens a way to send it and goes on, or says
+  // they will send it later.
+  const [sending, setSending] = useState(false)
 
   const reload = useCallback(async () => {
     try {
@@ -53,6 +59,15 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
     }
   }, [id])
 
+  // The person opened a way to send the link. The service is told, so the
+  // reminder on this page and the chip in the list know; the page itself
+  // knows at once, and a request that fails changes nothing it can show.
+  const shared = useCallback(() => {
+    const at = new Date().toISOString()
+    setExchange((current) => current && { ...current, invitation_shared_at: at })
+    api.markInvitationShared(id).catch(() => {})
+  }, [id])
+
   if (!exchange) {
     if (!failure) return <p>{wording.common.loading}</p>
     return (
@@ -68,9 +83,11 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
 
   function sent(result: RevisionSent, boundTo: string | null) {
     setExchange(result.exchange)
-    setIssued(result.invitation_token ? { token: result.invitation_token, boundTo } : null)
-    // Back to the exchange, from the top: the first thing there after a
-    // first proposal is the invitation link.
+    const link = result.invitation_token ? { token: result.invitation_token, boundTo } : null
+    setIssued(link)
+    // A first proposal is not done until its link is sent: that step comes
+    // next, as the page, before the exchange itself is shown.
+    setSending(link !== null)
     navigate(paths.exchange(id), { replace: true })
   }
 
@@ -83,11 +100,24 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
     )
   }
 
+  if (sending && issued) {
+    return (
+      <SendInvitation
+        exchange={exchange}
+        issued={issued}
+        onShared={shared}
+        onDone={() => setSending(false)}
+        onLater={() => setSending(false)}
+      />
+    )
+  }
+
   return (
     <ExchangeView
       exchange={exchange}
       issued={issued}
       onIssued={setIssued}
+      onShared={shared}
       onChange={setExchange}
       reload={reload}
     />

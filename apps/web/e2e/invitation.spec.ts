@@ -1,6 +1,7 @@
 import { expect, test } from './support/fixtures'
 import {
   composerItem,
+  invitationCard,
   join,
   propose,
   reviewAndSend,
@@ -24,7 +25,7 @@ test('a replaced invitation link stops working, and the new one opens the propos
   // Ana makes a new link, which replaces the one she had. It asks the same
   // question as the composer, the same way: naming him is expected, and an
   // empty field is not taken for a link for anyone.
-  const card = ana.page.getByRole('region', { name: en.invitationLink.heading, exact: true })
+  const card = invitationCard(ana.page, bruno.name)
   await card.getByRole('button', { name: en.invitationLink.reissue }).click()
   const panel = card.getByRole('group', { name: en.invitationLink.reissue })
   await expect(panel.getByText(en.invitationLink.forNoContact)).toBeVisible()

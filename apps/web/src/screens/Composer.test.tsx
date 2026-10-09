@@ -94,9 +94,8 @@ describe('who the invitation is for', () => {
     expect((field(w.linkLabel) as HTMLInputElement).value).toBe(
       `${window.location.origin}/en/i#${SENT_INVITATION}`,
     )
-    await press(button(w.share))
     const email = [...document.querySelectorAll('a')].find(
-      (link) => link.textContent === w.shareEmail,
+      (link) => link.textContent === w.sendEmail,
     )
     expect(email?.getAttribute('href')?.startsWith('mailto:carla@example.test?subject=')).toBe(true)
   })

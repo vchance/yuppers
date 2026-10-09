@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client'
-import { groupExchanges } from '@yuppers/shared'
+import { groupExchanges, invitationChip } from '@yuppers/shared'
 import { useEffect, useState } from 'react'
 
 import { useI18n } from '../app/context'
@@ -8,6 +8,7 @@ import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { CombinedNotice } from '../components/CombinedNotice'
 import { Mark } from '../components/Mark'
+import { StatusChip } from '../components/StatusChip'
 import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
@@ -139,29 +140,41 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
   const w = wording.home
   return (
     <ul className="plain cards">
-      {exchanges.map((exchange) => (
-        <li key={exchange.id} className="card">
-          <Link to={paths.exchange(exchange.id)} className="card-link">
-            {exchange.other_party_name ? (
-              <Written inline>{fmt(w.withParty, { name: exchange.other_party_name })}</Written>
-            ) : (
-              w.noParty
-            )}
-          </Link>
-          <p>
-            <span className="tag">
-              {exchange.closed_outcome
-                ? wording.outcomes[exchange.closed_outcome]
-                : wording.states[exchange.state]}
-            </span>
-          </p>
-          <p className="hint">
-            {fmt(w.reference, { code: exchange.display_code })}
-            <br />
-            {fmt(w.updated, { date: moment(exchange.updated_at) })}
-          </p>
-        </li>
-      ))}
+      {exchanges.map((exchange) => {
+        // The initiator holds the link that brings the other party in, and
+        // Yuppers never sends it: until someone joins, the card says whether
+        // they have sent it (`invitationChip`), on a chip like an item's status.
+        const chip = invitationChip(exchange)
+        return (
+          <li key={exchange.id} className="card">
+            <Link to={paths.exchange(exchange.id)} className="card-link">
+              {exchange.other_party_name ? (
+                <Written inline>{fmt(w.withParty, { name: exchange.other_party_name })}</Written>
+              ) : (
+                w.noParty
+              )}
+            </Link>
+            <p className="tags">
+              <span className="tag">
+                {exchange.closed_outcome
+                  ? wording.outcomes[exchange.closed_outcome]
+                  : wording.states[exchange.state]}
+              </span>
+              {chip === 'notSent' && <StatusChip status="PENDING">{w.notSent}</StatusChip>}
+              {chip === 'waiting' && (
+                <StatusChip status="CLAIMED">
+                  {fmt(w.waitingFor, { name: exchange.other_party_name })}
+                </StatusChip>
+              )}
+            </p>
+            <p className="hint">
+              {fmt(w.reference, { code: exchange.display_code })}
+              <br />
+              {fmt(w.updated, { date: moment(exchange.updated_at) })}
+            </p>
+          </li>
+        )
+      })}
     </ul>
   )
 }

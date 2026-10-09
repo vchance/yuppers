@@ -7,9 +7,13 @@ import {
   boundToProblem,
   boundToProblemText,
   invitationBoundTo,
+  invitationChip,
   invitationOptions,
   invitationForProblem,
+  inviteeKind,
   NAMED_INVITATION,
+  sendReminder,
+  SHARE_REMINDER_AFTER_MS,
   shareAddresses,
 } from './share'
 
@@ -161,4 +165,64 @@ test('the service is told outright who a link is for: the person named, or anyon
   expect(invitationOptions('856 548')).toEqual({ bound_to: '856 548' })
   expect(invitationOptions(null)).toEqual({ for_anyone: true })
   expect(invitationOptions('  ')).toEqual({ for_anyone: true })
+})
+
+test('the way to send the link leads with how the person named can be reached', () => {
+  expect(inviteeKind(' carla@example.test ')).toBe('email')
+  for (const phone of ['+1 202 555 0142', '(202) 555-0142', '2025550142', '+44 20 7946 0958']) {
+    expect(inviteeKind(phone), phone).toBe('phone')
+  }
+  // Nobody named, or nothing that reaches anyone: the share sheet.
+  expect(inviteeKind(null)).toBe('anyone')
+  expect(inviteeKind('  ')).toBe('anyone')
+  expect(inviteeKind('carla')).toBe('anyone')
+  expect(inviteeKind('carla@')).toBe('anyone')
+})
+
+test('the initiator is reminded to send the link until someone joins through it', () => {
+  const now = new Date('2026-10-09T12:00:00Z')
+  const waiting = {
+    you: 'A' as const,
+    state: 'NEGOTIATING' as const,
+    counterparty: 'UNCLAIMED' as const,
+    invitation_open: true,
+    invitation_shared_at: null,
+  }
+  // Never sent: reminded at once.
+  expect(sendReminder(waiting, now)).toBe('unsent')
+  expect(sendReminder({ ...waiting, invitation_shared_at: undefined }, now)).toBe('unsent')
+  // Sent a moment ago: left alone, until two days have passed.
+  const fresh = new Date(now.getTime() - 60_000).toISOString()
+  expect(sendReminder({ ...waiting, invitation_shared_at: fresh }, now)).toBeNull()
+  const almost = new Date(now.getTime() - SHARE_REMINDER_AFTER_MS + 1000).toISOString()
+  expect(sendReminder({ ...waiting, invitation_shared_at: almost }, now)).toBeNull()
+  const stale = new Date(now.getTime() - SHARE_REMINDER_AFTER_MS).toISOString()
+  expect(sendReminder({ ...waiting, invitation_shared_at: stale }, now)).toBe('waiting')
+  expect(SHARE_REMINDER_AFTER_MS).toBe(2 * 24 * 60 * 60 * 1000)
+
+  // Nothing to send: the other party is in, the link is used up, the
+  // exchange is not open, or the reader is not the one holding a link.
+  expect(sendReminder({ ...waiting, counterparty: 'CLAIMED' }, now)).toBeNull()
+  expect(sendReminder({ ...waiting, counterparty: 'CONFIRMED' }, now)).toBeNull()
+  expect(sendReminder({ ...waiting, invitation_open: false }, now)).toBeNull()
+  expect(sendReminder({ ...waiting, state: 'DRAFT' }, now)).toBeNull()
+  expect(sendReminder({ ...waiting, state: 'CLOSED' }, now)).toBeNull()
+  expect(sendReminder({ ...waiting, you: 'B' }, now)).toBeNull()
+})
+
+test('the list marks a yup whose link the initiator holds and nobody has joined through', () => {
+  const summary = {
+    you: 'A' as const,
+    state: 'NEGOTIATING' as const,
+    counterparty: 'UNCLAIMED' as const,
+    invitation_shared_at: null,
+  }
+  expect(invitationChip(summary)).toBe('notSent')
+  expect(invitationChip({ ...summary, invitation_shared_at: '2026-10-01T00:00:00Z' })).toBe(
+    'waiting',
+  )
+  expect(invitationChip({ ...summary, counterparty: 'CLAIMED' })).toBeNull()
+  expect(invitationChip({ ...summary, state: 'ACTIVE' })).toBeNull()
+  expect(invitationChip({ ...summary, state: 'DRAFT' })).toBeNull()
+  expect(invitationChip({ ...summary, you: 'B' })).toBeNull()
 })

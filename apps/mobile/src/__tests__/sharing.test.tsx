@@ -103,8 +103,10 @@ describe('who the invitation is for', () => {
     const link = screen.getByText(new RegExp(`/en/i#${SENT_INVITATION}$`));
     await fireEvent.press(screen.getByRole('button', { name: w.invitationLink.shareQr }));
     expect(readQr(screen.getByTestId('qr-code') as never)).toBe(link.props.children);
-    screen.getByRole('button', { name: w.invitationLink.share });
+    // Named by email address: an email to them first, copying beside it.
+    screen.getByRole('button', { name: w.invitationLink.sendEmail });
     screen.getByRole('button', { name: w.invitationLink.copy });
+    expect(screen.queryByRole('button', { name: w.invitationLink.share })).toBeNull();
   });
 
   test('left empty, it is asked for: an empty field never makes a link for anyone', async () => {

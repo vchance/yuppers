@@ -252,6 +252,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges/{id}/invitation/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Records that the initiator opened a way to pass the invitation link on:
+         *     the share sheet, a text message, an email, WhatsApp, a copy or its QR
+         *     code. Yuppers never sends the link itself, so this is all the service can
+         *     know about whether it went anywhere, and it says only that the sender
+         *     opened a way to send it, not that it arrived. Shown back as
+         *     `invitation_shared_at` on the exchange and in the list. Harmless to
+         *     repeat: the latest time is kept.
+         */
+        post: operations["invitation_shared"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges/{id}/leave": {
         parameters: {
             query?: never;
@@ -1447,9 +1472,20 @@ export interface components {
         EventType: "COUNTERPARTY_CLAIMED" | "COUNTERPARTY_CONFIRMED" | "COUNTERPARTY_REJECTED" | "COUNTERPARTY_RELEASED" | "REVISION_SENT" | "REVISION_SUPERSEDED" | "REVISION_ACCEPTED" | "REVISION_DECLINED" | "REVISION_WITHDRAWN" | "REVISION_EXPIRED" | "AGREEMENT_IN_FORCE" | "CONTRIBUTION_CLAIMED" | "CONTRIBUTION_CLAIM_RETRACTED" | "CONTRIBUTION_CONFIRMED" | "CONTRIBUTION_DISPUTED" | "CONTRIBUTION_WAIVED" | "END_PROPOSED" | "END_PROPOSAL_CANCELLED" | "CLOSE_REQUESTED" | "CLOSE_REQUEST_RETRACTED" | "STATEMENT_ADDED" | "INACTIVITY_PROMPTED" | "EXCHANGE_CLOSED";
         ExchangeSummary: {
             closed_outcome?: components["schemas"]["OutcomeDto"] | null;
+            /**
+             * @description Who is in the invited party's place, as on the exchange's view, so
+             *     the initiator's list can say that nobody has joined yet.
+             */
+            counterparty: components["schemas"]["CounterpartyDto"];
             display_code: string;
             /** Format: uuid */
             id: string;
+            /**
+             * @description As on the exchange's view: only for the initiator while nobody is in
+             *     the invited party's place, when they last opened a way to pass the
+             *     link on, if they have.
+             */
+            invitation_shared_at?: string | null;
             other_party_name: string;
             state: components["schemas"]["StateDto"];
             updated_at: string;
@@ -1496,6 +1532,15 @@ export interface components {
              *     removed, or has expired; a new one has to be issued.
              */
             invitation_open?: boolean | null;
+            /**
+             * @description With `invitation_open`: when the initiator last opened a way to pass
+             *     the link on (RFC 3339), such as a text message or the share sheet,
+             *     as the apps report it (`POST /v1/exchanges/{id}/invitation/shared`).
+             *     Yuppers never sends the link itself, so this says the sender opened a
+             *     way to send it, not that it arrived. Null until they have, and for a
+             *     link that replaced an earlier one until that one is shared too.
+             */
+            invitation_shared_at?: string | null;
             open_revision?: components["schemas"]["RevisionView"] | null;
             /**
              * @description The other party has deleted their account and can no longer act in
@@ -3238,6 +3283,63 @@ export interface operations {
             };
             /** @description Neither or both of `bound_to` and `for_anyone: true` */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    invitation_shared: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Only the initiator has a link to send */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Someone is in the invited party's place, or the exchange is not open */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

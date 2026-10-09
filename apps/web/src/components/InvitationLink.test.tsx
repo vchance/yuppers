@@ -10,10 +10,10 @@ import { readQr } from '../test/qr'
 import { InvitationLink } from './InvitationLink'
 
 /*
- * Passing an invitation link on (DESIGN.md §8). "Share link" always does
- * something: the device's share sheet where it has one, and otherwise a
- * panel of ways to start a message, a copy and a QR code. Nothing is sent by
- * the service, and the token never goes into an address of ours.
+ * Passing an invitation link on (DESIGN.md §8). Nothing is sent by the
+ * service: the ways to send it are real buttons and links, led by the one
+ * that reaches the person the link was made for, and opening any of them is
+ * reported (`onShared`). The token never goes into an address of ours.
  */
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -27,9 +27,11 @@ const MESSAGE = `I’ve sent you a yup to review: ${LINK}`
 
 let root: Root | null = null
 const copied: string[] = []
+let shared = 0
 
 beforeEach(() => {
   copied.length = 0
+  shared = 0
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: {
@@ -74,7 +76,13 @@ async function show(boundTo: string | null = null) {
     root.render(
       <I18nContext.Provider value={i18n}>
         <h1>Test</h1>
-        <InvitationLink token={TOKEN} boundTo={boundTo} />
+        <InvitationLink
+          token={TOKEN}
+          boundTo={boundTo}
+          onShared={() => {
+            shared += 1
+          }}
+        />
       </I18nContext.Provider>,
     )
   })
@@ -86,6 +94,13 @@ function button(text: string): HTMLButtonElement | undefined {
 
 function link(text: string): HTMLAnchorElement | undefined {
   return [...document.querySelectorAll('a')].find((found) => found.textContent?.startsWith(text))
+}
+
+/** The buttons and links of the ways to send, in order, as read. */
+function ways(): string[] {
+  return [...document.querySelectorAll('.share-actions > *')].map(
+    (found) => found.textContent?.trim() ?? '',
+  )
 }
 
 async function press(element: HTMLElement) {
@@ -133,73 +148,69 @@ test('it says, where the link is, that sending it is the person’s own job', as
   expect(w.shownOnce).toContain(w.reissue)
 })
 
-test('with a share sheet, “Share link” opens it, and copying and the QR code are beside it', async () => {
-  const shared = withShareSheet(() => true)
-  await show()
+test('made for a phone number, it leads with a text message to that number', async () => {
+  await show('(202) 555-0142')
+  expect(ways()).toEqual([w.sendText, `${w.sendWhatsApp} ${wording.help.newTab}`, w.copy, w.shareQr])
 
-  const share = button(w.share)!
-  expect(share.className).toBe('primary')
-  // It opens something of the system's, not a panel of ours.
-  expect(share.hasAttribute('aria-expanded')).toBe(false)
-  await press(share)
-  expect(shared).toEqual([{ title: wording.linkPreview.title, text: w.shareText, url: LINK }])
-  expect(document.querySelector('.panel')).toBeNull()
+  const text = link(w.sendText)!
+  expect(text.className).toBe('button primary')
+  const sms = text.getAttribute('href')!
+  expect(sms.startsWith('sms:+12025550142?body=')).toBe(true)
+  expect(query(sms).get('body')).toBe(MESSAGE)
+  // Nothing else is the primary action.
+  expect(document.querySelectorAll('.primary')).toHaveLength(1)
 
+  const whatsApp = new URL(link(w.sendWhatsApp)!.href)
+  expect(whatsApp.origin + whatsApp.pathname).toBe('https://wa.me/')
+  expect(whatsApp.searchParams.get('text')).toBe(MESSAGE)
+  expect(link(w.sendWhatsApp)!.target).toBe('_blank')
+  expect(link(w.sendWhatsApp)!.rel).toContain('noopener')
+
+  // Opening any of them is reported.
+  await press(text)
+  expect(shared).toBe(1)
   await press(button(w.copy)!)
+  expect(shared).toBe(2)
   expect(copied).toEqual([LINK])
   expect(document.body.textContent).toContain(w.copied)
-
-  await press(button(w.shareQr)!)
-  expect(readQr(await qrCode())).toBe(LINK)
-  expect(button(w.hideQr)!.getAttribute('aria-expanded')).toBe('true')
   expect(await violations()).toEqual([])
 })
 
-test('a share sheet that cannot take the link counts as none', async () => {
-  const shared = withShareSheet(() => false)
-  await show()
-  await press(button(w.share)!)
-  expect(shared).toEqual([])
-  expect(document.querySelector('.panel')).not.toBeNull()
-})
-
-test('without a share sheet, “Share link” opens the ways to pass it on, each carrying the link', async () => {
+test('made for an email address, it leads with an email to that address', async () => {
   await show('carla@example.test')
-  // No second copy button outside the panel: it is the panel's first choice.
-  expect(button(w.copy)).toBeUndefined()
-  const share = button(w.share)!
-  expect(share.getAttribute('aria-expanded')).toBe('false')
-  await press(share)
+  expect(ways()).toEqual([w.sendEmail, w.copy, w.shareQr])
 
-  expect(share.getAttribute('aria-expanded')).toBe('true')
-  const panel = document.querySelector<HTMLElement>('.panel')!
-  expect(panel.getAttribute('role')).toBe('group')
-  expect(document.activeElement).toBe(panel)
-  const choices = [...panel.querySelectorAll('li')].map((item) => item.textContent)
-  expect(choices).toEqual([
-    w.copy,
-    w.shareEmail,
-    w.shareSms,
-    `${w.shareWhatsApp} ${wording.help.newTab}`,
-    w.shareQr,
-  ])
-
-  // An email to whom the invitation is for, with the message and the link.
-  const email = link(w.shareEmail)!.getAttribute('href')!
+  const mail = link(w.sendEmail)!
+  expect(mail.className).toBe('button primary')
+  const email = mail.getAttribute('href')!
   expect(email.startsWith('mailto:carla@example.test?')).toBe(true)
   expect(query(email).get('subject')).toBe(wording.linkPreview.title)
   expect(query(email).get('body')).toBe(MESSAGE)
+  await press(mail)
+  expect(shared).toBe(1)
+  expect(await violations()).toEqual([])
+})
+
+test('for anyone, without a share sheet, it leads with copying, and the messages go to nobody in particular', async () => {
+  await show()
+  expect(ways()).toEqual([
+    w.copy,
+    w.shareSms,
+    `${w.shareWhatsApp} ${wording.help.newTab}`,
+    w.shareEmail,
+    w.shareQr,
+  ])
+  expect(button(w.copy)!.className).toBe('primary')
+  expect(button(w.share)).toBeUndefined()
+
   const sms = link(w.shareSms)!.getAttribute('href')!
   expect(sms.startsWith('sms:?body=')).toBe(true)
   expect(query(sms).get('body')).toBe(MESSAGE)
-  const whatsApp = new URL(link(w.shareWhatsApp)!.href)
-  expect(whatsApp.origin + whatsApp.pathname).toBe('https://wa.me/')
-  expect(whatsApp.searchParams.get('text')).toBe(MESSAGE)
-  expect(link(w.shareWhatsApp)!.target).toBe('_blank')
-  expect(link(w.shareWhatsApp)!.rel).toContain('noopener')
+  const email = link(w.shareEmail)!.getAttribute('href')!
+  expect(email.startsWith('mailto:?subject=')).toBe(true)
   // The token is inside each message, encoded, never the address's own
   // fragment; and none of them is an address of ours.
-  for (const anchor of panel.querySelectorAll('a')) {
+  for (const anchor of document.querySelectorAll('a')) {
     const href = anchor.getAttribute('href')!
     expect(href).not.toContain('#')
     expect(href).toContain(`%23${TOKEN}`)
@@ -208,14 +219,36 @@ test('without a share sheet, “Share link” opens the ways to pass it on, each
 
   await press(button(w.copy)!)
   expect(copied).toEqual([LINK])
-  expect(document.body.textContent).toContain(w.copied)
+  expect(shared).toBe(1)
   expect(await violations()).toEqual([])
 })
 
-test('the QR code, drawn on the device, reads back as the link', async () => {
+test('for anyone, with a share sheet, it leads with the sheet', async () => {
+  const sheet = withShareSheet(() => true)
   await show()
-  await press(button(w.share)!)
-  await press(button(w.shareQr)!)
+  expect(ways().slice(0, 2)).toEqual([w.share, w.copy])
+  const share = button(w.share)!
+  expect(share.className).toBe('primary')
+  expect(button(w.copy)!.className).toBe('')
+  await press(share)
+  expect(sheet).toEqual([{ title: wording.linkPreview.title, text: w.shareText, url: LINK }])
+  expect(shared).toBe(1)
+  expect(await violations()).toEqual([])
+})
+
+test('a share sheet that cannot take the link counts as none', async () => {
+  withShareSheet(() => false)
+  await show()
+  expect(button(w.share)).toBeUndefined()
+  expect(button(w.copy)!.className).toBe('primary')
+})
+
+test('the QR code, drawn on the device, reads back as the link, and showing it counts as sharing', async () => {
+  await show()
+  const toggle = button(w.shareQr)!
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  await press(toggle)
+  expect(shared).toBe(1)
 
   const code = await qrCode()
   expect(code.getAttribute('aria-label')).toBe(w.qrLabel)
@@ -223,20 +256,13 @@ test('the QR code, drawn on the device, reads back as the link', async () => {
   expect(document.body.textContent).toContain(w.qrHint)
   // Drawn, not fetched: nothing for the Content-Security-Policy to refuse.
   expect(document.querySelector('img')).toBeNull()
+  expect(button(w.hideQr)!.getAttribute('aria-expanded')).toBe('true')
   expect(await violations()).toEqual([])
 
+  // Hiding it is not sharing it.
   await press(button(w.hideQr)!)
   expect(document.querySelector('svg')).toBeNull()
-})
-
-test('closing the panel gives the focus back to “Share link”', async () => {
-  await show()
-  const share = button(w.share)!
-  await press(share)
-  await press(button(w.closeShare)!)
-  expect(document.querySelector('.panel')).toBeNull()
-  expect(document.activeElement).toBe(share)
-  expect(share.getAttribute('aria-expanded')).toBe('false')
+  expect(shared).toBe(1)
 })
 
 test('a copy that fails says how to copy it by hand', async () => {
@@ -245,7 +271,6 @@ test('a copy that fails says how to copy it by hand', async () => {
     value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
   })
   await show()
-  await press(button(w.share)!)
   await press(button(w.copy)!)
   expect(document.body.textContent).toContain(w.copyFailed)
 })

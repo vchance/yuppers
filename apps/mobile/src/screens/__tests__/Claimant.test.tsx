@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { I18nContext } from '../../lib/context';
 import { api } from '../../lib/session';
-import { ClaimantWaiting, ConfirmClaimant, NobodyYet } from '../Claimant';
+import { ClaimantWaiting, ConfirmClaimant } from '../Claimant';
 import { ExchangeSafety } from '../ExchangeSafety';
 
 jest.mock('expo-secure-store', () => ({}));
@@ -145,17 +145,6 @@ test('a refused removal goes nowhere', async () => {
   await fireEvent.press(screen.getByText(c.reject));
   await fireEvent.press(screen.getByText(c.confirmReject));
   expect(onRejected).not.toHaveBeenCalled();
-});
-
-test('with nobody in the other place, the initiator is told whether the link can still be used', async () => {
-  const first = await show(<NobodyYet exchange={exchange({ counterparty: 'UNCLAIMED' })} />);
-  expect(screen.getByText(wording.invitationLink.unclaimed)).toBeTruthy();
-  await first.unmount();
-
-  await show(
-    <NobodyYet exchange={exchange({ counterparty: 'UNCLAIMED', invitation_open: false })} />,
-  );
-  expect(screen.getByText(c.linkUsed)).toBeTruthy();
 });
 
 test('an unconfirmed claimant is told what they can do, and can leave after a second look', async () => {

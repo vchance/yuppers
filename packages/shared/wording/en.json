@@ -384,7 +384,9 @@
     "groupDrafts": "Drafts, not sent",
     "groupClosed": "Closed",
     "showClosed": "Show closed yups ({count})",
-    "hideClosed": "Hide closed yups"
+    "hideClosed": "Hide closed yups",
+    "notSent": "Not sent yet",
+    "waitingFor": "Waiting for {name}"
   },
   "states": {
     "DRAFT": "Draft, not sent",
@@ -549,7 +551,6 @@
     "agree": "I have read these terms and I sign them."
   },
   "invitationLink": {
-    "heading": "Invitation link",
     "intro": "Yuppers doesn’t send this for you. Share the link with them, and they can read the proposal after signing in.",
     "shownOnce": "This link is shown only this once. If you lose it, use “Create a new link”: you get a new one, and the old one stops working.",
     "linkLabel": "Link",
@@ -564,7 +565,6 @@
     "shareWhatsApp": "WhatsApp",
     "shareQr": "Show QR code",
     "hideQr": "Hide QR code",
-    "closeShare": "Close",
     "qrLabel": "QR code of the invitation link",
     "qrHint": "Someone with you can scan this with their phone’s camera to open the link.",
     "qrFailed": "The QR code couldn’t be shown. Copy the link instead.",
@@ -586,7 +586,21 @@
     "forNamed": "Name who it’s for instead",
     "boundSummary": "Only someone who signs in with {identifier} will be able to use the link.",
     "forAnyoneSummary": "Anyone you give the link to can open it. You’ll have to confirm who opened it before they can propose changes or decline.",
-    "reissue": "Create a new link"
+    "reissue": "Create a new link",
+    "sendTitle": "Send it to {name}",
+    "sendRule": "Yuppers doesn’t send it for you. {name} gets nothing until you share this link.",
+    "sendText": "Text the link",
+    "sendEmail": "Email the link",
+    "sendWhatsApp": "Send on WhatsApp",
+    "sharedNotice": "Once it’s sent, {name} can read the yup after signing in. You’ll see on the yup’s page when they join.",
+    "sendDone": "Done, show the yup",
+    "later": "I’ll send it later",
+    "laterHint": "You can send it from the yup’s page. It reminds you until {name} joins.",
+    "notJoined": "{name} hasn’t joined yet",
+    "notSentYet": "You haven’t sent them the link. Yuppers doesn’t send it for you: {name} gets nothing until you do.",
+    "sharedOn": "You shared the link on {date}.",
+    "sharedLongAgo": "You shared the link on {date}, and nobody has joined through it. If {name} hasn’t seen it, send it again, or create a new link.",
+    "sendAgain": "To send it now, create a new link. The old one stops working."
   },
   "invitation": {
     "title": "You’ve got a yup to review",

@@ -43,14 +43,20 @@ test('a first proposal goes from a new draft to a completed exchange both can ta
   await expect(ana.page.getByText(en.composer.moneyOutside)).toBeVisible()
   await reviewAndSend(ana.page)
 
-  // The link is shown once, and copies from the ways to share it.
+  // Sending the link is the next step: it is shown once, and for a link for
+  // anyone on a desktop browser, copying it comes first among the ways to
+  // send it. Having copied it, she goes on to the yup.
+  await expect(
+    ana.page.getByRole('heading', { name: `Send it to ${bruno.name}`, level: 1 }),
+  ).toBeVisible()
   const field = ana.page.getByLabel(en.invitationLink.linkLabel, { exact: true })
   await expect(field).toHaveValue(/^http:\/\/127\.0\.0\.1:\d+\/en\/i#.+/)
   const link = await field.inputValue()
-  await ana.page.getByRole('button', { name: en.invitationLink.share, exact: true }).click()
   await ana.page.getByRole('button', { name: en.invitationLink.copy }).click()
   await expect(ana.page.getByText(en.invitationLink.copied, { exact: true })).toBeVisible()
   expect(await ana.page.evaluate(() => navigator.clipboard.readText())).toBe(link)
+  await ana.page.getByRole('button', { name: en.invitationLink.sendDone, exact: true }).click()
+  await expect(ana.page.getByText(/^You shared the link on /)).toBeVisible()
 
   // Bruno opens it signed out: it says only that a yup is waiting, and asks
   // him to sign in to read it.

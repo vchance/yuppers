@@ -118,8 +118,11 @@ function draftExchange(): ExchangeView {
   };
 }
 
-/** The draft once its first proposal is sent: open, with nobody invited yet. */
-function sentExchange(): ExchangeView {
+/**
+ * The draft once its first proposal is sent: open, with nobody invited yet,
+ * and the link shared once the app has said so.
+ */
+function sentExchange(service: FakeService): ExchangeView {
   const { draft: _draft, ...sent } = draftExchange();
   return {
     ...sent,
@@ -127,6 +130,27 @@ function sentExchange(): ExchangeView {
     state: 'NEGOTIATING',
     counterparty: 'UNCLAIMED',
     open_revision: { ...revision, accepted_by: ['A'] },
+    invitation_open: true,
+    invitation_shared_at: service.sharedAt,
+  };
+}
+
+/**
+ * A first proposal sent a while ago, by the reader, whose link nobody has
+ * joined through: shared when the stand-in says so, and never otherwise.
+ * Put in `service.exchange` by a test that wants the reminder.
+ */
+export function waitingExchange(sharedAt: string | null): ExchangeView {
+  return {
+    ...activeExchange(),
+    version: 2,
+    state: 'NEGOTIATING',
+    counterparty: 'UNCLAIMED',
+    in_force_revision: undefined,
+    open_revision: { ...revision, accepted_by: ['A'] },
+    contributions: [],
+    invitation_open: true,
+    invitation_shared_at: sharedAt,
   };
 }
 
@@ -164,6 +188,8 @@ export interface FakeService {
   refuseCodes: ErrorCode | null;
   /** Whether the draft's first proposal has been sent. */
   proposed: boolean;
+  /** When the app said the sent proposal's link was shared, once it has. */
+  sharedAt: string | null;
   /** The list of exchanges as someone new sees it: empty. */
   noExchanges: boolean;
   /** The devices registered for push, by ID, with what was registered. */
@@ -192,6 +218,7 @@ export function fakeService(): FakeService {
     codeSender: CODE_SENDER,
     refuseCodes: null,
     proposed: false,
+    sharedAt: null,
     noExchanges: false,
     devices: new Map(),
     texting: true,
@@ -363,6 +390,8 @@ function respond(
           state: service.exchange.state,
           updated_at: '2026-10-02T06:30:00Z',
           you: 'A',
+          counterparty: service.exchange.counterparty,
+          invitation_shared_at: service.exchange.invitation_shared_at ?? null,
         },
       ],
     ];
@@ -370,10 +399,19 @@ function respond(
   if (call === `GET /v1/exchanges/${EXCHANGE}`) return [200, service.exchange];
   if (call === `POST /v1/exchanges/${DRAFT}/revisions`) {
     service.proposed = true;
-    return [200, { exchange: sentExchange(), invitation_token: SENT_INVITATION }];
+    return [200, { exchange: sentExchange(service), invitation_token: SENT_INVITATION }];
   }
   if (call === `GET /v1/exchanges/${DRAFT}`) {
-    return [200, service.proposed ? sentExchange() : draftExchange()];
+    return [200, service.proposed ? sentExchange(service) : draftExchange()];
+  }
+  // The initiator opened a way to send the link: the latest time is kept.
+  if (call === `POST /v1/exchanges/${DRAFT}/invitation/shared`) {
+    service.sharedAt = '2026-10-02T06:35:00Z';
+    return [204, null];
+  }
+  if (call === `POST /v1/exchanges/${EXCHANGE}/invitation/shared`) {
+    service.exchange = { ...service.exchange, invitation_shared_at: '2026-10-02T06:35:00Z' };
+    return [204, null];
   }
   if (call === `PUT /v1/exchanges/${DRAFT}/draft`) return [204, null];
   if (call === `POST /v1/exchanges/${EXCHANGE}/commands`) {

@@ -117,7 +117,7 @@ async fn an_address_is_one_account_whatever_its_case() {
 
     // Nobody else may add it, in any case: whoever proves it is offered to
     // combine the two accounts instead.
-    let ben = test.sign_in(&address(), "Ben").await;
+    let ben = test.sign_in(&number(), "Ben").await;
     test.ask(Some(&ben), &email).await;
     let code = test.code(&email);
     app.post(

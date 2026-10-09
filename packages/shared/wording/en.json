@@ -171,6 +171,14 @@
     "accountsCombined": {
       "subject": "Two of your Yuppers accounts were combined",
       "body": "Two {productName} accounts, each signed in to with one of your email addresses or phone numbers, were just combined into one. Everything from both is in that account now, and you sign in to it with the email address or phone number it kept.\n\nSee your account: {link}\n\nIf you didn’t do this, write to support@yuppers.app straight away. This email says nothing about your yups; sign in to see them."
+    },
+    "emailChanged": {
+      "subject": "Your {productName} email address was changed",
+      "body": "The email address on your {productName} account was just changed to another one, by someone signed in who entered codes sent to the new address and to the account. This address is no longer on the account, and you can’t sign in with it.\n\nSee your account: {link}\n\nIf you didn’t do this, write to support@yuppers.app straight away."
+    },
+    "emailRemoved": {
+      "subject": "Your {productName} email address was removed",
+      "body": "This email address was just removed from your {productName} account, by someone signed in who entered a code sent to the account’s phone number. You can’t sign in with this address any more.\n\nSee your account: {link}\n\nIf you didn’t do this, write to support@yuppers.app straight away."
     }
   },
   "push": {
@@ -269,6 +277,11 @@
     "newEmailLabel": "Email address",
     "newPhoneLabel": "Phone number",
     "changeNote": "The new one replaces {identifier} once you enter the code we send to it.",
+    "proveIntro": "To change it, first enter a code we send to {identifier}, so we know it’s you.",
+    "proveOther": "Send it to {identifier} instead",
+    "proveSend": "Send code to {identifier}",
+    "proveConfirm": "Continue",
+    "changeEmailTold": "We’ll email {identifier} to say it was changed.",
     "sendCode": "Send code",
     "codeSent": "We sent a code to {identifier}.",
     "confirm": "Confirm",
@@ -276,11 +289,13 @@
     "onlyPhone": "You can’t remove your phone number: it’s the only way you sign in. Add an email address first.",
     "removeIntro": "You’ll sign in with {staying} from now on. To make sure it reaches you, we send a code there.",
     "removePhoneNote": "Text updates for your agreements stop, and invitations already sent to this number stay as they are.",
-    "removeEmailNote": "Invitations already sent to this address stay as they are.",
+    "removeEmailNote": "We email this address to say it was removed. Invitations already sent to it stay as they are.",
     "sendRemovalCode": "Send code to {staying}",
     "removeConfirm": "Confirm and remove",
     "added": "Added {identifier}.",
-    "removed": "Removed."
+    "removed": "Removed.",
+    "noticePhoneChanged": "The phone number on your Yuppers account was changed on {date}. If you didn’t do this, write to support@yuppers.app.",
+    "noticePhoneRemoved": "The phone number on your Yuppers account was removed on {date}. If you didn’t do this, write to support@yuppers.app."
   },
   "combine": {
     "headingEmail": "That email address is on another Yuppers account",
@@ -587,11 +602,11 @@
     "missingTitle": "This link is incomplete",
     "missing": "The invitation link has lost its last part. Open it again from the message it came in, or ask the sender for a new one.",
     "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
-    "sentTo": "This invitation was sent to {identifier}. Add it to your account to open it.",
-    "sentToReplacesEmail": "Your account already has a different email address. Adding this one replaces it, and you’ll sign in with it from now on.",
-    "sentToReplacesPhone": "Your account already has a different phone number. Adding this one replaces it, and you’ll sign in with it from now on.",
-    "signInInstead": "Or sign out and sign in with {identifier} instead.",
-    "sendAddressCode": "Send a code to {identifier}",
+    "sentToEmail": "This invitation was sent to an email address that isn’t on your account. Type that address to add it and open the invitation.",
+    "sentToPhone": "This invitation was sent to a phone number that isn’t on your account. Type that number to add it and open the invitation.",
+    "sentToReplacesEmail": "Your account already has a different email address. Adding this one replaces it, and you’ll sign in with it from now on. First, enter a code we send to one already on your account.",
+    "sentToReplacesPhone": "Your account already has a different phone number. Adding this one replaces it, and you’ll sign in with it from now on. First, enter a code we send to one already on your account.",
+    "signInInstead": "Or sign out, and sign in with that address instead.",
     "addressCodeSent": "We sent a code to {identifier}.",
     "addAndOpen": "Add and open",
     "replaceAndOpen": "Use it and open"
@@ -1271,6 +1286,9 @@
     "IDENTIFIER_IN_USE": "That email address or phone number belongs to another account.",
     "IDENTIFIER_ON_OTHER_ACCOUNT": "That email address or phone number is on another of your accounts. You can combine the two.",
     "IDENTIFIER_KIND_TAKEN": "Your account already has one of these. Say whether to replace it.",
+    "PROOF_REQUIRED": "To change the email address or phone number on your account, first enter a code sent to one already on it.",
+    "NOT_INVITED_ADDRESS": "That isn’t the address this invitation was sent to.",
+    "CODE_NOT_SENT": "We couldn’t send a code there. Check what you typed, or sign in with that address instead.",
     "LAST_IDENTIFIER": "You can’t remove the only email address or phone number on your account: it’s how you sign in.",
     "COMBINE_EXPIRED": "That offer to combine accounts has ended. Add the email address or phone number again for a new code.",
     "COMBINE_SUSPENDED": "These accounts can’t be combined, because one of them is suspended.",

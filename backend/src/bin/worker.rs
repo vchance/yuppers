@@ -17,9 +17,7 @@ use yuppers_backend::contact::{self, store};
 use yuppers_backend::domain::Rules;
 use yuppers_backend::error::Redacted;
 use yuppers_backend::exchanges::reminders::run_reminders;
-use yuppers_backend::exchanges::service::{
-    purge_invitation_addresses, purge_network_metadata, run_timers,
-};
+use yuppers_backend::exchanges::service::{purge_network_metadata, run_timers};
 use yuppers_backend::metrics::{self, Text, WorkerMetrics};
 use yuppers_backend::notifications::outbox::{self, Delivery, DeliveryRules};
 use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
@@ -199,13 +197,8 @@ async fn main() -> anyhow::Result<()> {
                 }
                 match combine::purge(&db).await {
                     Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "old combine notices and offers removed"),
+                    Ok(removed) => tracing::info!(removed, "old account notices, offers and proofs removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "combine purge failed"),
-                }
-                match purge_invitation_addresses(&db, OffsetDateTime::now_utc()).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "addresses of invitations no longer open removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "invitation address purge failed"),
                 }
                 if last_sweep.is_none_or(|last| last.elapsed() >= sweep::SWEEP_EVERY) {
                     last_sweep = Some(std::time::Instant::now());

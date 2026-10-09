@@ -26,6 +26,14 @@
 0028 grant relation account_combine_offer UPDATE
 0028 grant relation account_merge INSERT
 0028 grant relation account_merge SELECT
+0028 grant relation account_notice DELETE
+0028 grant relation account_notice INSERT
+0028 grant relation account_notice SELECT
+0028 grant relation account_notice_id_seq USAGE
+0028 grant relation account_proof DELETE
+0028 grant relation account_proof INSERT
+0028 grant relation account_proof SELECT
+0028 grant relation account_proof UPDATE
 0002 grant relation account_session DELETE
 0002 grant relation account_session INSERT
 0002 grant relation account_session SELECT
@@ -33,10 +41,6 @@
 0001 grant relation attachment INSERT
 0001 grant relation attachment SELECT
 0001 grant relation attachment UPDATE
-0028 grant relation combine_notice DELETE
-0028 grant relation combine_notice INSERT
-0028 grant relation combine_notice SELECT
-0028 grant relation combine_notice_id_seq USAGE
 0025 grant relation contact_key SELECT
 0001 grant relation contribution INSERT
 0001 grant relation contribution SELECT
@@ -155,6 +159,7 @@
 0001 grant schema public USAGE
 0001 trigger acceptance acceptance_append_only O
 0006 trigger acceptance acceptance_holding O
+0028 trigger account account_merged_for_good O
 0028 trigger account_merge account_merge_append_only O
 0001 trigger contribution_snapshot contribution_snapshot_append_only O
 0019 trigger deletion_log deletion_log_account_deleted O

@@ -41,16 +41,17 @@ test('signed in by phone, an invitation sent to the email of another account com
   const number_ = number()
   await phone.page.goto(link)
   await signInByPhone(phone.page, number_)
-  const masked = `${bruno.email[0]}•••@example.test`
-  await expect(
-    phone.page.getByRole('heading', { name: fill(en.invitation.sentTo, { identifier: masked }) }),
-  ).toBeVisible()
+  // Only the kind is said; he types the address.
+  await expect(phone.page.getByRole('heading', { name: en.invitation.sentToEmail })).toBeVisible()
   await expect(phone.page.getByText(bruno.email)).toHaveCount(0)
-  const code = await codeFrom(bruno.email, 'sign-in', () =>
-    phone.page
-      .getByRole('button', { name: fill(en.invitation.sendAddressCode, { identifier: masked }) })
-      .click(),
-  )
+  const typed = phone.page.getByLabel(en.identifiers.newEmailLabel, { exact: true })
+  const send = phone.page.getByRole('button', { name: en.identifiers.sendCode, exact: true })
+  // Another address is refused, saying nothing more.
+  await typed.fill(`someone-else-${Date.now()}@example.test`)
+  await send.click()
+  await expect(phone.page.getByText(en.errors.NOT_INVITED_ADDRESS)).toBeVisible()
+  await typed.fill(bruno.email)
+  const code = await codeFrom(bruno.email, 'sign-in', () => send.click())
   await phone.page.getByLabel(en.signIn.codeLabel).fill(code)
   await phone.page.getByRole('button', { name: en.invitation.addAndOpen, exact: true }).click()
 
@@ -73,7 +74,7 @@ test('signed in by phone, an invitation sent to the email of another account com
   await expect(bruno.page.getByRole('heading', { name: en.signIn.title, level: 1 })).toBeVisible()
 })
 
-test('the phone is removed from an account that has both, with a code to the email', async ({
+test('the email is changed with a code to it first, and the phone removed with a code to the email', async ({
   person,
 }) => {
   const cleo = await person('Cleo')
@@ -101,13 +102,34 @@ test('the phone is removed from an account that has both, with a code to the ema
   await adding.getByRole('button', { name: w.confirm, exact: true }).click()
   await expect(page.getByText(american(phone), { exact: true })).toBeVisible()
 
-  // Remove it: the code goes to the email, which stays.
+  // Change the email: first a code to the one it replaces, then the new one's.
+  const email = `cleo-new-${Date.now()}@example.test`
+  await page.getByRole('button', { name: w.change, exact: true }).first().click()
+  const changing = page.getByRole('group', { name: w.changeEmailTitle })
+  await expect(changing.getByText(fill(w.proveIntro, { identifier: cleo.email }))).toBeVisible()
+  await expect(
+    changing.getByRole('button', { name: fill(w.proveOther, { identifier: american(phone) }) }),
+  ).toBeVisible()
+  const proving = await codeFrom(cleo.email, 'sign-in', () =>
+    changing.getByRole('button', { name: fill(w.proveSend, { identifier: cleo.email }) }).click(),
+  )
+  await changing.getByLabel(en.signIn.codeLabel).fill(proving)
+  await changing.getByRole('button', { name: w.proveConfirm, exact: true }).click()
+  await changing.getByLabel(w.newEmailLabel, { exact: true }).fill(email)
+  const newCode = await codeFrom(email, 'sign-in', () =>
+    changing.getByRole('button', { name: w.sendCode, exact: true }).click(),
+  )
+  await changing.getByLabel(en.signIn.codeLabel).fill(newCode)
+  await changing.getByRole('button', { name: w.confirm, exact: true }).click()
+  await expect(page.getByText(email, { exact: true })).toBeVisible()
+
+  // Remove the phone: the code goes to the email, which stays.
   await expect(removes).toHaveCount(2)
   await removes.nth(1).click()
   const panel = page.getByRole('group', { name: w.removePhoneTitle })
-  await expect(panel.getByText(fill(w.removeIntro, { staying: cleo.email }))).toBeVisible()
-  const removal = await codeFrom(cleo.email, 'sign-in', () =>
-    panel.getByRole('button', { name: fill(w.sendRemovalCode, { staying: cleo.email }) }).click(),
+  await expect(panel.getByText(fill(w.removeIntro, { staying: email }))).toBeVisible()
+  const removal = await codeFrom(email, 'sign-in', () =>
+    panel.getByRole('button', { name: fill(w.sendRemovalCode, { staying: email }) }).click(),
   )
   await panel.getByLabel(en.signIn.codeLabel).fill(removal)
   await panel.getByRole('button', { name: w.removeConfirm, exact: true }).click()

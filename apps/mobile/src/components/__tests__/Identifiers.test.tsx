@@ -50,6 +50,7 @@ const OFFER: Offer = {
   phone: 'ADDED',
   payment_options_move: false,
   text_updates_end: false,
+  proof_required: false,
 };
 
 interface Stand extends IdentifiersApi {
@@ -67,8 +68,12 @@ function stand(prepare: Partial<Stand> = {}): Stand {
     requestCode: async (identifier: string) => {
       service.calls.push(`code ${identifier}`);
     },
-    addIdentifier: async (identifier: string, code: string) => {
-      service.calls.push(`add ${identifier}`);
+    addIdentifier: async (identifier: string, code: string, proof?: string) => {
+      service.calls.push(proof ? `add ${identifier} ${proof}` : `add ${identifier}`);
+      const current = identifier.includes('@') ? service.current.email : service.current.phone;
+      if (current && current !== identifier && proof !== 'p0') {
+        throw new ApiFailure('PROOF_REQUIRED');
+      }
       if (code !== '123456') throw new ApiFailure('INVALID_CODE');
       if (identifier === service.otherAccountAt) {
         throw new ApiFailure('IDENTIFIER_ON_OTHER_ACCOUNT', false, OFFER);
@@ -83,6 +88,11 @@ function stand(prepare: Partial<Stand> = {}): Stand {
       if (code !== '123456') throw new ApiFailure('INVALID_CODE');
       service.current = { ...service.current, [kind]: null };
       return service.current;
+    },
+    proveIdentifier: async (channel: 'EMAIL' | 'PHONE', code: string) => {
+      service.calls.push(`prove ${channel}`);
+      if (code !== '123456') throw new ApiFailure('INVALID_CODE');
+      return { proof: 'p0', expires_at: '2026-10-22T09:10:00Z' };
     },
     combineAccounts: async (token: string) => {
       service.calls.push(`combine ${token}`);
@@ -184,44 +194,85 @@ test('a number on another account offers to combine, and combines on its button'
   expect(service.calls).toContain(`combine ${OFFER.token}`);
 });
 
-test('accounts combined with no email to tell are told once, until dismissed', async () => {
+test('changing the email takes a code to the account’s own first', async () => {
+  const service = stand();
+  const { wording } = await show(service);
+  const w = wording.identifiers;
+  await fireEvent.press(screen.getByTestId('email-change'));
+  expect(
+    await screen.findByText(w.proveIntro.replace('{identifier}', 'ana@example.test')),
+  ).toBeTruthy();
+  await fireEvent.press(
+    screen.getByRole('button', { name: w.proveSend.replace('{identifier}', 'ana@example.test') }),
+  );
+  await fireEvent.changeText(screen.getByLabelText(wording.signIn.codeLabel), '123456');
+  await fireEvent.press(screen.getByRole('button', { name: w.proveConfirm }));
+  expect(
+    await screen.findByText(w.changeEmailTold.replace('{identifier}', 'ana@example.test')),
+  ).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText(w.newEmailLabel), 'new@example.test');
+  await fireEvent.press(screen.getByRole('button', { name: w.sendCode }));
+  await fireEvent.changeText(screen.getByLabelText(wording.signIn.codeLabel), '123456');
+  await fireEvent.press(screen.getByRole('button', { name: w.confirm }));
+  expect(await screen.findByText('new@example.test')).toBeTruthy();
+  expect(service.calls).toEqual([
+    'code ana@example.test',
+    'prove EMAIL',
+    'code new@example.test',
+    'add new@example.test p0',
+  ]);
+});
+
+test('a notice with no email to tell is shown once, until dismissed', async () => {
   const wording = wordingFor('en');
-  const updated = jest
-    .spyOn(api, 'updateMe')
-    .mockResolvedValue({ ...account, combined_notice: null });
+  const updated = jest.spyOn(api, 'updateMe').mockResolvedValue({ ...account, notice: null });
   const setAccount = jest.fn();
   const session = {
-    account: { ...account, combined_notice: '2026-10-22T09:00:00Z' },
+    account: { ...account, notice: { kind: 'PHONE_REMOVED', at: '2026-10-22T09:00:00Z' } },
     setAccount,
   } as unknown as Session;
   await render(wrap(<CombinedNotice />, session));
   expect(
-    await screen.findByText(/^Two of your Yuppers accounts were combined into this one on/),
+    await screen.findByText(/^The phone number on your Yuppers account was removed on/),
   ).toBeTruthy();
   await fireEvent.press(screen.getByRole('button', { name: wording.combine.noticeDismiss }));
-  expect(updated).toHaveBeenCalledWith({ dismiss_combined_notice: true });
-  expect(setAccount).toHaveBeenCalledWith({ ...account, combined_notice: null });
+  expect(updated).toHaveBeenCalledWith({ dismiss_notice: true });
+  expect(setAccount).toHaveBeenCalledWith({ ...account, notice: null });
   updated.mockRestore();
 });
 
-test('an invitation sent to another address is added with a code and opens', async () => {
+test('an invitation sent to another address takes a proof, then the address typed, and opens', async () => {
   const wording = wordingFor('en');
   const w = wording.invitation;
-  const sentTo: BoundAddress = { kind: 'EMAIL', masked: 'j•••@gmail.com', replaces: true };
+  const sentTo: BoundAddress = { kind: 'EMAIL', replaces: true };
   const calls: string[] = [];
   const client: InvitationAddressApi = {
-    requestInvitationAddressCode: async (token: string) => {
-      calls.push(`code ${token}`);
+    requestCode: async (identifier: string) => {
+      calls.push(`code ${identifier}`);
     },
-    addInvitationAddress: async (_token: string, code: string, replace: boolean) => {
-      calls.push(`add ${code} ${replace}`);
+    proveIdentifier: async (channel: 'EMAIL' | 'PHONE') => {
+      calls.push(`prove ${channel}`);
+      return { proof: 'p0', expires_at: '2026-10-22T09:10:00Z' };
+    },
+    requestInvitationAddressCode: async (token: string, identifier: string) => {
+      calls.push(`address ${token} ${identifier}`);
+      if (identifier !== 'j@gmail.com') throw new ApiFailure('NOT_INVITED_ADDRESS');
+    },
+    addInvitationAddress: async (
+      _token: string,
+      identifier: string,
+      code: string,
+      replace: boolean,
+      proof?: string,
+    ) => {
+      calls.push(`add ${identifier} ${code} ${replace} ${proof}`);
       return { id: 'x' } as ExchangeView;
     },
     combineAccounts: async () => account,
     claimInvitation: async () => ({ id: 'x' }) as ExchangeView,
   };
   const opened = jest.fn();
-  const session = { setAccount: jest.fn() } as unknown as Session;
+  const session = { account, setAccount: jest.fn() } as unknown as Session;
   await render(
     wrap(
       <InvitationAddress
@@ -234,17 +285,32 @@ test('an invitation sent to another address is added with a code and opens', asy
       session,
     ),
   );
-  expect(
-    await screen.findByRole('header', {
-      name: w.sentTo.replace('{identifier}', 'j•••@gmail.com'),
-    }),
-  ).toBeTruthy();
+  expect(await screen.findByRole('header', { name: w.sentToEmail })).toBeTruthy();
   expect(screen.getByText(w.sentToReplacesEmail)).toBeTruthy();
   // An address needs no box.
   expect(screen.queryByRole('checkbox')).toBeNull();
-  await fireEvent.press(screen.getByTestId('send-address-code'));
+  await fireEvent.press(screen.getByTestId('send-proof-code'));
   await fireEvent.changeText(screen.getByLabelText(wording.signIn.codeLabel), '123456');
+  await fireEvent.press(screen.getByRole('button', { name: wording.identifiers.proveConfirm }));
+  await fireEvent.changeText(
+    await screen.findByLabelText(wording.identifiers.newEmailLabel),
+    'other@gmail.com',
+  );
+  await fireEvent.press(screen.getByTestId('send-address-code'));
+  expect(await screen.findByText(wording.errors.NOT_INVITED_ADDRESS)).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText(wording.identifiers.newEmailLabel), 'j@gmail.com');
+  await fireEvent.press(screen.getByTestId('send-address-code'));
+  await fireEvent.changeText(
+    await screen.findByLabelText(wording.signIn.codeLabel),
+    '123456',
+  );
   await fireEvent.press(screen.getByRole('button', { name: w.replaceAndOpen }));
-  expect(calls).toEqual(['code t0', 'add 123456 true']);
+  expect(calls).toEqual([
+    'code ana@example.test',
+    'prove EMAIL',
+    'address t0 other@gmail.com',
+    'address t0 j@gmail.com',
+    'add j@gmail.com 123456 true p0',
+  ]);
   expect(opened).toHaveBeenCalledWith({ id: 'x' });
 });

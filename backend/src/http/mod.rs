@@ -290,6 +290,7 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         account::me,
         account::update_me,
         account::add_identifier,
+        account::prove_identifier,
         account::remove_identifier,
         account::combine_accounts,
         account::request_invitation_address_code,

@@ -171,6 +171,14 @@
     "accountsCombined": {
       "subject": "Se combinaron dos de tus cuentas de Yuppers",
       "body": "Dos cuentas de {productName}, cada una con uno de tus correos electrónicos o números de teléfono para iniciar sesión, se acaban de combinar en una. Todo lo de ambas está ahora en esa cuenta, y para iniciar sesión usas el correo electrónico o número de teléfono que conservó.\n\nVe tu cuenta: {link}\n\nSi no lo hiciste tú, escribe de inmediato a support@yuppers.app. Este correo no dice nada de tus yups; inicia sesión para verlos."
+    },
+    "emailChanged": {
+      "subject": "Se cambió el correo electrónico de tu cuenta de {productName}",
+      "body": "El correo electrónico de tu cuenta de {productName} se acaba de cambiar por otro, desde una sesión iniciada en la que se escribieron códigos enviados al nuevo correo y a la cuenta. Este correo ya no está en la cuenta, y no puedes iniciar sesión con él.\n\nVe tu cuenta: {link}\n\nSi no lo hiciste tú, escribe de inmediato a support@yuppers.app."
+    },
+    "emailRemoved": {
+      "subject": "Se quitó el correo electrónico de tu cuenta de {productName}",
+      "body": "Este correo electrónico se acaba de quitar de tu cuenta de {productName}, desde una sesión iniciada en la que se escribió un código enviado al número de teléfono de la cuenta. Ya no puedes iniciar sesión con este correo.\n\nVe tu cuenta: {link}\n\nSi no lo hiciste tú, escribe de inmediato a support@yuppers.app."
     }
   },
   "push": {
@@ -269,6 +277,11 @@
     "newEmailLabel": "Correo electrónico",
     "newPhoneLabel": "Número de teléfono",
     "changeNote": "El nuevo reemplaza a {identifier} cuando ingreses el código que te enviamos.",
+    "proveIntro": "Para cambiarlo, primero ingresa un código que enviamos a {identifier}, para saber que eres tú.",
+    "proveOther": "Enviarlo a {identifier}",
+    "proveSend": "Enviar código a {identifier}",
+    "proveConfirm": "Continuar",
+    "changeEmailTold": "Le enviaremos un correo a {identifier} para avisar que se cambió.",
     "sendCode": "Enviar código",
     "codeSent": "Enviamos un código a {identifier}.",
     "confirm": "Confirmar",
@@ -276,11 +289,13 @@
     "onlyPhone": "No puedes quitar tu número de teléfono: es tu única forma de iniciar sesión. Primero agrega un correo electrónico.",
     "removeIntro": "Desde ahora iniciarás sesión con {staying}. Para asegurarnos de que te llega, te enviamos un código ahí.",
     "removePhoneNote": "Las actualizaciones por mensaje de tus acuerdos se detienen, y las invitaciones ya enviadas a este número quedan como están.",
-    "removeEmailNote": "Las invitaciones ya enviadas a este correo quedan como están.",
+    "removeEmailNote": "Le enviamos un correo a esta dirección para avisar que se quitó. Las invitaciones ya enviadas a ella quedan como están.",
     "sendRemovalCode": "Enviar código a {staying}",
     "removeConfirm": "Confirmar y quitar",
     "added": "Se agregó {identifier}.",
-    "removed": "Se quitó."
+    "removed": "Se quitó.",
+    "noticePhoneChanged": "El número de teléfono de tu cuenta de Yuppers se cambió el {date}. Si no lo hiciste tú, escribe a support@yuppers.app.",
+    "noticePhoneRemoved": "El número de teléfono de tu cuenta de Yuppers se quitó el {date}. Si no lo hiciste tú, escribe a support@yuppers.app."
   },
   "combine": {
     "headingEmail": "Ese correo electrónico está en otra cuenta de Yuppers",
@@ -587,11 +602,11 @@
     "missingTitle": "Este enlace está incompleto",
     "missing": "El enlace de invitación perdió su última parte. Ábrelo de nuevo desde el mensaje en el que llegó, o pide uno nuevo a quien te lo envió.",
     "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
-    "sentTo": "Esta invitación se envió a {identifier}. Agrégalo a tu cuenta para abrirla.",
-    "sentToReplacesEmail": "Tu cuenta ya tiene otro correo electrónico. Agregar este lo reemplaza, y desde ahora iniciarás sesión con él.",
-    "sentToReplacesPhone": "Tu cuenta ya tiene otro número de teléfono. Agregar este lo reemplaza, y desde ahora iniciarás sesión con él.",
-    "signInInstead": "O cierra sesión e inicia sesión con {identifier}.",
-    "sendAddressCode": "Enviar un código a {identifier}",
+    "sentToEmail": "Esta invitación se envió a un correo electrónico que no está en tu cuenta. Escribe ese correo para agregarlo y abrir la invitación.",
+    "sentToPhone": "Esta invitación se envió a un número de teléfono que no está en tu cuenta. Escribe ese número para agregarlo y abrir la invitación.",
+    "sentToReplacesEmail": "Tu cuenta ya tiene otro correo electrónico. Agregar este lo reemplaza, y desde ahora iniciarás sesión con él. Primero, ingresa un código que enviamos a uno que ya está en tu cuenta.",
+    "sentToReplacesPhone": "Tu cuenta ya tiene otro número de teléfono. Agregar este lo reemplaza, y desde ahora iniciarás sesión con él. Primero, ingresa un código que enviamos a uno que ya está en tu cuenta.",
+    "signInInstead": "O cierra sesión e inicia sesión con esa dirección.",
     "addressCodeSent": "Enviamos un código a {identifier}.",
     "addAndOpen": "Agregar y abrir",
     "replaceAndOpen": "Usarlo y abrir"
@@ -1271,6 +1286,9 @@
     "IDENTIFIER_IN_USE": "Ese correo electrónico o número de teléfono pertenece a otra cuenta.",
     "IDENTIFIER_ON_OTHER_ACCOUNT": "Ese correo electrónico o número de teléfono está en otra de tus cuentas. Puedes combinarlas.",
     "IDENTIFIER_KIND_TAKEN": "Tu cuenta ya tiene uno de estos. Indica si quieres reemplazarlo.",
+    "PROOF_REQUIRED": "Para cambiar el correo electrónico o el número de teléfono de tu cuenta, primero ingresa un código enviado a uno que ya está en ella.",
+    "NOT_INVITED_ADDRESS": "Esa no es la dirección a la que se envió esta invitación.",
+    "CODE_NOT_SENT": "No pudimos enviar un código ahí. Revisa lo que escribiste, o inicia sesión con esa dirección.",
     "LAST_IDENTIFIER": "No puedes quitar el único correo electrónico o número de teléfono de tu cuenta: es con lo que inicias sesión.",
     "COMBINE_EXPIRED": "Esa oferta para combinar cuentas terminó. Vuelve a agregar el correo electrónico o número de teléfono para recibir un código nuevo.",
     "COMBINE_SUSPENDED": "Estas cuentas no se pueden combinar, porque una de ellas está suspendida.",

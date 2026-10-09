@@ -1,7 +1,13 @@
 import type { Account, ErrorCode } from '@yuppers/api-client'
 import { useCallback, useRef, useState } from 'react'
 
-import { combineOffer, failureCode, type CombineOffer, type ExchangeApi } from './api'
+import {
+  combineOffer,
+  failureCode,
+  type CombineOffer,
+  type ExchangeApi,
+  type InAppNotice,
+} from './api'
 import { formatMessage } from './message'
 import { formatPhone, usPhone } from './phone'
 import { smsCodeConsent, useSmsCodeConsentBox, type SmsCodeConsentBox } from './sms-code-consent'
@@ -11,8 +17,11 @@ import type { Wording } from './wording/types'
  * The account's email address and phone number (README, "Combining
  * accounts"), as both apps show them: each with Add, Change and Remove.
  *
- *   - Adding and changing are one thing: the new one, with the code sent to
- *     it, replaces the one of its kind (`addIdentifier`).
+ *   - Adding takes the code sent to the new one (`addIdentifier`).
+ *   - Changing takes more than a session: first a code to one of the
+ *     account's own, the one being replaced or, if the person no longer has
+ *     it, the other (`proveIdentifier`), which gives a proof; then the new
+ *     one's code, with the proof. An email address replaced is told by email.
  *   - Removing keeps the other, which must be there: Remove is not offered
  *     for the only one, and the screen says why. It is proved with a code
  *     sent to the one that stays, so the person knows they can still sign in.
@@ -29,11 +38,15 @@ export type IdentifierSlot = 'email' | 'phone'
 
 export type IdentifiersApi = Pick<
   ExchangeApi,
-  'requestCode' | 'addIdentifier' | 'removeIdentifier' | 'combineAccounts'
+  'requestCode' | 'addIdentifier' | 'removeIdentifier' | 'combineAccounts' | 'proveIdentifier'
 >
 
 /** What is being done to one of the two, and how far it has got. */
 export type IdentifierEdit =
+  /** Changing: where the code proving one of the account's own goes. */
+  | { slot: IdentifierSlot; action: 'change'; step: 'prove'; to: string }
+  /** That code was sent to `to`. */
+  | { slot: IdentifierSlot; action: 'change'; step: 'proveCode'; to: string }
   /** The new address or number to type. */
   | { slot: IdentifierSlot; action: 'add' | 'change'; step: 'enter' }
   /** A code was sent to `identifier`, as the service takes it. */
@@ -70,6 +83,13 @@ export interface IdentifiersControl {
   offer: CombineOffer | null
   /** What was just done, for the screen to say. */
   done: string | null
+  /**
+   * While proving one of the account's own: the account's other one, to
+   * send the code there instead, if it has one.
+   */
+  proveAlternative: string | null
+  /** Sends the proving code to `proveAlternative` instead. */
+  proveElsewhere(): void
   /** Whether Remove can be offered for this one: the account has the other. */
   removable(slot: IdentifierSlot): boolean
   start(slot: IdentifierSlot, action: 'add' | 'change' | 'remove'): void
@@ -100,6 +120,9 @@ export function useIdentifiers(
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [offer, setOffer] = useState<CombineOffer | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  // A proof of one of the account's own, once its code was entered: what
+  // replacing one, and a combination that does, takes.
+  const [proof, setProof] = useState<string | null>(null)
   const working = useRef(false)
   const w = wording.identifiers
 
@@ -111,7 +134,9 @@ export function useIdentifiers(
       ? (usPhone(input) ?? (input.trim() === '' ? null : input.trim()))
       : edit?.action === 'remove' && edit.step === 'explain' && edit.slot === 'email'
         ? edit.staying
-        : null
+        : edit?.step === 'prove' && !edit.to.includes('@')
+          ? edit.to
+          : null
   const codeConsent = useSmsCodeConsentBox(textedTo)
 
   const run = useCallback(async (work: () => Promise<void>) => {
@@ -137,6 +162,11 @@ export function useIdentifiers(
   }, [])
 
   const other = (slot: IdentifierSlot) => (slot === 'email' ? account.phone : account.email)
+  const own = (slot: IdentifierSlot) => (slot === 'email' ? account.email : account.phone)
+  const proveAlternative =
+    edit?.step === 'prove'
+      ? ([account.email, account.phone].find((value) => value && value !== edit.to) ?? null)
+      : null
 
   return {
     edit,
@@ -153,6 +183,12 @@ export function useIdentifiers(
     failure,
     offer,
     done,
+    proveAlternative,
+    proveElsewhere() {
+      if (edit?.step !== 'prove' || !proveAlternative) return
+      setFailure(null)
+      setEdit({ ...edit, to: proveAlternative })
+    },
     removable: (slot) =>
       Boolean(other(slot)) && Boolean(slot === 'email' ? account.email : account.phone),
     start(slot, action) {
@@ -162,10 +198,14 @@ export function useIdentifiers(
       setInputState('')
       setCode('')
       setInvalidPhone(false)
+      setProof(null)
+      const current = own(slot)
       if (action === 'remove') {
         const staying = other(slot)
         if (!staying) return
         setEdit({ slot, action, step: 'explain', staying })
+      } else if (action === 'change' && current) {
+        setEdit({ slot, action, step: 'prove', to: current })
       } else {
         setEdit({ slot, action, step: 'enter' })
       }
@@ -177,6 +217,16 @@ export function useIdentifiers(
     },
     async sendCode() {
       if (!edit) return
+      if (edit.step === 'prove' || edit.step === 'proveCode') {
+        if (edit.step === 'prove' && codeConsent.missing) return
+        const to = edit.to
+        await run(async () => {
+          await api.requestCode(to, to.includes('@') ? undefined : smsCodeConsent(language))
+          setEdit({ slot: edit.slot, action: 'change', step: 'proveCode', to })
+          setCode('')
+        })
+        return
+      }
       if (edit.action === 'remove') {
         if (codeConsent.missing) return
         const staying = edit.staying
@@ -213,6 +263,16 @@ export function useIdentifiers(
       })
     },
     async confirm() {
+      if (edit?.step === 'proveCode') {
+        const channel = edit.to.includes('@') ? 'EMAIL' : 'PHONE'
+        await run(async () => {
+          const proved = await api.proveIdentifier(channel, code.trim())
+          setProof(proved.proof)
+          setEdit({ slot: edit.slot, action: 'change', step: 'enter' })
+          setCode('')
+        })
+        return
+      }
       if (!edit || edit.step !== 'code') return
       if (edit.action === 'remove') {
         await run(async () => {
@@ -226,10 +286,11 @@ export function useIdentifiers(
       }
       const identifier = edit.identifier
       await run(async () => {
-        const changed = await api.addIdentifier(identifier, code.trim())
+        const changed = await api.addIdentifier(identifier, code.trim(), proof ?? undefined)
         onAccount(changed)
         setEdit(null)
         setCode('')
+        setProof(null)
         setDone(formatMessage(w.added, { identifier: shownIdentifier(identifier) }, language))
       })
     },
@@ -237,9 +298,16 @@ export function useIdentifiers(
       if (!offer) return
       const token = offer.token
       await run(async () => {
-        const changed = await api.combineAccounts(token)
+        // The proof given with the address found it on the other account,
+        // and was not used up: a combination that replaces one of this
+        // account's own takes it.
+        const changed = await api.combineAccounts(
+          token,
+          offer.proof_required ? (proof ?? undefined) : undefined,
+        )
         onAccount(changed)
         setOffer(null)
+        setProof(null)
         setDone(wording.combine.done)
       })
     },
@@ -248,6 +316,20 @@ export function useIdentifiers(
       setFailure(null)
     },
   }
+}
+
+/**
+ * What a notice in the app says (`notice` in `GET /v1/me`), with `date`, the
+ * time it happened as the screens write it.
+ */
+export function noticeText(wording: Wording, kind: InAppNotice, date: string, language: string): string {
+  const text =
+    kind === 'PHONE_CHANGED'
+      ? wording.identifiers.noticePhoneChanged
+      : kind === 'PHONE_REMOVED'
+        ? wording.identifiers.noticePhoneRemoved
+        : wording.combine.noticeBanner
+  return formatMessage(text, { date }, language)
 }
 
 /** The heading of the offer: which kind of address was proved. */

@@ -166,6 +166,16 @@ export interface Wording {
      * `{productName}` and `{link}`, the account page.
      */
     accountsCombined: { subject: string; body: string }
+    /**
+     * The email telling an address that it was replaced on its account by
+     * another, sent to the old one. Uses `{productName}` and `{link}`.
+     */
+    emailChanged: { subject: string; body: string }
+    /**
+     * The email telling an address that it was removed from its account,
+     * sent to it. Uses `{productName}` and `{link}`.
+     */
+    emailRemoved: { subject: string; body: string }
   }
   /**
    * The push notification the service sends, for every notice alike
@@ -319,6 +329,17 @@ export interface Wording {
     newEmailLabel: string
     newPhoneLabel: string
     changeNote: string
+    /**
+     * Changing one first takes a code to one of the account's own, the one
+     * being replaced or the other (`POST /v1/me/identifiers/proof`).
+     * `{identifier}` is where it goes.
+     */
+    proveIntro: string
+    proveOther: string
+    proveSend: string
+    proveConfirm: string
+    /** The email address replaced is told; `{identifier}` is that one. */
+    changeEmailTold: string
     sendCode: string
     codeSent: string
     confirm: string
@@ -332,6 +353,12 @@ export interface Wording {
     removeConfirm: string
     added: string
     removed: string
+    /**
+     * The notices shown once in the app for a phone number replaced or
+     * removed, which is not texted (`notice` in `GET /v1/me`). Use `{date}`.
+     */
+    noticePhoneChanged: string
+    noticePhoneRemoved: string
   }
   /**
    * The offer to combine another account into this one, once a code proved
@@ -665,13 +692,14 @@ export interface Wording {
     ownInvitation: string
     /**
      * An invitation sent to an address the account does not have
-     * (`sent_to`): `{identifier}` is that address, masked, never in full.
+     * (`sent_to`): only its kind is said, never the address, in full or in
+     * part. The person types it.
      */
-    sentTo: string
+    sentToEmail: string
+    sentToPhone: string
     sentToReplacesEmail: string
     sentToReplacesPhone: string
     signInInstead: string
-    sendAddressCode: string
     addressCodeSent: string
     addAndOpen: string
     replaceAndOpen: string

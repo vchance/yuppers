@@ -54,13 +54,16 @@ test('signed in by phone, an invitation sent to the email of another account com
   await expect(title(page, en.invitation.signedOutTitle)).toBeVisible()
   await signInByPhone(page, phone, american)
 
-  const masked = `${brunoEmail[0]}•••@${brunoEmail.split('@')[1]}`
-  await expect(
-    page.getByRole('heading', { name: fill(en.invitation.sentTo, { identifier: masked }) }),
-  ).toBeVisible()
+  // Only the kind is said; he types the address.
+  await expect(page.getByRole('heading', { name: en.invitation.sentToEmail })).toBeVisible()
   await expect(page.getByText(brunoEmail)).toHaveCount(0)
+  const typed = shown(page.getByRole('textbox', { name: en.identifiers.newEmailLabel, exact: true }))
+  await typed.fill(`someone-else-${Date.now()}@example.test`)
+  await button(page, en.identifiers.sendCode).click()
+  await expect(page.getByText(en.errors.NOT_INVITED_ADDRESS)).toBeVisible()
+  await typed.fill(brunoEmail)
   const code = await codeFrom(brunoEmail, 'sign-in', () =>
-    button(page, fill(en.invitation.sendAddressCode, { identifier: masked })).click(),
+    button(page, en.identifiers.sendCode).click(),
   )
   await shown(page.getByLabel(en.signIn.codeLabel)).fill(code)
   await button(page, en.invitation.addAndOpen).click()

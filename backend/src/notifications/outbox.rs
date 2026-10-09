@@ -649,13 +649,13 @@ async fn accounts_combined(
         // no address.
         Err(error) => return Ok(Err(Attempt::Failed(Redacted(&error).to_string()))),
     };
-    let Some((to, language)) = found else {
+    let Some((kind, to, language)) = found else {
         return Ok(Err(Attempt::Dropped(
             "not sent: the notice and its address are gone",
         )));
     };
     let link = format!("{}/account", delivery.web_origin);
-    let rendered = delivery.wording.accounts_combined(&language, &link);
+    let rendered = delivery.wording.account_notice(kind, &language, &link);
     Ok(Ok(Email {
         to,
         subject: rendered.subject,

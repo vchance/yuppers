@@ -22,6 +22,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/session", delete(auth::delete_session))
         .route("/me", get(account::me).patch(account::update_me))
         .route("/me/identifiers", post(account::add_identifier))
+        .route("/me/identifiers/proof", post(account::prove_identifier))
         .route("/me/identifiers/{kind}", delete(account::remove_identifier))
         .route("/me/combine", post(account::combine_accounts))
         .route(

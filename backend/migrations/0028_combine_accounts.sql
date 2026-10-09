@@ -12,24 +12,27 @@
 -- What this migration adds:
 --
 --   1. `account`: the status `MERGED`, `merged_into` and `merged_at`. A
---      combined account holds no address or number and cannot be reached.
+--      combined account holds no address or number and cannot be reached,
+--      and stays combined for good (`account_merged_for_good`).
 --   2. `slot_holding`: a holding can end because its account was combined
 --      into another (`ended_by_merge`). The place passes to that account
 --      under a new holding, and a signature made under the old one still
 --      counts while the chain of combined holdings reaches the one open now
 --      (`holding_void_since`). Removing a claimant, or the claimant leaving,
 --      still ends the chain, as before.
---   3. `account_merge`: the audit of every combination, append-only.
+--   3. `account_merge`: the audit of every combination, append-only. A place
+--      passes from one account to another only where it holds the row.
 --   4. `account_combine_offer`: the short-lived, single-use token that the
---      proof of B's identifier gives A.
---   5. `combine_notice`: the email addresses told that two accounts were
---      combined, encrypted, until the worker has told them; and
---      `account.combined_notice_at`, the notice shown in the app instead
---      where neither account had an email address. Nothing is texted: the
---      SMS program is agreement updates only.
---   6. `invitation`: the address or number an invitation names, encrypted
---      as well as indexed, so that someone signed in with another can be
---      sent a code to add it ("This invitation was sent to j•••@…").
+--      proof of B's identifier gives A; and `account_proof`, the same for a
+--      code to one of the account's own identifiers, which replacing one
+--      needs.
+--   5. `account_notice`: the email addresses told that two accounts were
+--      combined, or that an email address was replaced or removed,
+--      encrypted, until the worker has told them; and `account.notice_kind`
+--      and `notice_at`, a notice shown in the app instead where there is no
+--      email address to tell. Nothing is texted: the SMS program is
+--      agreement updates only.
+--   6. `sign_in_limit`: counts for adding the address an invitation names.
 --   7. `deletion_log`: a line can say that the account was combined into
 --      another, so that replaying the log after a restore combines it again.
 --   8. `sms_consent`: an opt-out recorded because a combination dropped the
@@ -46,9 +49,13 @@ ALTER TABLE account ADD CONSTRAINT account_status_check
 ALTER TABLE account
     ADD COLUMN merged_into uuid REFERENCES account,
     ADD COLUMN merged_at   timestamptz,
-    -- When accounts were combined into this one with no email address on
-    -- either to tell: the app shows it once, until dismissed.
-    ADD COLUMN combined_notice_at timestamptz,
+    -- A notice the app shows once, until dismissed, where there was no email
+    -- address to tell: accounts combined into this one, or its phone number
+    -- replaced or removed.
+    ADD COLUMN notice_kind text
+        CHECK (notice_kind IN ('ACCOUNTS_COMBINED', 'PHONE_CHANGED', 'PHONE_REMOVED')),
+    ADD COLUMN notice_at   timestamptz,
+    ADD CONSTRAINT account_notice_whole CHECK ((notice_kind IS NULL) = (notice_at IS NULL)),
     ADD CONSTRAINT account_merged_whole CHECK (
         (status = 'MERGED') = (merged_into IS NOT NULL)
         AND (merged_into IS NULL) = (merged_at IS NULL)
@@ -63,6 +70,34 @@ ALTER TABLE account ADD CONSTRAINT account_reachable
     CHECK (status IN ('DELETED', 'MERGED') OR num_nonnulls(email_index, phone_index) >= 1);
 
 CREATE INDEX account_merged_into_idx ON account (merged_into) WHERE merged_into IS NOT NULL;
+
+-- Combined is for good, for every role. An account becomes `MERGED` once,
+-- never leaves it, and its `merged_into` changes only to follow a later
+-- combination of the account it went into: to that account's own
+-- `merged_into`.
+CREATE FUNCTION account_merged_for_good() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = public, pg_temp AS
+$$
+BEGIN
+    IF OLD.status = 'MERGED' THEN
+        IF NEW.status <> 'MERGED' THEN
+            RAISE EXCEPTION 'a combined account stays combined'
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        IF NEW.merged_into IS DISTINCT FROM OLD.merged_into
+           AND NEW.merged_into IS DISTINCT FROM (SELECT a.merged_into FROM account a
+                                                 WHERE a.id = OLD.merged_into) THEN
+            RAISE EXCEPTION 'a combined account follows only a later combination of its own'
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER account_merged_for_good
+    BEFORE UPDATE OF status, merged_into ON account
+    FOR EACH ROW EXECUTE FUNCTION account_merged_for_good();
 
 ------------------------------------------------------------------------------
 -- 2. A place passes to the account its holder was combined into
@@ -90,9 +125,14 @@ BEGIN
         END IF;
         IF OLD.account_id IS NOT NULL THEN
             IF NEW.account_id IS NOT NULL THEN
+                -- Only by a combination recorded as such, B into A, before
+                -- the places move: marking an account combined is not enough.
                 IF NOT EXISTS (SELECT 1 FROM account a
                                WHERE a.id = OLD.account_id AND a.status = 'MERGED'
-                                 AND a.merged_into = NEW.account_id) THEN
+                                 AND a.merged_into = NEW.account_id)
+                   OR NOT EXISTS (SELECT 1 FROM account_merge m
+                                  WHERE m.merged_account_id = OLD.account_id
+                                    AND m.into_account_id = NEW.account_id) THEN
                     RAISE EXCEPTION 'a slot is emptied before another account takes it'
                         USING ERRCODE = 'check_violation';
                 END IF;
@@ -148,7 +188,10 @@ BEGIN
               AND ((holder IS NULL AND NOT NEW.ended_by_merge)
                    OR (NEW.ended_by_merge AND holder IS NOT NULL
                        AND holder = (SELECT a.merged_into FROM account a
-                                     WHERE a.id = OLD.account_id AND a.status = 'MERGED'))) THEN
+                                     WHERE a.id = OLD.account_id AND a.status = 'MERGED')
+                       AND EXISTS (SELECT 1 FROM account_merge m
+                                   WHERE m.merged_account_id = OLD.account_id
+                                     AND m.into_account_id = holder))) THEN
             RETURN NEW;
         END IF;
     END IF;
@@ -262,46 +305,67 @@ CREATE INDEX account_combine_offer_account_idx ON account_combine_offer (account
 CREATE INDEX account_combine_offer_other_idx ON account_combine_offer (other_account_id);
 CREATE INDEX account_combine_offer_expires_idx ON account_combine_offer (expires_at);
 
+-- What a verified code for one of the account's own identifiers gives it: a
+-- token, kept as its hash, good once, for a few minutes, that replacing an
+-- identifier (directly, by combining, or for an invitation) needs, so that a
+-- session alone cannot take the account's ways in away.
+CREATE TABLE account_proof (
+    token_hash       bytea PRIMARY KEY CHECK (octet_length(token_hash) = 32),
+    account_id       uuid NOT NULL REFERENCES account,
+    identifier_index bytea NOT NULL CHECK (octet_length(identifier_index) = 32),
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    expires_at       timestamptz NOT NULL,
+    used_at          timestamptz,
+    CHECK (expires_at > created_at)
+);
+
+CREATE INDEX account_proof_account_idx ON account_proof (account_id);
+CREATE INDEX account_proof_expires_idx ON account_proof (expires_at);
+
 ------------------------------------------------------------------------------
--- 5. Telling every email address that two accounts were combined
+-- 5. Telling the email addresses an account had
 ------------------------------------------------------------------------------
 
--- One row per email address told, encrypted with the row's ID as
--- associated data, as the records of consent are (`crate::contact`). An
--- outbox row names it (`{"combine_notice": id}`); the worker removes it
--- once it is a week old, sent or not. Phone numbers are not told: the SMS
--- program covers agreement updates only.
-CREATE TABLE combine_notice (
+-- One row per email address told that two accounts were combined, or that
+-- it was replaced or removed, encrypted with the row's ID as associated
+-- data, as the records of consent are (`crate::contact`). An outbox row
+-- names it (`{"account_notice": id}`); the worker removes it once it is a
+-- week old, sent or not. Phone numbers are not told: the SMS program covers
+-- agreement updates only.
+CREATE TABLE account_notice (
     id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     account_id      uuid NOT NULL REFERENCES account,
+    kind            text NOT NULL
+                    CHECK (kind IN ('ACCOUNTS_COMBINED', 'EMAIL_CHANGED', 'EMAIL_REMOVED')),
     email_encrypted bytea NOT NULL CHECK (octet_length(email_encrypted) BETWEEN 42 AND 295),
     language        text NOT NULL CHECK (language ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'),
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX combine_notice_account_idx ON combine_notice (account_id);
-CREATE INDEX combine_notice_created_idx ON combine_notice (created_at);
+CREATE INDEX account_notice_account_idx ON account_notice (account_id);
+CREATE INDEX account_notice_created_idx ON account_notice (created_at);
 
 ------------------------------------------------------------------------------
--- 6. Whom an invitation names, so that a code can be sent there
+-- 6. Counting attempts to add the address an invitation names
 ------------------------------------------------------------------------------
 
--- Encrypted with the invitation's ID as associated data. Kept only while
--- the invitation can still be claimed: the worker empties it once the
--- invitation is claimed, revoked or expired, and a deletion empties it with
--- the index. An invitation issued before this has the index alone, and is
--- refused as before to anyone signed in with another address.
-ALTER TABLE invitation
-    ADD COLUMN bound_email_encrypted bytea
-        CHECK (octet_length(bound_email_encrypted) BETWEEN 42 AND 295),
-    ADD COLUMN bound_phone_encrypted bytea
-        CHECK (octet_length(bound_phone_encrypted) BETWEEN 42 AND 72),
-    ADD CONSTRAINT invitation_bound_encrypted_indexed CHECK (
-        (bound_email_encrypted IS NULL OR bound_email_index IS NOT NULL)
-        AND (bound_phone_encrypted IS NULL OR bound_phone_index IS NOT NULL));
-
-CREATE INDEX invitation_bound_encrypted_idx ON invitation (id)
-    WHERE bound_email_encrypted IS NOT NULL OR bound_phone_encrypted IS NOT NULL;
+-- Per account and per invitation, per hour: every address typed and every
+-- code asked for or entered there (`crate::exchanges::service`).
+ALTER TABLE sign_in_limit DROP CONSTRAINT sign_in_limit_scope_check;
+ALTER TABLE sign_in_limit ADD CONSTRAINT sign_in_limit_scope_check CHECK (scope IN (
+    'code-requests-by-address',
+    'failed-guesses-by-address',
+    'failed-guesses-by-identifier',
+    'code-requests-by-account',
+    'failed-guesses-by-account',
+    'sms-sent',
+    'sms-refused',
+    'sms-failed',
+    'sms-sent-by-prefix',
+    'sms-refused-prefix',
+    'sms-refused-country',
+    'invitation-address-by-account',
+    'invitation-address-by-invitation'));
 
 ------------------------------------------------------------------------------
 -- 7. The deletion log names combined accounts too
@@ -378,7 +442,8 @@ ALTER TABLE sms_consent ADD CONSTRAINT sms_consent_source_check
 
 GRANT SELECT, INSERT ON account_merge TO exchange_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON account_combine_offer TO exchange_app;
-GRANT SELECT, INSERT, DELETE ON combine_notice TO exchange_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON account_proof TO exchange_app;
+GRANT SELECT, INSERT, DELETE ON account_notice TO exchange_app;
 -- The notice's address is encrypted with its row's ID, which the service
 -- takes before it writes the row.
-GRANT USAGE ON SEQUENCE combine_notice_id_seq TO exchange_app;
+GRANT USAGE ON SEQUENCE account_notice_id_seq TO exchange_app;

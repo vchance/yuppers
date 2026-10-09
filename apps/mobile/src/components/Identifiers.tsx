@@ -195,12 +195,54 @@ function EditPanel({
     );
   }
 
+  if (edit.step === 'prove' || edit.step === 'proveCode') {
+    const to = shownIdentifier(edit.to);
+    const alternative = control.proveAlternative;
+    return (
+      <Panel title={title}>
+        {edit.step === 'prove' ? (
+          <>
+            <P>{fmt(w.proveIntro, { identifier: to })}</P>
+            {consentBox}
+            <Failure code={control.failure} />
+            <Actions>
+              <Button
+                label={fmt(w.proveSend, { identifier: to })}
+                variant="primary"
+                disabled={control.busy || consent.missing}
+                hint={consent.missing ? wording.smsCode.tickToSend : undefined}
+                onPress={() => void control.sendCode()}
+              />
+              {alternative ? (
+                <Button
+                  label={fmt(w.proveOther, { identifier: shownIdentifier(alternative) })}
+                  disabled={control.busy}
+                  onPress={control.proveElsewhere}
+                />
+              ) : null}
+              <Button
+                label={wording.common.cancel}
+                disabled={control.busy}
+                onPress={control.cancel}
+              />
+            </Actions>
+          </>
+        ) : (
+          codeStep(edit.to, w.proveConfirm)
+        )}
+      </Panel>
+    );
+  }
+
   const current = edit.slot === 'email' ? account.email : account.phone;
   return (
     <Panel title={title}>
       {edit.step === 'enter' ? (
         <>
           {current ? <P>{fmt(w.changeNote, { identifier: shownIdentifier(current) })}</P> : null}
+          {current && edit.slot === 'email' ? (
+            <P>{fmt(w.changeEmailTold, { identifier: current })}</P>
+          ) : null}
           {edit.slot === 'email' ? (
             <TextField
               label={w.newEmailLabel}

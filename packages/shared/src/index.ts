@@ -168,6 +168,7 @@ export {
   combineAccountLines,
   combineEffects,
   combineHeading,
+  noticeText,
   shownIdentifier,
   useIdentifiers,
 } from './identifiers'
@@ -181,8 +182,10 @@ export { useInvitationAddress } from './invitation-address'
 export type { InvitationAddressApi, InvitationAddressControl } from './invitation-address'
 export type {
   BlockedPerson,
+  AccountProof,
   BoundAddress,
   CombineOffer,
+  InAppNotice,
   IdentifierKind,
   BlockStatus,
   CodeChannel,

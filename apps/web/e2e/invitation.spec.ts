@@ -158,15 +158,13 @@ test('named, as the composer expects: the person it names can propose changes as
     { invitee: bruno.email },
   )
 
-  // Someone signed in with another address is told whom it was sent to,
-  // masked, and that it opens only once that address is theirs; nothing on
-  // the page takes it as it is.
+  // Someone signed in with another address is told only that it was sent
+  // to an email address that isn't theirs, and that it opens once that
+  // address is; nothing on the page takes it as it is.
   await carla.page.goto(link)
   await signIn(carla)
-  const masked = `${bruno.email[0]}•••@example.test`
-  await expect(
-    carla.page.getByRole('heading', { name: fill(en.invitation.sentTo, { identifier: masked }) }),
-  ).toBeVisible()
+  await expect(carla.page.getByRole('heading', { name: en.invitation.sentToEmail })).toBeVisible()
+  await expect(carla.page.getByText(`${bruno.email[0]}•••`)).toHaveCount(0)
   await expect(carla.page.getByRole('button', { name: en.invitation.respondNew })).toHaveCount(0)
   await expect(carla.page.getByText(bruno.email)).toHaveCount(0)
   await expect(carla.page).toHaveURL(/\/en\/i$/)

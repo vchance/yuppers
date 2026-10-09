@@ -42,14 +42,26 @@ async fn status(test: &Texting, account: Uuid) -> (String, Option<Uuid>) {
         .unwrap()
 }
 
-/// Proves `identifier` for `user`: asks for its code and enters it.
+/// Proves `identifier` for `user`: asks for its code and enters it, with a
+/// proof of the user's own where the user has one of that kind already.
 async fn prove(test: &Texting, user: &User, identifier: &str) -> Reply {
+    let me = test.app.get(user, "/v1/me").await.ok();
+    let kind = if identifier.contains('@') {
+        "email"
+    } else {
+        "phone"
+    };
+    let proof = if me[kind].is_string() {
+        Some(own_proof(test, user).await)
+    } else {
+        None
+    };
     test.ask(Some(user), identifier).await;
     test.app
         .post(
             user,
             "/v1/me/identifiers",
-            json!({ "identifier": identifier, "code": test.code(identifier) }),
+            json!({ "identifier": identifier, "code": test.code(identifier), "proof": proof }),
         )
         .await
 }
@@ -62,15 +74,103 @@ async fn offer(test: &Texting, user: &User, identifier: &str) -> Value {
 }
 
 async fn combine_with(test: &Texting, user: &User, token: &Value, key: &str) -> Reply {
+    combine_proved(test, user, token, None, key).await
+}
+
+async fn combine_proved(
+    test: &Texting,
+    user: &User,
+    token: &Value,
+    proof: Option<&str>,
+    key: &str,
+) -> Reply {
     test.app
         .call(
             Some(user),
             Method::POST,
             "/v1/me/combine",
-            Some(json!({ "token": token })),
+            Some(json!({ "token": token, "proof": proof })),
             &[("idempotency-key", key)],
         )
         .await
+}
+
+/// Takes up the offer, with a proof of the user's own email address where
+/// the offer needs one.
+async fn accept_offer(test: &Texting, user: &User, offered: &Value, key: &str) -> Reply {
+    let proof = if offered["proof_required"] == true {
+        Some(own_proof(test, user).await)
+    } else {
+        None
+    };
+    combine_proved(test, user, &offered["token"], proof.as_deref(), key).await
+}
+
+/// A proof of the user's own email address (or, without one, phone
+/// number), from a code sent to it.
+async fn own_proof(test: &Texting, user: &User) -> String {
+    let me = test.app.get(user, "/v1/me").await.ok();
+    let (channel, own) = match me["email"].as_str() {
+        Some(email) => ("EMAIL", email.to_owned()),
+        None => ("PHONE", me["phone"].as_str().unwrap().to_owned()),
+    };
+    proof_by(test, user, channel, &own).await
+}
+
+/// A proof of `own`, the user's identifier of `channel`.
+async fn proof_by(test: &Texting, user: &User, channel: &str, own: &str) -> String {
+    test.ask(Some(user), own).await;
+    let proved = test
+        .app
+        .post(
+            user,
+            "/v1/me/identifiers/proof",
+            json!({ "channel": channel, "code": test.code(own) }),
+        )
+        .await
+        .ok();
+    proved["proof"].as_str().unwrap().to_owned()
+}
+
+/// Replaces the user's identifier of that kind with `identifier`, with its
+/// code and a proof of the user's own.
+async fn replace(test: &Texting, user: &User, identifier: &str) -> Reply {
+    let proof = own_proof(test, user).await;
+    test.ask(Some(user), identifier).await;
+    test.app
+        .post(
+            user,
+            "/v1/me/identifiers",
+            json!({ "identifier": identifier, "code": test.code(identifier), "proof": proof }),
+        )
+        .await
+}
+
+/// The email notices queued for `account`: what each says, to whom, and in
+/// which language, decrypted.
+async fn notices(test: &Texting, account: Uuid) -> Vec<(String, String, String)> {
+    let rows: Vec<(i64, String, Vec<u8>, String)> = sqlx::query_as(
+        "SELECT id, kind, email_encrypted, language FROM account_notice
+         WHERE account_id = $1 ORDER BY id",
+    )
+    .bind(account)
+    .fetch_all(&test.app.owner)
+    .await
+    .unwrap();
+    rows.into_iter()
+        .map(|(id, kind, email, language)| {
+            let email = common::open(
+                yuppers_backend::contact::Field::ACCOUNT_NOTICE_EMAIL.row(id),
+                &email,
+            );
+            (kind, email, language)
+        })
+        .collect()
+}
+
+/// The notice the app shows on the account, if any.
+async fn in_app(test: &Texting, user: &User) -> Value {
+    test.app.get(user, "/v1/me").await.ok()["notice"]["kind"].clone()
 }
 
 async fn remove(test: &Texting, user: &User, kind: &str, code: &str, key: &str) -> Reply {
@@ -114,9 +214,57 @@ async fn an_identifier_is_added_changed_and_removed_with_codes_and_one_always_st
         .await
         .ok();
 
-    // Change the email: the new one, with its code, replaces the old.
+    // Changing the email takes a proof of one of the account's own: without
+    // one it is refused before its code is looked at.
     let changed = address();
-    assert_eq!(test.add(&ana, &changed).await["email"], changed);
+    test.ask(Some(&ana), &changed).await;
+    let code = test.code(&changed);
+    app.post(
+        &ana,
+        "/v1/me/identifiers",
+        json!({ "identifier": changed, "code": code }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    // A proof from a code to the phone; another account's is no good.
+    let stranger = test.sign_in(&address(), "Sam").await;
+    let theirs = own_proof(&test, &stranger).await;
+    app.post(
+        &ana,
+        "/v1/me/identifiers",
+        json!({ "identifier": changed, "code": code, "proof": theirs }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    assert_eq!(app.get(&ana, "/v1/me").await.ok()["email"], email);
+    let proof = proof_by(&test, &ana, "PHONE", &phone).await;
+    test.ask(Some(&ana), &changed).await;
+    let me = app
+        .post(
+            &ana,
+            "/v1/me/identifiers",
+            json!({ "identifier": changed, "code": test.code(&changed), "proof": proof }),
+        )
+        .await
+        .ok();
+    assert_eq!(me["email"], changed);
+    // The address replaced is told, by email, in the account's language;
+    // nothing is shown in the app for it.
+    assert_eq!(
+        notices(&test, ana.id).await,
+        vec![("EMAIL_CHANGED".to_owned(), email.clone(), "en".to_owned())]
+    );
+    assert!(in_app(&test, &ana).await.is_null());
+    // The proof was good once.
+    let again = address();
+    test.ask(Some(&ana), &again).await;
+    app.post(
+        &ana,
+        "/v1/me/identifiers",
+        json!({ "identifier": again, "code": test.code(&again), "proof": proof }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
 
     // Removing the phone needs a code sent to the email that stays: a code
     // sent to the phone itself, or a wrong one, is refused.
@@ -161,6 +309,19 @@ async fn an_identifier_is_added_changed_and_removed_with_codes_and_one_always_st
         1
     );
     assert_eq!(app.get(&ana, &path).await.ok()["on"], false);
+    // A number is not texted about it: the app shows it, until dismissed.
+    assert_eq!(in_app(&test, &ana).await, "PHONE_REMOVED");
+    let me = app
+        .call(
+            Some(&ana),
+            Method::PATCH,
+            "/v1/me",
+            Some(json!({ "dismiss_notice": true })),
+            &[],
+        )
+        .await
+        .ok();
+    assert!(me["notice"].is_null(), "{me}");
 
     // Now the email is the only one again.
     remove(&test, &ana, "email", "000000", &key())
@@ -203,9 +364,14 @@ async fn removing_the_email_is_proved_by_a_code_to_the_phone_and_leaves_invitati
         .await
         .ok();
     assert_eq!(me["email"], Value::Null);
+    // The address removed is told, by email.
+    assert_eq!(
+        notices(&test, ben.id).await,
+        vec![("EMAIL_REMOVED".to_owned(), email.clone(), "en".to_owned())]
+    );
 
     // The invitation still names the address, and is not Ben's to take now;
-    // the address masked is what he is shown, to add it back.
+    // he is told only that it went to an email address, to type it back.
     let (bound, revoked): (bool, bool) = sqlx::query_as(
         "SELECT bound_email_index IS NOT NULL, revoked_at IS NOT NULL FROM invitation
          WHERE exchange_id = $1",
@@ -219,11 +385,57 @@ async fn removing_the_email_is_proved_by_a_code_to_the_phone_and_leaves_invitati
         .post(&ben, "/v1/invitations/preview", json!({ "token": token }))
         .await
         .ok();
-    let first = email.chars().next().unwrap();
     assert_eq!(
         preview["sent_to"],
-        json!({ "kind": "EMAIL", "masked": format!("{first}•••@contact.example.test"), "replaces": false })
+        json!({ "kind": "EMAIL", "replaces": false })
     );
+}
+
+#[tokio::test]
+async fn changing_the_phone_takes_a_proof_and_is_shown_in_the_app_not_texted() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let phone = number();
+    let ana = test.sign_in(&phone, "Ana").await;
+    // Adding a kind the account has none of takes no proof.
+    let email = address();
+    assert_eq!(test.add(&ana, &email).await["email"], email);
+    assert!(notices(&test, ana.id).await.is_empty());
+
+    // Replacing the number: without a proof, refused before the code; with
+    // one from a code to the email, done.
+    let changed = number();
+    test.ask(Some(&ana), &changed).await;
+    app.post(
+        &ana,
+        "/v1/me/identifiers",
+        json!({ "identifier": changed, "code": test.code(&changed) }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    assert_eq!(replace(&test, &ana, &changed).await.ok()["phone"], changed);
+    // The number replaced is not texted; the app shows it, and no email
+    // goes about a number.
+    assert_eq!(in_app(&test, &ana).await, "PHONE_CHANGED");
+    assert!(notices(&test, ana.id).await.is_empty());
+    assert_eq!(
+        scalar_i64(
+            &test,
+            "SELECT count(*) FROM outbox WHERE recipient_account_id = $1 AND kind = 'SMS'",
+            ana.id
+        )
+        .await,
+        0
+    );
+    // The same number again is no change, and takes no proof.
+    test.ask(Some(&ana), &changed).await;
+    app.post(
+        &ana,
+        "/v1/me/identifiers",
+        json!({ "identifier": changed, "code": test.code(&changed) }),
+    )
+    .await
+    .ok();
 }
 
 // ---- Combining --------------------------------------------------------------
@@ -332,8 +544,20 @@ async fn combining_moves_the_yups_number_updates_payment_options_and_ends_the_ot
     );
     assert_eq!(offered["payment_options_move"], true);
     assert_eq!(offered["text_updates_end"], false);
+    // Ana has no number of her own to lose, so no proof of hers is needed.
+    assert_eq!(offered["proof_required"], false);
     // Nothing has moved yet.
     assert_eq!(status(&test, ben.id).await.0, "ACTIVE");
+    // Ben reads Spanish: he is told in it.
+    app.call(
+        Some(ben),
+        Method::PATCH,
+        "/v1/me",
+        Some(json!({ "language": "es" })),
+        &[],
+    )
+    .await
+    .ok();
 
     let me = combine_with(&test, ana, &offered["token"], &key())
         .await
@@ -480,7 +704,7 @@ async fn combining_moves_the_yups_number_updates_payment_options_and_ends_the_ot
     // texted. Nothing in the queue says who.
     let queued: Vec<(String, Value)> = sqlx::query_as(
         "SELECT kind, payload FROM outbox WHERE recipient_account_id = $1
-           AND payload ? 'combine_notice' ORDER BY id",
+           AND payload ? 'account_notice' ORDER BY id",
     )
     .bind(ana.id)
     .fetch_all(&app.owner)
@@ -488,6 +712,23 @@ async fn combining_moves_the_yups_number_updates_payment_options_and_ends_the_ot
     .unwrap();
     let kinds: Vec<&str> = queued.iter().map(|(kind, _)| kind.as_str()).collect();
     assert_eq!(kinds, ["EMAIL", "EMAIL"]);
+    // Each in its own account's language: Ben's in Spanish.
+    let mut told = notices(&test, ana.id).await;
+    told.sort();
+    let mut expected = vec![
+        (
+            "ACCOUNTS_COMBINED".to_owned(),
+            ana.email.clone(),
+            "en".to_owned(),
+        ),
+        (
+            "ACCOUNTS_COMBINED".to_owned(),
+            s.ben_email.clone(),
+            "es".to_owned(),
+        ),
+    ];
+    expected.sort();
+    assert_eq!(told, expected);
 }
 
 #[tokio::test]
@@ -499,12 +740,25 @@ async fn an_offer_is_good_once_for_its_account_and_a_retry_with_its_key_is_harml
     combine_with(&test, &s.cleo, &offered["token"], &key())
         .await
         .refused(StatusCode::CONFLICT, "COMBINE_EXPIRED");
+    // Ben's address would replace Ana's own: that takes a proof of hers, as
+    // replacing it directly does. Without one, nothing happens.
+    assert_eq!(offered["email"], "REPLACED");
+    assert_eq!(offered["proof_required"], true);
+    combine_with(&test, &s.ana, &offered["token"], &key())
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    let cleos = own_proof(&test, &s.cleo).await;
+    combine_proved(&test, &s.ana, &offered["token"], Some(&cleos), &key())
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    assert_eq!(status(&test, s.ben.id).await.0, "ACTIVE");
+    let proof = own_proof(&test, &s.ana).await;
     let attempt = key();
-    combine_with(&test, &s.ana, &offered["token"], &attempt)
+    combine_proved(&test, &s.ana, &offered["token"], Some(&proof), &attempt)
         .await
         .ok();
     // The same request again, as a client retrying would: done already.
-    combine_with(&test, &s.ana, &offered["token"], &attempt)
+    combine_proved(&test, &s.ana, &offered["token"], Some(&proof), &attempt)
         .await
         .ok();
     // A new request with the spent token: refused.
@@ -622,9 +876,7 @@ async fn a_block_between_the_two_goes_and_one_against_the_other_account_carries_
     )
     .await;
     let offered = offer(&test, &s.ana, &s.ben_email).await;
-    combine_with(&test, &s.ana, &offered["token"], &key())
-        .await
-        .ok();
+    accept_offer(&test, &s.ana, &offered, &key()).await.ok();
     let blocks: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT blocker_account_id, blocked_account_id FROM account_block
          WHERE $1 IN (blocker_account_id, blocked_account_id)
@@ -681,9 +933,7 @@ async fn a_signature_waiting_when_the_accounts_are_combined_still_counts() {
 
     let ana = test.sign_in(&address(), "Ana").await;
     let offered = offer(&test, &ana, &ben_email).await;
-    combine_with(&test, &ana, &offered["token"], &key())
-        .await
-        .ok();
+    accept_offer(&test, &ana, &offered, &key()).await.ok();
 
     // Cleo signs Ben's version: Ben's signature, given before, is Ana's
     // place's, and the agreement comes into force.
@@ -727,6 +977,166 @@ async fn the_database_lets_a_place_pass_only_to_the_account_its_holder_was_combi
 }
 
 #[tokio::test]
+async fn the_service_role_cannot_fake_a_combination_to_move_a_place() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let exchange = Uuid::parse_str(&deal.exchange).unwrap();
+    let thief = app.user("Sam").await;
+    // As the service's own role: mark the holder combined into another
+    // account, move the place, and mark it live again. The place does not
+    // move: no combination of the two is recorded.
+    let mut tx = app.db.begin().await.unwrap();
+    sqlx::query("UPDATE account SET status = 'MERGED', merged_into = $2, merged_at = now(), email_encrypted = NULL,
+                email_index = NULL, phone_encrypted = NULL, phone_index = NULL
+         WHERE id = $1")
+        .bind(deal.ben.id)
+        .bind(thief.id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let refused =
+        sqlx::query("UPDATE participant SET account_id = $2 WHERE exchange_id = $1 AND slot = 'B'")
+            .bind(exchange)
+            .bind(thief.id)
+            .execute(&mut *tx)
+            .await
+            .unwrap_err();
+    assert!(refused.to_string().contains("emptied before"), "{refused}");
+    drop(tx);
+
+    // Nor can the mark be taken back once made, or pointed elsewhere.
+    let mut tx = app.db.begin().await.unwrap();
+    sqlx::query("UPDATE account SET status = 'MERGED', merged_into = $2, merged_at = now(), email_encrypted = NULL,
+                email_index = NULL, phone_encrypted = NULL, phone_index = NULL
+         WHERE id = $1")
+        .bind(deal.ben.id)
+        .bind(thief.id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let mut savepoint = sqlx::Acquire::begin(&mut *tx).await.unwrap();
+    let refused = sqlx::query("UPDATE account SET status = 'ACTIVE' WHERE id = $1")
+        .bind(deal.ben.id)
+        .execute(&mut *savepoint)
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("stays combined"), "{refused}");
+    savepoint.rollback().await.unwrap();
+    let elsewhere = app.user("Other").await;
+    let refused = sqlx::query("UPDATE account SET merged_into = $2 WHERE id = $1")
+        .bind(deal.ben.id)
+        .bind(elsewhere.id)
+        .execute(&mut *tx)
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("follows only"), "{refused}");
+    drop(tx);
+
+    // Nothing changed.
+    assert_eq!(
+        status(&test, deal.ben.id).await,
+        ("ACTIVE".to_owned(), None)
+    );
+    let holder: Uuid = sqlx::query_scalar(
+        "SELECT account_id FROM participant WHERE exchange_id = $1 AND slot = 'B'",
+    )
+    .bind(exchange)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(holder, deal.ben.id);
+}
+
+#[tokio::test]
+async fn a_place_beside_the_other_account_taken_after_the_offer_stops_the_combination() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let ben_phone = number();
+    let ben = test.sign_in(&ben_phone, "Ben").await;
+    let ana = test.sign_in(&address(), "Ana").await;
+    let offered = offer(&test, &ana, &ben_phone).await;
+    // After the offer, Ana takes the place beside Ben in his yup.
+    let deal = app.negotiating_between(ben.clone(), ana.clone()).await;
+    app.post(
+        &ana,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    combine_with(&test, &ana, &offered["token"], &key())
+        .await
+        .refused(StatusCode::CONFLICT, "COMBINE_SHARED_EXCHANGE");
+    assert_eq!(status(&test, ben.id).await.0, "ACTIVE");
+
+    // Had the check been passed, the database refuses one account in both
+    // places, by the constraint the service reads as this refusal.
+    let exchange = Uuid::parse_str(&deal.exchange).unwrap();
+    let mut tx = app.db.begin().await.unwrap();
+    sqlx::query(
+        "INSERT INTO account_merge
+             (merged_account_id, into_account_id, identifier_kind, source, merged_at)
+         VALUES ($1, $2, 'PHONE', 'PERSON', now())",
+    )
+    .bind(ben.id)
+    .bind(ana.id)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let refused = sqlx::query(
+        "UPDATE participant SET account_id = $2 WHERE exchange_id = $1 AND account_id = $3",
+    )
+    .bind(exchange)
+    .bind(ana.id)
+    .bind(ben.id)
+    .execute(&mut *tx)
+    .await
+    .unwrap_err();
+    let failure = refused.as_database_error().unwrap();
+    assert_eq!(failure.code().as_deref(), Some("23505"));
+    assert_eq!(
+        failure.constraint(),
+        Some("participant_exchange_id_account_id_key")
+    );
+}
+
+#[tokio::test]
+async fn a_block_made_through_a_place_the_other_account_left_is_listed_and_lifted_by_the_new_one() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let cleo = test.sign_in(&address(), "Cleo").await;
+    let ben_phone = number();
+    let ben = test.sign_in(&ben_phone, "Ben").await;
+    // Ben takes Cleo's link, unconfirmed, and blocks her through it, which
+    // takes him out of it.
+    let deal = app.negotiating_between(cleo.clone(), ben.clone()).await;
+    app.post(
+        &ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    let path = format!("/v1/exchanges/{}/block", deal.exchange);
+    let blocked = app.call(Some(&ben), Method::PUT, &path, None, &[]).await;
+    assert_eq!(blocked.status, StatusCode::NO_CONTENT, "{}", blocked.body);
+
+    let ana = test.sign_in(&address(), "Ana").await;
+    let offered = offer(&test, &ana, &ben_phone).await;
+    accept_offer(&test, &ana, &offered, &key()).await.ok();
+
+    // The block is Ana's now, and so is the place it was made through.
+    let people = app.get(&ana, "/v1/blocks").await.ok();
+    assert_eq!(people.as_array().unwrap().len(), 1, "{people}");
+    assert_eq!(people[0]["exchange_id"], deal.exchange);
+    assert_eq!(people[0]["left"], true);
+    let lifted = app.call(Some(&ana), Method::DELETE, &path, None, &[]).await;
+    assert_eq!(lifted.status, StatusCode::NO_CONTENT, "{}", lifted.body);
+    assert_eq!(app.get(&ana, "/v1/blocks").await.ok(), json!([]));
+}
+
+#[tokio::test]
 async fn two_combinations_at_once_happen_once() {
     let (test, _turn) = start().await;
     let s = setup(&test).await;
@@ -737,10 +1147,15 @@ async fn two_combinations_at_once_happen_once() {
         .to_owned();
     let to_ana = offer(&test, &s.ana, &s.ben_email).await;
     let to_ben = offer(&test, &s.ben, &ana_email).await;
+    // Each would replace the other's own address: each proves their own.
+    let (ana_proof, ben_proof) = (
+        own_proof(&test, &s.ana).await,
+        own_proof(&test, &s.ben).await,
+    );
     let (k1, k2) = (key(), key());
     let (first, second) = tokio::join!(
-        combine_with(&test, &s.ana, &to_ana["token"], &k1),
-        combine_with(&test, &s.ben, &to_ben["token"], &k2),
+        combine_proved(&test, &s.ana, &to_ana["token"], Some(&ana_proof), &k1),
+        combine_proved(&test, &s.ben, &to_ben["token"], Some(&ben_proof), &k2),
     );
     let worked = [&first, &second]
         .iter()
@@ -758,10 +1173,11 @@ async fn two_combinations_at_once_happen_once() {
     // And the same offer used twice at once.
     let s = setup(&test).await;
     let offered = offer(&test, &s.ana, &s.ben_email).await;
+    let proof = own_proof(&test, &s.ana).await;
     let (k1, k2) = (key(), key());
     let (first, second) = tokio::join!(
-        combine_with(&test, &s.ana, &offered["token"], &k1),
-        combine_with(&test, &s.ana, &offered["token"], &k2),
+        combine_proved(&test, &s.ana, &offered["token"], Some(&proof), &k1),
+        combine_proved(&test, &s.ana, &offered["token"], Some(&proof), &k2),
     );
     let mut codes = [first.code().to_owned(), second.code().to_owned()];
     codes.sort();
@@ -807,7 +1223,7 @@ async fn deleting_the_combined_account_clears_what_referred_to_the_other() {
     assert_eq!(
         scalar_i64(
             &test,
-            "SELECT count(*) FROM combine_notice WHERE account_id = $1",
+            "SELECT count(*) FROM account_notice WHERE account_id = $1",
             s.ana.id
         )
         .await,
@@ -857,7 +1273,7 @@ async fn replaying_the_log_combines_again_and_then_deletes() {
     assert_eq!(
         scalar_i64(
             &test,
-            "SELECT count(*) FROM combine_notice WHERE account_id = $1",
+            "SELECT count(*) FROM account_notice WHERE account_id = $1",
             s.ana.id
         )
         .await,
@@ -875,8 +1291,8 @@ async fn replaying_the_log_combines_again_and_then_deletes() {
     let again = deletion_log::replay(&app.db, &app.rules, &entries, |_| {}).await;
     assert_eq!((again.already_combined, again.already_deleted), (1, 1));
 
-    // A line whose account it went into is not in this copy leaves the
-    // account as it is.
+    // Alone, a line whose account it went into is not in this copy leaves
+    // the account as it is.
     let lone = test.sign_in(&address(), "Lone").await;
     let replayed = combine::replay(
         &app.db,
@@ -890,6 +1306,86 @@ async fn replaying_the_log_combines_again_and_then_deletes() {
     .unwrap();
     assert_eq!(replayed, combine::Replayed::TargetNotHere);
     assert_eq!(status(&test, lone.id).await.0, "ACTIVE");
+}
+
+#[tokio::test]
+async fn an_account_combined_into_one_made_after_the_backup_follows_the_log_to_where_that_went() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    // The backup was taken before A was made: Ben was combined into A, and
+    // A was deleted. Ben goes too, at the time A did.
+    let ben = test.sign_in(&number(), "Ben").await;
+    let at = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap() + time::Duration::seconds(1);
+    let later = at + time::Duration::seconds(1);
+    let a = Uuid::new_v4();
+    let log = format!(
+        "{ben}\t{at}\t{a}\tPHONE\n{a}\t{later}\n",
+        ben = ben.id,
+        at = rfc3339(at),
+        later = rfc3339(later),
+    );
+    let entries = deletion_log::parse(&log).unwrap();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |_| {}).await;
+    assert!(summary.complete(), "{summary}");
+    assert_eq!((summary.deleted, summary.not_here), (1, 1), "{summary}");
+    assert_eq!(status(&test, ben.id).await.0, "DELETED");
+    let deleted: OffsetDateTime =
+        sqlx::query_scalar("SELECT deleted_at FROM deletion_log WHERE account_id = $1")
+            .bind(ben.id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(deleted, later);
+
+    // Ben was combined into A, made after the backup, and A into Cleo,
+    // who is here: Ben goes into Cleo.
+    let ben = test.sign_in(&number(), "Ben").await;
+    let cleo = test.sign_in(&number(), "Cleo").await;
+    let a = Uuid::new_v4();
+    let log = format!(
+        "{ben}\t{at}\t{a}\tPHONE\n{a}\t{later}\t{cleo}\tEMAIL\n",
+        ben = ben.id,
+        cleo = cleo.id,
+        at = rfc3339(at),
+        later = rfc3339(later),
+    );
+    let entries = deletion_log::parse(&log).unwrap();
+    let mut said = Vec::new();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
+        said.push(line.to_owned())
+    })
+    .await;
+    assert!(summary.complete(), "{summary}");
+    assert_eq!((summary.combined, summary.not_here), (1, 1), "{summary}");
+    assert_eq!(
+        status(&test, ben.id).await,
+        ("MERGED".to_owned(), Some(cleo.id))
+    );
+    assert!(said[0].contains(&format!("through {a}")), "{said:?}");
+    // A replay tells nobody, in the app or outside.
+    assert!(in_app(&test, &cleo).await.is_null());
+    assert!(notices(&test, cleo.id).await.is_empty());
+
+    // Where no later line says where A went, Ben is left as he is, and the
+    // replay says so and is not complete.
+    let dan = test.sign_in(&number(), "Dan").await;
+    let log = format!(
+        "{dan}\t{at}\t{a}\tPHONE\n",
+        dan = dan.id,
+        a = Uuid::new_v4(),
+        at = rfc3339(at),
+    );
+    let entries = deletion_log::parse(&log).unwrap();
+    let mut said = Vec::new();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
+        said.push(line.to_owned())
+    })
+    .await;
+    assert!(!summary.complete(), "{summary}");
+    assert_eq!(summary.unresolved, vec![dan.id]);
+    assert!(said[0].contains("UNRESOLVED"), "{said:?}");
+    assert!(summary.to_string().contains("UNRESOLVED"), "{summary}");
+    assert_eq!(status(&test, dan.id).await.0, "ACTIVE");
 }
 
 // ---- Invitations sent to another address ---------------------------------------
@@ -917,14 +1413,39 @@ async fn invite(test: &Texting, ana: &User, bound: &str) -> (String, String) {
     )
 }
 
-async fn ask_invitation_code(test: &Texting, user: &User, token: &str) -> Reply {
+/// Asks for a code to `typed`, as the address `token`'s invitation was sent to.
+async fn ask_invitation_code(test: &Texting, user: &User, token: &str, typed: &str) -> Reply {
     test.app
         .post(
             user,
             "/v1/invitations/address/codes",
-            json!({ "token": token, "sms_consent": common::sms_consent() }),
+            json!({ "token": token, "identifier": typed, "sms_consent": common::sms_consent() }),
         )
         .await
+}
+
+/// Adds `typed` with its code, and opens the invitation.
+async fn add_invitation_address(
+    test: &Texting,
+    user: &User,
+    token: &str,
+    typed: &str,
+    extra: Value,
+) -> Reply {
+    let mut body = json!({ "token": token, "identifier": typed, "code": test.code(typed) });
+    for (name, value) in extra.as_object().unwrap() {
+        body[name] = value.clone();
+    }
+    test.app.post(user, "/v1/invitations/address", body).await
+}
+
+/// How many codes were ever stored for `identifier`.
+async fn codes_sent(test: &Texting, identifier: &str) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM one_time_code WHERE identifier_index = $1")
+        .bind(common::index(identifier))
+        .fetch_one(&test.app.owner)
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -934,41 +1455,43 @@ async fn an_invitation_sent_to_an_address_nobody_has_adds_it_and_opens() {
     let ana = test.sign_in(&address(), "Ana").await;
     let bound = number();
     let (exchange, token) = invite(&test, &ana, &bound).await;
-    // Ben signed in by email; the invitation names a phone number.
+    // Ben signed in by email; the invitation was sent to a phone number.
     let ben = test.sign_in(&address(), "Ben").await;
     let preview = app
         .post(&ben, "/v1/invitations/preview", json!({ "token": token }))
         .await
         .ok();
-    let last4 = &bound[bound.len() - 4..];
+    // Only the kind is said: not the number, in full or in part.
     assert_eq!(
         preview["sent_to"],
-        json!({ "kind": "PHONE", "masked": format!("(•••) •••-{last4}"), "replaces": false })
+        json!({ "kind": "PHONE", "replaces": false })
     );
-    // The address itself is never in an answer.
-    assert!(!preview.to_string().contains(&bound[2..]));
+    assert!(!preview.to_string().contains(&bound[bound.len() - 4..]));
     // Claiming as it is still names someone else.
     app.post(&ben, "/v1/invitations/claim", json!({ "token": token }))
         .await
         .refused(StatusCode::FORBIDDEN, "INVITATION_NOT_FOR_YOU");
 
-    // A code goes to the number the invitation names; a wrong one is
-    // refused as any wrong code is.
-    let reply = ask_invitation_code(&test, &ben, &token).await;
+    // He types the number. Another one is refused, saying nothing more, and
+    // nothing is sent to it.
+    let wrong = number();
+    ask_invitation_code(&test, &ben, &token, &wrong)
+        .await
+        .refused(StatusCode::UNPROCESSABLE_ENTITY, "NOT_INVITED_ADDRESS");
+    assert_eq!(codes_sent(&test, &wrong).await, 0);
+    // The right one, typed as people in the US write it, gets a code; a
+    // wrong code is refused as any wrong code is.
+    let typed = format!("({}) {}-{}", &bound[2..5], &bound[5..8], &bound[8..]);
+    let reply = ask_invitation_code(&test, &ben, &token, &typed).await;
     assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
     app.post(
         &ben,
         "/v1/invitations/address",
-        json!({ "token": token, "code": "000000" }),
+        json!({ "token": token, "identifier": bound, "code": "000000" }),
     )
     .await
     .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
-    let view = app
-        .post(
-            &ben,
-            "/v1/invitations/address",
-            json!({ "token": token, "code": test.code(&bound) }),
-        )
+    let view = add_invitation_address(&test, &ben, &token, &bound, json!({}))
         .await
         .ok();
     assert_eq!(view["id"], exchange);
@@ -976,15 +1499,6 @@ async fn an_invitation_sent_to_an_address_nobody_has_adds_it_and_opens() {
     // Named, so nobody has to confirm Ben.
     assert_eq!(view["counterparty"], "CONFIRMED");
     assert_eq!(app.get(&ben, "/v1/me").await.ok()["phone"], bound);
-    // Taken: the address is no longer kept with the invitation.
-    let kept: bool = sqlx::query_scalar(
-        "SELECT bound_phone_encrypted IS NOT NULL FROM invitation WHERE exchange_id = $1",
-    )
-    .bind(Uuid::parse_str(&exchange).unwrap())
-    .fetch_one(&app.owner)
-    .await
-    .unwrap();
-    assert!(!kept);
 }
 
 #[tokio::test]
@@ -999,18 +1513,14 @@ async fn an_invitation_sent_to_another_accounts_address_offers_to_combine_then_o
     let ben = test.sign_in(&number(), "Ben").await;
 
     // Before the code, asking is answered as for any address.
-    let reply = ask_invitation_code(&test, &ben, &token).await;
+    let reply = ask_invitation_code(&test, &ben, &token, &ben_email).await;
     assert_eq!(reply.status, StatusCode::NO_CONTENT);
-    let reply = app
-        .post(
-            &ben,
-            "/v1/invitations/address",
-            json!({ "token": token, "code": test.code(&ben_email) }),
-        )
-        .await;
+    let reply = add_invitation_address(&test, &ben, &token, &ben_email, json!({})).await;
     reply.refused(StatusCode::CONFLICT, "IDENTIFIER_ON_OTHER_ACCOUNT");
     let offered = reply.body["combine"].clone();
     assert_eq!(offered["proved"], "EMAIL");
+    // Nothing was added, nor the invitation opened.
+    assert_eq!(app.get(&ben, "/v1/me").await.ok()["email"], Value::Null);
     combine_with(&test, &ben, &offered["token"], &key())
         .await
         .ok();
@@ -1028,38 +1538,151 @@ async fn an_invitation_sent_to_another_accounts_address_offers_to_combine_then_o
 }
 
 #[tokio::test]
-async fn an_invitation_to_another_address_of_a_kind_the_account_has_must_say_to_replace_it() {
+async fn an_invitation_to_another_address_of_a_kind_the_account_has_replaces_it_only_with_a_proof()
+{
     let (test, _turn) = start().await;
     let app = &test.app;
     let ana = test.sign_in(&address(), "Ana").await;
     let bound = address();
     let (exchange, token) = invite(&test, &ana, &bound).await;
-    let ben = test.sign_in(&address(), "Ben").await;
+    let ben_email = address();
+    let ben = test.sign_in(&ben_email, "Ben").await;
     let preview = app
         .post(&ben, "/v1/invitations/preview", json!({ "token": token }))
         .await
         .ok();
     assert_eq!(preview["sent_to"]["replaces"], true);
-    ask_invitation_code(&test, &ben, &token).await;
-    let code = test.code(&bound);
-    // Refused before the code is looked at, so the code still works.
+    ask_invitation_code(&test, &ben, &token, &bound).await;
+    // Refused before the code is looked at, so the code still works:
+    // without saying to replace, and without a proof of his own.
+    add_invitation_address(&test, &ben, &token, &bound, json!({}))
+        .await
+        .refused(StatusCode::CONFLICT, "IDENTIFIER_KIND_TAKEN");
+    add_invitation_address(&test, &ben, &token, &bound, json!({ "replace": true }))
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    let proof = own_proof(&test, &ben).await;
+    let view = add_invitation_address(
+        &test,
+        &ben,
+        &token,
+        &bound,
+        json!({ "replace": true, "proof": proof }),
+    )
+    .await
+    .ok();
+    assert_eq!(view["id"], exchange);
+    assert_eq!(app.get(&ben, "/v1/me").await.ok()["email"], bound);
+    // The address replaced is told.
+    assert_eq!(
+        notices(&test, ben.id).await,
+        vec![("EMAIL_CHANGED".to_owned(), ben_email, "en".to_owned())]
+    );
+}
+
+#[tokio::test]
+async fn a_claim_that_fails_leaves_the_invitation_address_unadded() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let ana = test.sign_in(&address(), "Ana").await;
+    let bound = number();
+    let (exchange, token) = invite(&test, &ana, &bound).await;
+    let ben = test.sign_in(&address(), "Ben").await;
+    ask_invitation_code(&test, &ben, &token, &bound).await;
+    // The claim breaks, after the address was put on the account.
+    let exchange_id = Uuid::parse_str(&exchange).unwrap();
+    let trigger = format!("fail_claim_{}", exchange_id.simple());
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "CREATE FUNCTION {trigger}() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+             IF NEW.exchange_id = '{exchange_id}' AND NEW.claimed_by IS NOT NULL THEN
+                 RAISE EXCEPTION 'the claim breaks';
+             END IF;
+             RETURN NEW;
+         END; $$"
+    )))
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "CREATE TRIGGER {trigger} BEFORE UPDATE ON invitation
+         FOR EACH ROW EXECUTE FUNCTION {trigger}()"
+    )))
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    let reply = add_invitation_address(&test, &ben, &token, &bound, json!({})).await;
+    for statement in [
+        format!("DROP TRIGGER {trigger} ON invitation"),
+        format!("DROP FUNCTION {trigger}()"),
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(statement))
+            .execute(&app.owner)
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        reply.status,
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "{}",
+        reply.body
+    );
+    // Nothing changed: the number is not his, and the place is open.
+    assert_eq!(app.get(&ben, "/v1/me").await.ok()["phone"], Value::Null);
+    assert_eq!(
+        app.post(&ben, "/v1/invitations/preview", json!({ "token": token }))
+            .await
+            .ok()["sent_to"]["kind"],
+        "PHONE"
+    );
+}
+
+#[tokio::test]
+async fn tries_at_an_invitation_address_are_limited_and_say_nothing_of_it() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let ana = test.sign_in(&address(), "Ana").await;
+    let bound = number();
+    let (_, token) = invite(&test, &ana, &bound).await;
+
+    // The number replied STOP: whoever asks is told only that no code was
+    // sent, as for any address a code cannot go to.
+    test.inbound(&bound, "STOP").await;
+    let ben = test.sign_in(&address(), "Ben").await;
+    let reply = ask_invitation_code(&test, &ben, &token, &bound).await;
+    reply.refused(StatusCode::CONFLICT, "CODE_NOT_SENT");
+    assert!(!reply.body.to_string().contains("OPTED_OUT"));
+
+    // Ten tries an hour for an account, whatever is typed; then it is
+    // refused, the right address included.
+    for _ in 0..9 {
+        ask_invitation_code(&test, &ben, &token, &number())
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "NOT_INVITED_ADDRESS");
+    }
+    ask_invitation_code(&test, &ben, &token, &number())
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
     app.post(
         &ben,
         "/v1/invitations/address",
-        json!({ "token": token, "code": code }),
+        json!({ "token": token, "identifier": bound, "code": "000000" }),
     )
     .await
-    .refused(StatusCode::CONFLICT, "IDENTIFIER_KIND_TAKEN");
-    let view = app
-        .post(
-            &ben,
-            "/v1/invitations/address",
-            json!({ "token": token, "code": code, "replace": true }),
-        )
+    .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+
+    // And ten an hour for an invitation, whoever tries.
+    let (_, other) = invite(&test, &ana, &number()).await;
+    for _ in 0..10 {
+        let cleo = test.sign_in(&address(), "Cleo").await;
+        ask_invitation_code(&test, &cleo, &other, &number())
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "NOT_INVITED_ADDRESS");
+    }
+    let dora = test.sign_in(&address(), "Dora").await;
+    ask_invitation_code(&test, &dora, &other, &number())
         .await
-        .ok();
-    assert_eq!(view["id"], exchange);
-    assert_eq!(app.get(&ben, "/v1/me").await.ok()["email"], bound);
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
 }
 
 #[tokio::test]
@@ -1081,11 +1704,11 @@ async fn nothing_about_an_invitation_address_is_said_to_the_wrong_people() {
         .await
         .ok();
     assert_eq!(preview["sent_to"], Value::Null);
-    ask_invitation_code(&test, &ben, &deal.invitation)
+    ask_invitation_code(&test, &ben, &deal.invitation, &address())
         .await
         .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
     // A made-up link: the same dead link as everywhere.
-    ask_invitation_code(&test, &ben, &"0".repeat(64))
+    ask_invitation_code(&test, &ben, &"0".repeat(64), &address())
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
     // Its own sender is shown nothing to add either.
@@ -1096,20 +1719,18 @@ async fn nothing_about_an_invitation_address_is_said_to_the_wrong_people() {
         .await
         .ok();
     assert_eq!(own["sent_to"], Value::Null);
-    // An invitation from before addresses were kept: refused as before.
-    sqlx::query("UPDATE invitation SET bound_email_encrypted = NULL WHERE bound_email_index = $1")
-        .bind(common::index(&bound))
-        .execute(&app.owner)
+    ask_invitation_code(&test, &ana, &token, &bound)
         .await
-        .unwrap();
-    let preview = app
-        .post(&ben, "/v1/invitations/preview", json!({ "token": token }))
-        .await
-        .ok();
-    assert_eq!(preview["sent_to"], Value::Null);
-    ask_invitation_code(&test, &ben, &token)
-        .await
-        .refused(StatusCode::FORBIDDEN, "INVITATION_NOT_FOR_YOU");
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    // The address is kept nowhere but as its blind index.
+    let kept: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM information_schema.columns
+         WHERE table_name = 'invitation' AND column_name LIKE '%encrypted%'",
+    )
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(kept, 0);
 }
 
 #[tokio::test]
@@ -1130,9 +1751,7 @@ async fn staff_see_that_a_reported_account_was_combined_and_act_on_the_one_it_we
         .await
         .unwrap();
     let offered = offer(&test, &s.ana, &s.ben_email).await;
-    combine_with(&test, &s.ana, &offered["token"], &key())
-        .await
-        .ok();
+    accept_offer(&test, &s.ana, &offered, &key()).await.ok();
 
     let rae = test.sign_in(&address(), "Rae").await;
     sqlx::query("INSERT INTO staff_member (account_id) VALUES ($1)")
@@ -1162,28 +1781,16 @@ async fn staff_see_that_a_reported_account_was_combined_and_act_on_the_one_it_we
 #[tokio::test]
 async fn the_combined_accounts_notices_go_to_every_email_address_and_never_by_text() {
     let (test, _turn) = start().await;
-    let app = &test.app;
     let s = setup(&test).await;
     let offered = offer(&test, &s.ana, &s.ben_phone).await;
     combine_with(&test, &s.ana, &offered["token"], &key())
         .await
         .ok();
     // Each notice holds its email address encrypted, bound to its row.
-    let rows: Vec<(i64, Vec<u8>)> = sqlx::query_as(
-        "SELECT id, email_encrypted FROM combine_notice WHERE account_id = $1 ORDER BY id",
-    )
-    .bind(s.ana.id)
-    .fetch_all(&app.owner)
-    .await
-    .unwrap();
-    let mut told: Vec<String> = rows
+    let mut told: Vec<String> = notices(&test, s.ana.id)
+        .await
         .into_iter()
-        .map(|(id, email)| {
-            common::open(
-                yuppers_backend::contact::Field::COMBINE_NOTICE_EMAIL.row(id),
-                &email,
-            )
-        })
+        .map(|(_, email, _)| email)
         .collect();
     told.sort();
     let mut expected = vec![s.ana.email.clone(), s.ben_email.clone()];
@@ -1194,13 +1801,13 @@ async fn the_combined_accounts_notices_go_to_every_email_address_and_never_by_te
         scalar_i64(
             &test,
             "SELECT count(*) FROM outbox WHERE recipient_account_id = $1 AND kind = 'SMS'
-               AND payload ? 'combine_notice'",
+               AND payload ? 'account_notice'",
             s.ana.id
         )
         .await,
         0
     );
-    assert!(app.get(&s.ana, "/v1/me").await.ok()["combined_notice"].is_null());
+    assert!(in_app(&test, &s.ana).await.is_null());
 }
 
 #[tokio::test]
@@ -1211,9 +1818,7 @@ async fn two_phone_only_accounts_combined_are_told_in_the_app_once() {
     let ana = test.sign_in(&ana_phone, "Ana").await;
     let ben = test.sign_in(&ben_phone, "Ben").await;
     let offered = offer(&test, &ana, &ben_phone).await;
-    combine_with(&test, &ana, &offered["token"], &key())
-        .await
-        .ok();
+    accept_offer(&test, &ana, &offered, &key()).await.ok();
     assert_eq!(
         status(&test, ben.id).await,
         ("MERGED".to_owned(), Some(ana.id))
@@ -1223,7 +1828,7 @@ async fn two_phone_only_accounts_combined_are_told_in_the_app_once() {
         scalar_i64(
             &test,
             "SELECT count(*) FROM outbox WHERE recipient_account_id = $1
-               AND payload ? 'combine_notice'",
+               AND payload ? 'account_notice'",
             ana.id
         )
         .await,
@@ -1232,7 +1837,7 @@ async fn two_phone_only_accounts_combined_are_told_in_the_app_once() {
     assert_eq!(
         scalar_i64(
             &test,
-            "SELECT count(*) FROM combine_notice WHERE account_id = $1",
+            "SELECT count(*) FROM account_notice WHERE account_id = $1",
             ana.id
         )
         .await,
@@ -1240,16 +1845,17 @@ async fn two_phone_only_accounts_combined_are_told_in_the_app_once() {
     );
     // Instead the app is told to show it, until it is dismissed.
     let me = app.get(&ana, "/v1/me").await.ok();
-    assert!(me["combined_notice"].is_string(), "{me}");
+    assert_eq!(me["notice"]["kind"], "ACCOUNTS_COMBINED", "{me}");
+    assert!(me["notice"]["at"].is_string(), "{me}");
     let me = app
         .call(
             Some(&ana),
             Method::PATCH,
             "/v1/me",
-            Some(json!({ "dismiss_combined_notice": true })),
+            Some(json!({ "dismiss_notice": true })),
             &[],
         )
         .await
         .ok();
-    assert!(me["combined_notice"].is_null(), "{me}");
+    assert!(me["notice"].is_null(), "{me}");
 }

@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use super::html;
 use crate::auth::Purpose;
+use crate::combine::NoticeKind;
 use crate::domain::notification::Notice;
 use crate::languages;
 
@@ -65,6 +66,12 @@ struct Notifications {
     /// another (`crate::combine`). It says nothing about any yup.
     #[serde(rename = "accountsCombined")]
     accounts_combined: Message,
+    /// The email telling an address that it was replaced on its account.
+    #[serde(rename = "emailChanged")]
+    email_changed: Message,
+    /// The email telling an address that it was removed from its account.
+    #[serde(rename = "emailRemoved")]
+    email_removed: Message,
 }
 
 #[derive(Deserialize)]
@@ -381,6 +388,20 @@ impl Wording {
         self.linked(language, link, |file| &file.notifications.accounts_combined)
     }
 
+    /// The email to an address about its account (`crate::combine`), as
+    /// [`Self::accounts_combined`]: combined, replaced or removed.
+    pub fn account_notice(&self, kind: NoticeKind, language: &str, link: &str) -> Rendered {
+        match kind {
+            NoticeKind::AccountsCombined => self.accounts_combined(language, link),
+            NoticeKind::EmailChanged => {
+                self.linked(language, link, |file| &file.notifications.email_changed)
+            }
+            NoticeKind::EmailRemoved => {
+                self.linked(language, link, |file| &file.notifications.email_removed)
+            }
+        }
+    }
+
     /// An email with no exchange behind it, whose paragraph ending in
     /// `{link}` becomes a button.
     fn linked(&self, language: &str, link: &str, message: fn(&File) -> &Message) -> Rendered {
@@ -643,6 +664,8 @@ mod tests {
                 "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
                 "staffAlert": { "subject": format!("{product} review"), "body": "Waiting.\n\nOpen: {link}" },
                 "accountsCombined": { "subject": format!("{product} combined"), "body": "Combined.\n\nOpen: {link}" },
+                "emailChanged": { "subject": format!("{product} changed"), "body": "Changed.\n\nOpen: {link}" },
+                "emailRemoved": { "subject": format!("{product} removed"), "body": "Removed.\n\nOpen: {link}" },
             },
             "push": { "body": format!("{product} news") },
             "sms": {
@@ -906,15 +929,30 @@ mod tests {
         let wording = Wording::embedded().unwrap();
         let link = "https://app.test/account";
         for language in languages::supported() {
-            let email = wording.accounts_combined(language, link);
-            check_html(language, "accounts combined", &email);
-            assert!(email.body.contains(link), "{language}: the link");
-            assert!(
-                email.html.contains(&format!("<a href=\"{link}\"")),
-                "{language}: the button"
-            );
-            assert!(!email.body.contains('{'), "{language}: every variable");
+            for kind in [
+                NoticeKind::AccountsCombined,
+                NoticeKind::EmailChanged,
+                NoticeKind::EmailRemoved,
+            ] {
+                let email = wording.account_notice(kind, language, link);
+                check_html(language, "account notice", &email);
+                assert!(email.body.contains(link), "{language} {kind:?}: the link");
+                assert!(
+                    email.html.contains(&format!("<a href=\"{link}\"")),
+                    "{language} {kind:?}: the button"
+                );
+                assert!(
+                    !email.body.contains('{') && !email.subject.contains('{'),
+                    "{language} {kind:?}: every variable"
+                );
+            }
         }
+        assert_eq!(
+            wording
+                .account_notice(NoticeKind::EmailChanged, "en", link)
+                .subject,
+            "Your Yuppers email address was changed"
+        );
         assert_eq!(
             wording.accounts_combined("en", link).subject,
             "Two of your Yuppers accounts were combined"

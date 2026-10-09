@@ -1357,13 +1357,29 @@ async fn a_second_identifier_can_be_verified_and_then_signs_in() {
 #[tokio::test]
 async fn an_identifier_belongs_to_one_account() {
     let app = App::start().await;
-    let (ana, ben) = (email(), email());
+    let (ana, ben, cleo) = (email(), phone(), email());
     app.sign_in(&ana).await;
     let (ben_token, _) = app.sign_in(&ben).await;
 
-    // Ben holds a valid code for Ana's address, but it is already hers. It
-    // stays hers: the code only shows he controls both, so he is offered to
-    // combine the two, and nothing moves until he does.
+    // An account with an email address of its own is asked first for a proof
+    // of one of its own, before any code for another is looked at.
+    let (cleo_token, _) = app.sign_in(&cleo).await;
+    let reply = app
+        .send(
+            Method::POST,
+            "/v1/me/identifiers",
+            Some(json!({ "identifier": ana, "code": "000000" })),
+            &[(AUTHORIZATION, &format!("Bearer {cleo_token}"))],
+        )
+        .await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::CONFLICT, "PROOF_REQUIRED")
+    );
+
+    // Ben, signed in by number, holds a valid code for Ana's address, but it
+    // is already hers. It stays hers: the code only shows he controls both,
+    // so he is offered to combine the two, and nothing moves until he does.
     let code = app.request_code(&ana).await;
     let reply = app
         .send(
@@ -1379,7 +1395,7 @@ async fn an_identifier_belongs_to_one_account() {
     );
     assert!(reply.body["combine"]["token"].is_string(), "{}", reply.body);
 
-    app.finish(&[&ana, &ben]).await;
+    app.finish(&[&ana, &ben, &cleo]).await;
 }
 
 #[tokio::test]

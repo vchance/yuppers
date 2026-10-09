@@ -489,6 +489,10 @@ enum Counted {
     SmsRefusedCountry,
     /// Codes the SMS provider did not take.
     SmsFailed,
+    /// Attempts to add the address an invitation names, by one account.
+    InvitationAddressByAccount,
+    /// The same, at one invitation, whoever makes them.
+    InvitationAddressByInvitation,
 }
 
 impl Counted {
@@ -504,6 +508,8 @@ impl Counted {
             Counted::SmsRefusedPrefix => SMS_REFUSED_PREFIX,
             Counted::SmsRefusedCountry => SMS_REFUSED_COUNTRY,
             Counted::SmsFailed => SMS_FAILED,
+            Counted::InvitationAddressByAccount => "invitation-address-by-account",
+            Counted::InvitationAddressByInvitation => "invitation-address-by-invitation",
         }
     }
 
@@ -601,6 +607,46 @@ impl Counter {
         .await?;
         Ok(())
     }
+}
+
+/// Attempts at adding the address an invitation names (typing it, asking
+/// for its code, entering the code) that one account, and one invitation,
+/// may make per hour. Every attempt is counted, right or wrong, so typing
+/// addresses to see which one an invitation names, or guessing its code,
+/// stops soon, on top of the limits every code has.
+pub const INVITATION_ADDRESS_ATTEMPTS_PER_HOUR: i64 = 10;
+
+/// Counts one attempt at the address of the invitation `token_hash` by
+/// `account`, committed at once, and refuses it with `TOO_MANY_REQUESTS`
+/// past [`INVITATION_ADDRESS_ATTEMPTS_PER_HOUR`] for either.
+pub async fn count_invitation_address_attempt(
+    db: &PgPool,
+    secret: &[u8],
+    account: Uuid,
+    token_hash: &[u8; 32],
+) -> Result<(), ApiError> {
+    let hex: String = token_hash
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let counters = [
+        Counter::new(
+            secret,
+            Counted::InvitationAddressByAccount,
+            &account.to_string(),
+        ),
+        Counter::new(secret, Counted::InvitationAddressByInvitation, &hex),
+    ];
+    let mut tx = db.begin().await?;
+    let mut over = false;
+    for counter in &counters {
+        over |= counter.add(&mut tx, 1).await? > INVITATION_ADDRESS_ATTEMPTS_PER_HOUR;
+    }
+    tx.commit().await?;
+    if over {
+        return Err(ErrorCode::TooManyRequests.into());
+    }
+    Ok(())
 }
 
 /// The network a requester's address is counted as. An IPv4 address is

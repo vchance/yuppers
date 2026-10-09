@@ -461,11 +461,12 @@ export interface paths {
         put?: never;
         /**
          * Adds to the signed-in account the email address or phone number an
-         *     invitation names, with the code sent there, and opens the invitation: the
-         *     account takes the invited party's place, as named, so nobody has to
-         *     confirm it. If the address belongs to another account the answer is
-         *     `IDENTIFIER_ON_OTHER_ACCOUNT` with the offer to combine the two; once
-         *     combined, claiming the invitation (`POST /v1/invitations/claim`) opens it.
+         *     invitation was sent to, with the code sent there, and opens the
+         *     invitation: the account takes the invited party's place, as named, so
+         *     nobody has to confirm it. Both happen, or neither does. If the address
+         *     belongs to another account the answer is `IDENTIFIER_ON_OTHER_ACCOUNT`
+         *     with the offer to combine the two; once combined, claiming the
+         *     invitation (`POST /v1/invitations/claim`) opens it.
          */
         post: operations["add_invitation_address"];
         delete?: never;
@@ -485,10 +486,12 @@ export interface paths {
         put?: never;
         /**
          * Sends a one-time code to the email address or phone number an invitation
-         *     names, for someone signed in with another who wants to add it to their
-         *     account and open the invitation (`sent_to` in its preview). The address
-         *     is never shown in full and never named in the request. The usual limits
-         *     on codes apply, as for any address.
+         *     was sent to, for someone signed in with another who wants to add it to
+         *     their account and open the invitation (`sent_to` in its preview). The
+         *     person types the address; unless it is the one the invitation was sent
+         *     to, nothing is sent and the answer is `NOT_INVITED_ADDRESS`, which says
+         *     nothing more. Requests are counted by account and by invitation
+         *     (`TOO_MANY_REQUESTS`), besides the usual limits on codes.
          */
         post: operations["request_invitation_address_code"];
         delete?: never;
@@ -596,9 +599,11 @@ export interface paths {
          * Combines into the signed-in account the account an offer names. It
          *     cannot be undone: that account's place in each of its yups, the address
          *     or number proved and what else the offer lists move here, and it can no
-         *     longer be signed in to. Every address and number either account had is
-         *     told. The offer is good once, for ten minutes, from this account only; a
-         *     repeat with the same `Idempotency-Key` succeeds and changes nothing.
+         *     longer be signed in to. Where it replaces this account's own address or
+         *     number, it needs `proof`. Every email address either account had is
+         *     told; with none, the app shows a notice. The offer is good once, for ten
+         *     minutes, from this account only; a repeat with the same
+         *     `Idempotency-Key` succeeds and changes nothing.
          */
         post: operations["combine_accounts"];
         delete?: never;
@@ -716,14 +721,40 @@ export interface paths {
         put?: never;
         /**
          * Verifies an email address or phone number and attaches it to the
-         *     account, or replaces the one of the same kind: adding one, or changing
-         *     it. An account with both a verified email and a verified phone can meet
-         *     the higher risk tier. If the code is right and the identifier belongs to
-         *     another account, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an
-         *     offer to combine the two (`POST /v1/me/combine`); until the code is
-         *     right, an identifier with an account is answered like any other.
+         *     account: adding one, or, with a proof of one of the account's own
+         *     (`proof`), replacing the one of the same kind. The address replaced is
+         *     told by email; a number replaced, by a notice in the app. An account
+         *     with both a verified email and a verified phone can meet the higher risk
+         *     tier. If the code is right and the identifier belongs to another
+         *     account, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an offer to
+         *     combine the two (`POST /v1/me/combine`); until the code is right, an
+         *     identifier with an account is answered like any other.
          */
         post: operations["add_identifier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/identifiers/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Proves, with a code sent to one of the account's own identifiers, that
+         *     the person signed in controls it: what replacing the account's email
+         *     address or phone number needs, directly, from an invitation, or by
+         *     combining another account into this one (`proof`). Good once, for ten
+         *     minutes, for this account only, and only while the account still has
+         *     the identifier proved.
+         */
+        post: operations["prove_identifier"];
         delete?: never;
         options?: never;
         head?: never;
@@ -744,11 +775,13 @@ export interface paths {
          * Removes the account's email address or phone number, keeping the other:
          *     an account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a
          *     code sent to the one that stays, so that a session alone cannot take a
-         *     way in away, and the person knows they can still sign in. Removing the
-         *     phone number ends text updates for every agreement. Invitations named
-         *     for the address or number removed are left as they are. Removing one the
-         *     account does not have changes nothing and succeeds, as a repeat finds;
-         *     so does a repeat with the same `Idempotency-Key`.
+         *     way in away, and the person knows they can still sign in. An email
+         *     address removed is told by email; a phone number removed, by a notice in
+         *     the app. Removing the phone number ends text updates for every
+         *     agreement. Invitations named for the address or number removed are left
+         *     as they are. Removing one the account does not have changes nothing and
+         *     succeeds, as a repeat finds; so does a repeat with the same
+         *     `Idempotency-Key`.
          */
         delete: operations["remove_identifier"];
         options?: never;
@@ -988,20 +1021,30 @@ export interface components {
         Account: {
             /** @description The holder has confirmed they are 18 or over. Required before signing. */
             adult_confirmed: boolean;
-            /**
-             * @description When another account was combined into this one with no email address
-             *     on either to tell, as RFC 3339: the clients show it once, until it is
-             *     dismissed (`dismiss_combined_notice` in `PATCH /v1/me`). Absent
-             *     otherwise.
-             */
-            combined_notice?: string | null;
             /** @description Empty until the person has chosen one. */
             display_name: string;
             email?: string | null;
             id: string;
             /** @description A supported language tag, such as `en` or `es`. */
             language: string;
+            notice?: components["schemas"]["AccountNotice"] | null;
             phone?: string | null;
+        };
+        /** @description A notice the app shows once on the account. */
+        AccountNotice: {
+            /** @description When it happened, as RFC 3339. */
+            at: string;
+            kind: components["schemas"]["InAppNotice"];
+        };
+        /**
+         * @description A proof that the person signed in controls one of the account's own
+         *     identifiers, from a code sent to it: what replacing an identifier needs.
+         */
+        AccountProof: {
+            /** @description RFC 3339. */
+            expires_at: string;
+            /** @description Good once, for ten minutes, for this account only. */
+            proof: string;
         };
         /**
          * @description Where an account stands.
@@ -1025,10 +1068,25 @@ export interface components {
              *     or 1 and ten (`(856) 548-8780`), which is taken as `+1`.
              */
             identifier: string;
+            /**
+             * @description Where the account has another of this kind, which this replaces:
+             *     a proof of one of the account's own identifiers
+             *     (`POST /v1/me/identifiers/proof`). Without it such a request is
+             *     refused with `PROOF_REQUIRED`, before the code is looked at.
+             */
+            proof?: string | null;
         };
         AddInvitationAddress: {
-            /** @description The code sent to the address the invitation names. */
+            /** @description The code sent to the address the invitation was sent to. */
             code: string;
+            /** @description The address the code was sent to, as typed for it. */
+            identifier: string;
+            /**
+             * @description With `replace`: a proof of one of the account's own identifiers
+             *     (`POST /v1/me/identifiers/proof`). Without it such a request is
+             *     refused, before the code is looked at, with `PROOF_REQUIRED`.
+             */
+            proof?: string | null;
             /**
              * @description The account has another address of this kind (`sent_to.replaces`):
              *     `true` replaces it. Without it such a request is refused, before the
@@ -1071,15 +1129,14 @@ export interface components {
         };
         /**
          * @description Whom an invitation names, as someone signed in with another address is
-         *     shown it.
+         *     told it: the kind alone.
          */
         BoundAddress: {
             kind: components["schemas"]["IdentifierKind"];
-            /** @description `j•••@gmail.com`, or a phone number with all but its last digits hidden. */
-            masked: string;
             /**
              * @description The account already has another address of this kind: adding this
-             *     one replaces it, so the request must say `replace: true`.
+             *     one replaces it, which needs `replace: true` and a proof of one of
+             *     the account's own (`POST /v1/me/identifiers/proof`).
              */
             replaces: boolean;
         };
@@ -1107,6 +1164,11 @@ export interface components {
         CodeChannel: "EMAIL" | "PHONE";
         CombineAccounts: {
             /**
+             * @description Where the offer says `proof_required`: a proof of one of this
+             *     account's own identifiers (`POST /v1/me/identifiers/proof`).
+             */
+            proof?: string | null;
+            /**
              * @description The token of the offer: `combine.token` in an
              *     `IDENTIFIER_ON_OTHER_ACCOUNT` answer.
              */
@@ -1127,6 +1189,12 @@ export interface components {
              */
             payment_options_move: boolean;
             phone: components["schemas"]["IdentifierOutcome"];
+            /**
+             * @description This account's own identifier of the kind proved would be replaced:
+             *     combining then needs a proof of one of its own
+             *     (`POST /v1/me/identifiers/proof`), as replacing it directly does.
+             */
+            proof_required: boolean;
             /** @description The kind of identifier proved, which comes to this account. */
             proved: components["schemas"]["IdentifierKind"];
             /** @description The other account's text updates end, because its number is dropped. */
@@ -1340,7 +1408,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1467,7 +1535,18 @@ export interface components {
          * @enum {string}
          */
         IdentifierOutcome: "NONE" | "KEPT" | "ADDED" | "REPLACED" | "THEIRS_DROPPED";
+        /**
+         * @description A notice the app shows once on the account, where there is no email
+         *     address to tell (`account.notice_kind`).
+         * @enum {string}
+         */
+        InAppNotice: "ACCOUNTS_COMBINED" | "PHONE_CHANGED" | "PHONE_REMOVED";
         InvitationAddressCode: {
+            /**
+             * @description The email address or phone number the person says the invitation was
+             *     sent to, typed in full.
+             */
+            identifier: string;
             sms_consent?: components["schemas"]["SmsCodeConsent"] | null;
             /** @description The invitation link's token. */
             token: string;
@@ -1746,6 +1825,12 @@ export interface components {
          *     API description; the handler sends the bytes themselves.
          */
         Pkpass: string;
+        ProveIdentifier: {
+            /** @description Which of the account's own identifiers the code was sent to. */
+            channel: components["schemas"]["CodeChannel"];
+            /** @description A one-time code sent to it, asked for with `POST /v1/auth/codes`. */
+            code: string;
+        };
         QuantityDto: {
             /** @description A positive decimal number such as `2` or `1.5`. */
             amount: string;
@@ -2348,11 +2433,8 @@ export interface components {
         UpdateAccount: {
             /** @description Only `true` is meaningful: a confirmation cannot be taken back. */
             adult_confirmed?: boolean | null;
-            /**
-             * @description `true` once the notice that accounts were combined into this one has
-             *     been shown (`combined_notice`).
-             */
-            dismiss_combined_notice?: boolean | null;
+            /** @description `true` once the account's `notice` has been shown. */
+            dismiss_notice?: boolean | null;
             /** @description 1 to 100 characters. */
             display_name?: string | null;
             /**
@@ -3774,7 +3856,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`); or the two accounts cannot be combined */
+            /** @description The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`); or the two accounts cannot be combined */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3783,7 +3865,16 @@ export interface operations {
                     "application/json": components["schemas"]["CombineOffered"];
                 };
             };
-            /** @description Too many wrong codes */
+            /** @description Not the address the invitation was sent to (`NOT_INVITED_ADDRESS`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes or attempts */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3850,7 +3941,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The invitation names nobody, or this account already (`ACTION_NOT_ALLOWED`), or the number replied STOP (`PHONE_OPTED_OUT`) */
+            /** @description The invitation names nobody, or this account already (`ACTION_NOT_ALLOWED`), or no code could be sent there (`CODE_NOT_SENT`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3859,7 +3950,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description A phone number without `sms_consent` (`SMS_CONSENT_REQUIRED`), or of a country not served (`PHONE_COUNTRY_NOT_SERVED`) */
+            /** @description Not the address the invitation was sent to (`NOT_INVITED_ADDRESS`), not an address at all (`INVALID_IDENTIFIER`), a phone number without `sms_consent` (`SMS_CONSENT_REQUIRED`), or of a country not served (`PHONE_COUNTRY_NOT_SERVED`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3868,7 +3959,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Too many codes asked for */
+            /** @description Too many codes or attempts asked for */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4144,7 +4235,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The offer is used, expired or no longer true (`COMBINE_EXPIRED`), or the two cannot be combined (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`) */
+            /** @description The offer is used, expired or no longer true (`COMBINE_EXPIRED`), the two cannot be combined (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`), or the offer needs a proof and none good was given (`PROOF_REQUIRED`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4412,7 +4503,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`) */
+            /** @description The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or it would replace one of the account's own without a good `proof` (`PROOF_REQUIRED`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4440,6 +4531,66 @@ export interface operations {
                 };
             };
             /** @description A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    prove_identifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProveIdentifier"];
+            };
+        };
+        responses: {
+            /** @description The proof */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProof"];
+                };
+            };
+            /** @description Not signed in, or the code is wrong, expired or used up */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The account has no such identifier */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes for that identifier today */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A code sent by text could not be checked; nothing was counted */
             503: {
                 headers: {
                     [name: string]: unknown;

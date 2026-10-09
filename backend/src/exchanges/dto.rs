@@ -495,23 +495,22 @@ pub struct InvitationPreview {
     pub timezone: String,
     pub revision: RevisionView,
     /// Present when the invitation names an email address or phone number
-    /// the signed-in account does not have: which kind, and the address
-    /// masked, never in full. The account can add it, with a code sent there
-    /// (`POST /v1/invitations/address/codes`), and then open the invitation.
-    /// Absent for an invitation made before addresses were kept for this:
-    /// claiming it is refused with `INVITATION_NOT_FOR_YOU`, as it always was.
+    /// the signed-in account does not have: only which kind, never the
+    /// address, in full or masked. Someone who knows it can type it, and
+    /// with a code sent there add it to their account and open the
+    /// invitation (`POST /v1/invitations/address/codes`); claiming it as it
+    /// is is refused with `INVITATION_NOT_FOR_YOU`.
     pub sent_to: Option<BoundAddress>,
 }
 
 /// Whom an invitation names, as someone signed in with another address is
-/// shown it.
+/// told it: the kind alone.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct BoundAddress {
     pub kind: crate::combine::IdentifierKind,
-    /// `j•••@gmail.com`, or a phone number with all but its last digits hidden.
-    pub masked: String,
     /// The account already has another address of this kind: adding this
-    /// one replaces it, so the request must say `replace: true`.
+    /// one replaces it, which needs `replace: true` and a proof of one of
+    /// the account's own (`POST /v1/me/identifiers/proof`).
     pub replaces: bool,
 }
 

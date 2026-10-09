@@ -549,7 +549,9 @@ export interface FakeService {
   /** An address or number on another of the person's accounts: proving it offers to combine. */
   otherAccountAt: string | null
   /** Whom the invitation names, when it is not the account signed in. */
-  sentTo: { kind: 'EMAIL' | 'PHONE'; masked: string; replaces: boolean } | null
+  sentTo: { kind: 'EMAIL' | 'PHONE'; replaces: boolean } | null
+  /** The address the invitation was sent to, as the service takes it: never shown. */
+  sentToAddress: string | null
   fetch: typeof fetch
 }
 
@@ -571,7 +573,11 @@ export const COMBINE_OFFER = {
   phone: 'KEPT' as const,
   payment_options_move: true,
   text_updates_end: false,
+  proof_required: false,
 }
+
+/** The proof a right code to one of the account's own gives. */
+export const GOOD_PROOF = 'f0'.repeat(32)
 
 export function fakeService(account: Account | null): FakeService {
   const service: FakeService = {
@@ -590,6 +596,7 @@ export function fakeService(account: Account | null): FakeService {
     theirsChanged: { venmo: null, cash_app: null, paypal: null, zelle: null },
     otherAccountAt: null,
     sentTo: null,
+    sentToAddress: null,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -817,22 +824,39 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     ]
   }
   if (call === 'POST /v1/invitations/address/codes') {
-    const { sms_consent } = body as { sms_consent?: unknown }
+    const { sms_consent, identifier } = body as { sms_consent?: unknown; identifier: string }
+    if (identifier !== service.sentToAddress) return [422, { code: 'NOT_INVITED_ADDRESS' }]
     if (service.sentTo?.kind === 'PHONE' && !sms_consent) {
       return [422, { code: 'SMS_CONSENT_REQUIRED' }]
     }
     return [204, null]
   }
   if (call === 'POST /v1/invitations/address') {
-    const { code, replace } = body as { code: string; replace: boolean }
+    const { code, replace, identifier, proof } = body as {
+      code: string
+      replace: boolean
+      identifier: string
+      proof?: string
+    }
+    if (identifier !== service.sentToAddress) return [422, { code: 'NOT_INVITED_ADDRESS' }]
     if (service.sentTo?.replaces && !replace) return [409, { code: 'IDENTIFIER_KIND_TAKEN' }]
+    if (service.sentTo?.replaces && proof !== GOOD_PROOF) {
+      return [409, { code: 'PROOF_REQUIRED' }]
+    }
     if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
     if (service.otherAccountAt) {
       return [409, { code: 'IDENTIFIER_ON_OTHER_ACCOUNT', combine: COMBINE_OFFER }]
     }
     return [200, offerExchange()]
   }
+  if (call === 'POST /v1/me/identifiers/proof') {
+    const { code } = body as { code: string }
+    if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
+    return [200, { proof: GOOD_PROOF, expires_at: '2026-10-22T09:10:00Z' }]
+  }
   if (call === 'POST /v1/me/combine') {
+    const { proof } = body as { proof?: string }
+    if (proof !== undefined && proof !== GOOD_PROOF) return [409, { code: 'PROOF_REQUIRED' }]
     service.account = { ...service.account, email: 'ana@old.example.test' }
     service.otherAccountAt = null
     return [200, service.account]
@@ -880,7 +904,15 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return [204, null]
   }
   if (call === 'POST /v1/me/identifiers') {
-    const { code, identifier } = body as { code: string; identifier: string }
+    const { code, identifier, proof } = body as {
+      code: string
+      identifier: string
+      proof?: string
+    }
+    const current = identifier.includes('@') ? service.account.email : service.account.phone
+    if (current && current !== identifier && proof !== GOOD_PROOF) {
+      return [409, { code: 'PROOF_REQUIRED' }]
+    }
     if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
     if (identifier === service.otherAccountAt) {
       return [409, { code: 'IDENTIFIER_ON_OTHER_ACCOUNT', combine: COMBINE_OFFER }]
@@ -891,11 +923,11 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return [200, service.account]
   }
   if (call === 'PATCH /v1/me') {
-    const { dismiss_combined_notice: dismiss, ...rest } = body as Partial<Account> & {
-      dismiss_combined_notice?: boolean
+    const { dismiss_notice: dismiss, ...rest } = body as Partial<Account> & {
+      dismiss_notice?: boolean
     }
     service.account = { ...service.account, ...rest }
-    if (dismiss) service.account = { ...service.account, combined_notice: null }
+    if (dismiss) service.account = { ...service.account, notice: null }
     return [200, service.account]
   }
   if (call === 'GET /v1/exchanges') return [200, exchanges().map(summary)]

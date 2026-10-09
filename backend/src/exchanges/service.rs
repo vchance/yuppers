@@ -675,45 +675,27 @@ async fn issue_invitation(
         }) => None,
         _ => return Err(ErrorCode::InvalidRequest.into()),
     };
-    // A claim is compared with the blind index of whom it names
-    // (`crate::contact`). The address itself is kept encrypted, bound to the
-    // invitation, only so that someone signed in with another can be sent a
-    // code there to add it (`invitation_address`), and only while the
-    // invitation can be claimed: the worker empties it after
-    // (`purge_invitation_addresses`).
-    let id = Uuid::new_v4();
-    let keys = contact::keys();
-    let index = bound.as_ref().map(|identifier| keys.index_of(identifier));
-    let (email, phone, email_sealed, phone_sealed) = match &bound {
-        Some(Identifier::Email(value)) => (
-            index.as_ref(),
-            None,
-            Some(keys.seal(Field::INVITATION_EMAIL.record(id), value)),
-            None,
-        ),
-        Some(Identifier::Phone(value)) => (
-            None,
-            index.as_ref(),
-            None,
-            Some(keys.seal(Field::INVITATION_PHONE.record(id), value)),
-        ),
-        None => (None, None, None, None),
+    // Only the blind index of whom it names is kept: a claim is compared
+    // with it, and nothing reads it back (`crate::contact`).
+    let index = bound
+        .as_ref()
+        .map(|identifier| contact::keys().index_of(identifier));
+    let (email, phone) = match &bound {
+        Some(Identifier::Email(_)) => (index.as_ref(), None),
+        Some(Identifier::Phone(_)) => (None, index.as_ref()),
+        None => (None, None),
     };
 
     let token = auth::generate_token();
     sqlx::query(
         "INSERT INTO invitation
-             (id, exchange_id, token_hash, bound_email_index, bound_phone_index,
-              bound_email_encrypted, bound_phone_encrypted, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+             (exchange_id, token_hash, bound_email_index, bound_phone_index, expires_at)
+         VALUES ($1, $2, $3, $4, $5)",
     )
-    .bind(id)
     .bind(exchange)
     .bind(auth::token_hash(&token).as_slice())
     .bind(email.map(<[u8; 32]>::as_slice))
     .bind(phone.map(<[u8; 32]>::as_slice))
-    .bind(email_sealed)
-    .bind(phone_sealed)
     .bind(at + rules.invitation_ttl)
     .execute(&mut *conn)
     .await?;
@@ -1118,27 +1100,6 @@ struct InvitationRow {
     exchange: Uuid,
     record: invitation::Invitation,
     claimed_by: Option<Uuid>,
-    /// Whom it names, encrypted, where it was kept (migration 0028).
-    bound_encrypted: Option<Vec<u8>>,
-}
-
-impl InvitationRow {
-    /// Whom the invitation names, decrypted, where it names someone and was
-    /// made since that is kept: to send a code to, or to show masked.
-    fn bound_identifier(&self) -> Result<Option<Identifier>, contact::Unreadable> {
-        let Some(sealed) = &self.bound_encrypted else {
-            return Ok(None);
-        };
-        Ok(match self.record.bound_to {
-            Some(invitation::Binding::Email(_)) => Some(Identifier::Email(
-                contact::keys().open(Field::INVITATION_EMAIL.record(self.id), sealed)?,
-            )),
-            Some(invitation::Binding::Phone(_)) => Some(Identifier::Phone(
-                contact::keys().open(Field::INVITATION_PHONE.record(self.id), sealed)?,
-            )),
-            None => None,
-        })
-    }
 }
 
 /// Everything an answer about an invitation link turns on, as one query
@@ -1173,7 +1134,6 @@ struct GateRow {
     exchange_id: Option<Uuid>,
     bound_email_index: Option<Vec<u8>>,
     bound_phone_index: Option<Vec<u8>>,
-    bound_encrypted: Option<Vec<u8>>,
     expires_at: Option<OffsetDateTime>,
     claimed_by: Option<Uuid>,
     revoked_at: Option<OffsetDateTime>,
@@ -1195,9 +1155,8 @@ fn index_of(stored: Option<Vec<u8>>) -> Option<[u8; 32]> {
 /// nothing found where the token names no link.
 async fn gate(conn: &mut PgConnection, viewer: Uuid, token: &str) -> Result<Gate, ApiError> {
     let row: Option<GateRow> = sqlx::query_as(
-        "SELECT i.id, i.exchange_id, i.bound_email_index, i.bound_phone_index,
-                coalesce(i.bound_email_encrypted, i.bound_phone_encrypted) AS bound_encrypted,
-                i.expires_at, i.claimed_by, i.revoked_at,
+        "SELECT i.id, i.exchange_id, i.bound_email_index, i.bound_phone_index, i.expires_at,
+                i.claimed_by, i.revoked_at,
                 coalesce(e.state = 'NEGOTIATING' AND e.open_revision_id IS NOT NULL, false)
                     AS offer_open,
                 initiator.account_id AS initiator,
@@ -1238,7 +1197,6 @@ async fn gate(conn: &mut PgConnection, viewer: Uuid, token: &str) -> Result<Gate
                 bound_to,
             },
             claimed_by,
-            bound_encrypted: row.bound_encrypted,
         }),
         _ => None,
     };
@@ -1273,8 +1231,8 @@ impl Gate {
         }
     }
 
-    /// Whether the viewer has an address of the kind the invitation names,
-    /// another one.
+    /// Whether the viewer has another address of the kind the invitation
+    /// names.
     fn viewer_has_kind(&self, found: &InvitationRow) -> bool {
         match found.record.bound_to {
             None => false,
@@ -1284,33 +1242,39 @@ impl Gate {
     }
 }
 
-/// The address or number a live invitation names, for a viewer signed in
-/// with another, to send a code to and add to their account: with whether
-/// adding it replaces one of theirs. Refused, as everything about a link
-/// is, with `INVITATION_UNAVAILABLE` where the link cannot show its offer;
-/// with `ACTION_NOT_ALLOWED` where it names nobody, or the viewer already;
-/// and with `INVITATION_NOT_FOR_YOU` for a link made before the address was
-/// kept, which only the address it names can open.
+/// Whether `typed`, an address or number the viewer typed, is the one a live
+/// invitation names, for a viewer signed in with another: with whether
+/// adding it replaces one of theirs. Only the blind indexes are compared;
+/// nothing about the invitation's address is read back or shown. Refused, as
+/// everything about a link is, with `INVITATION_UNAVAILABLE` where the link
+/// cannot show its offer; with `ACTION_NOT_ALLOWED` where it names nobody,
+/// or the viewer already; and with `NOT_INVITED_ADDRESS`, saying nothing
+/// more, where `typed` is not the address.
 pub async fn invitation_address(
     db: &PgPool,
     viewer: Uuid,
     token: &str,
-) -> Result<(Identifier, bool), ApiError> {
+    typed: &Identifier,
+) -> Result<bool, ApiError> {
     let mut conn = db.acquire().await?;
     let gate = gate(&mut conn, viewer, token).await?;
     let found = gate
         .showable(now())
         .ok_or(ErrorCode::InvitationUnavailable)?;
-    if gate.initiator == Some(viewer) {
+    if gate.initiator == Some(viewer) || found.record.bound_to.is_none() || gate.viewer_named(found)
+    {
         return Err(ErrorCode::ActionNotAllowed.into());
     }
-    if found.record.bound_to.is_none() || gate.viewer_named(found) {
-        return Err(ErrorCode::ActionNotAllowed.into());
+    let index = contact::keys().index_of(typed);
+    let matches = match (found.record.bound_to, typed) {
+        (Some(invitation::Binding::Email(bound)), Identifier::Email(_)) => bound == index,
+        (Some(invitation::Binding::Phone(bound)), Identifier::Phone(_)) => bound == index,
+        _ => false,
+    };
+    if !matches {
+        return Err(ErrorCode::NotInvitedAddress.into());
     }
-    let identifier = found
-        .bound_identifier()?
-        .ok_or(ErrorCode::InvitationNotForYou)?;
-    Ok((identifier, gate.viewer_has_kind(found)))
+    Ok(gate.viewer_has_kind(found))
 }
 
 /// Locks an invitation row, once its exchange is locked, so that two claims
@@ -1359,16 +1323,19 @@ pub async fn preview_invitation(
         _ => return Err(unavailable()),
     };
 
-    // Whom it names, masked, for a viewer who is not them and could add the
-    // address: never in full.
-    let sent_to = if gate.viewer_named(found) || gate.initiator == Some(viewer) {
-        None
-    } else {
-        found.bound_identifier()?.map(|identifier| BoundAddress {
-            kind: IdentifierKind::of(contact::Kind::of(&identifier)),
-            masked: crate::combine::masked(&identifier),
-            replaces: gate.viewer_has_kind(found),
-        })
+    // For a viewer who is not whom it names: only that, and of which kind.
+    // The address itself is never shown, in full or masked; they type it.
+    let sent_to = match found.record.bound_to {
+        Some(binding) if !gate.viewer_named(found) && gate.initiator != Some(viewer) => {
+            Some(BoundAddress {
+                kind: match binding {
+                    invitation::Binding::Email(_) => IdentifierKind::Email,
+                    invitation::Binding::Phone(_) => IdentifierKind::Phone,
+                },
+                replaces: gate.viewer_has_kind(found),
+            })
+        }
+        _ => None,
     };
 
     Ok(InvitationPreview {
@@ -1459,27 +1426,46 @@ pub async fn claim_invitation(
     token: &str,
     claim: Claim,
 ) -> Result<ExchangeView, ApiError> {
-    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
-    let account = session.account_id;
     let mut tx = db.begin().await?;
-    acting(&mut tx, account).await?;
+    let view = claim_in(&mut tx, rules, session.account_id, token, claim).await?;
+    tx.commit().await?;
+    Ok(view)
+}
 
-    let exchange = match claim_gate(&gate(&mut tx, account, token).await?, account, claim, now())? {
+/// [`claim_invitation`], in the caller's transaction: what it changes stands
+/// or falls with the rest of that transaction (adding the address an
+/// invitation names and claiming it, `crate::http::account`).
+pub(crate) async fn claim_in(
+    tx: &mut PgConnection,
+    rules: &Rules,
+    account: Uuid,
+    token: &str,
+    claim: Claim,
+) -> Result<ExchangeView, ApiError> {
+    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
+    acting(&mut *tx, account).await?;
+
+    let exchange = match claim_gate(
+        &gate(&mut *tx, account, token).await?,
+        account,
+        claim,
+        now(),
+    )? {
         Passed::Yours(exchange) | Passed::Take { exchange, .. } => exchange,
     };
 
     // The exchange first, then the invitation: the order every other change
     // takes them in. Then the gate again, under the lock: a block, a
     // revocation, a suspension or another claim may have come first.
-    let aggregate = repo::load(&mut tx, exchange, true)
+    let aggregate = repo::load(&mut *tx, exchange, true)
         .await?
         .ok_or_else(unavailable)?;
-    let gate = gate(&mut tx, account, token).await?;
+    let gate = gate(&mut *tx, account, token).await?;
     let found = gate.invitation.as_ref().ok_or_else(unavailable)?;
     if found.exchange != exchange {
         return Err(unavailable());
     }
-    lock_invitation(&mut tx, found.id).await?;
+    lock_invitation(&mut *tx, found.id).await?;
     let at = now();
 
     // Claiming twice with the same account is harmless, for as long as the
@@ -1487,7 +1473,7 @@ pub async fn claim_invitation(
     // spent like any other, and says so the same way.
     let pre_bound = match claim_gate(&gate, account, claim, at)? {
         Passed::Yours(_) if aggregate.accounts[1] == Some(account) => {
-            return view(&mut tx, rules, exchange, account).await;
+            return view(&mut *tx, rules, exchange, account).await;
         }
         Passed::Yours(_) => return Err(unavailable()),
         Passed::Take { pre_bound, .. } => pre_bound,
@@ -1507,28 +1493,20 @@ pub async fn claim_invitation(
         .bind(account)
         .execute(&mut *tx)
         .await?;
-    // Whom it named is no longer needed in full once it is taken.
-    sqlx::query(
-        "UPDATE invitation
-         SET claimed_by = $2, claimed_at = $3,
-             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
-         WHERE id = $1",
-    )
-    .bind(found.id)
-    .bind(account)
-    .bind(at)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("UPDATE invitation SET claimed_by = $2, claimed_at = $3 WHERE id = $1")
+        .bind(found.id)
+        .bind(account)
+        .bind(at)
+        .execute(&mut *tx)
+        .await?;
     // Stored with the slot now filled, so the claim event records who
     // claimed it. That fact then lives in the permanent history and not only
     // in a row that can change.
     let mut claimed = aggregate.clone();
     claimed.accounts[1] = Some(account);
-    repo::persist(&mut tx, &claimed, &decision, actor, None, at).await?;
+    repo::persist(&mut *tx, &claimed, &decision, actor, None, at).await?;
 
-    let view = view(&mut tx, rules, exchange, account).await?;
-    tx.commit().await?;
-    Ok(view)
+    view(&mut *tx, rules, exchange, account).await
 }
 
 // ---- Timers -----------------------------------------------------------------
@@ -1548,26 +1526,6 @@ pub async fn purge_network_metadata(
         .await?
         .rows_affected();
     Ok(removed)
-}
-
-/// Empties the encrypted address of every invitation that can no longer be
-/// claimed: taken, revoked or expired (migration 0028). Its blind index stays
-/// while the rest of the row does. Returns how many were emptied. Called by
-/// the worker.
-pub async fn purge_invitation_addresses(
-    db: &PgPool,
-    at: OffsetDateTime,
-) -> Result<u64, sqlx::Error> {
-    let emptied = sqlx::query(
-        "UPDATE invitation SET bound_email_encrypted = NULL, bound_phone_encrypted = NULL
-         WHERE (bound_email_encrypted IS NOT NULL OR bound_phone_encrypted IS NOT NULL)
-           AND (claimed_by IS NOT NULL OR revoked_at IS NOT NULL OR expires_at <= $1)",
-    )
-    .bind(at)
-    .execute(db)
-    .await?
-    .rows_affected();
-    Ok(emptied)
 }
 
 /// Runs every timer that has come due: expired revisions, lapsed close

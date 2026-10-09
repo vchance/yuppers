@@ -230,12 +230,62 @@ function EditForm({
     )
   }
 
+  if (edit.step === 'prove' || edit.step === 'proveCode') {
+    const to = shownIdentifier(edit.to)
+    const alternative = control.proveAlternative
+    return (
+      <Panel title={title}>
+        {edit.step === 'prove' ? (
+          <form noValidate onSubmit={send}>
+            <p>{fmt(w.proveIntro, { identifier: to })}</p>
+            {consent.shown && (
+              <ConsentCheckbox
+                wording={wording.smsCode.verifyNumber}
+                checked={consent.checked}
+                onChange={consent.setChecked}
+              />
+            )}
+            {consent.missing && (
+              <p className="hint" id={waitId}>
+                {wording.smsCode.tickToSend}
+              </p>
+            )}
+            <Failure code={control.failure} />
+            <div className="actions">
+              <button
+                type="submit"
+                className="primary"
+                disabled={control.busy || consent.missing}
+                aria-describedby={consent.missing ? waitId : undefined}
+              >
+                {fmt(w.proveSend, { identifier: to })}
+              </button>
+              {alternative && (
+                <button type="button" disabled={control.busy} onClick={control.proveElsewhere}>
+                  {fmt(w.proveOther, { identifier: shownIdentifier(alternative) })}
+                </button>
+              )}
+              <button type="button" disabled={control.busy} onClick={control.cancel}>
+                {wording.common.cancel}
+              </button>
+            </div>
+          </form>
+        ) : (
+          codeForm(edit.to, w.proveConfirm)
+        )}
+      </Panel>
+    )
+  }
+
   const current = edit.slot === 'email' ? account.email : account.phone
   return (
     <Panel title={title}>
       {edit.step === 'enter' ? (
         <form noValidate onSubmit={send}>
           {current && <p>{fmt(w.changeNote, { identifier: shownIdentifier(current) })}</p>}
+          {current && edit.slot === 'email' && (
+            <p>{fmt(w.changeEmailTold, { identifier: current })}</p>
+          )}
           <Field
             label={edit.slot === 'email' ? w.newEmailLabel : w.newPhoneLabel}
             hint={edit.slot === 'phone' ? wording.smsUpdates.phoneHint : undefined}

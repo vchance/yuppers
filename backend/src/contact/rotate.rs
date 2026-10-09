@@ -36,8 +36,6 @@ pub enum Bound {
     Row,
     /// Its row's `account_id` ([`Field::owned_by`]): payment options.
     Account,
-    /// Its row's `id`, a UUID ([`Field::record`]): whom an invitation names.
-    Record,
 }
 
 impl Bound {
@@ -47,7 +45,6 @@ impl Bound {
             Bound::Column => "NULL::text",
             Bound::Row => "id::text",
             Bound::Account => "account_id::text",
-            Bound::Record => "id::text",
         }
     }
 
@@ -57,7 +54,6 @@ impl Bound {
             (Bound::Column, _) => Some(column),
             (Bound::Row, Some(id)) => id.parse().ok().map(|id| column.row(id)),
             (Bound::Account, Some(id)) => id.parse().ok().map(|id| column.owned_by(id)),
-            (Bound::Record, Some(id)) => id.parse().ok().map(|id| column.record(id)),
             _ => None,
         }
     }
@@ -72,7 +68,7 @@ impl Column {
 
 /// Every column that holds encrypted contact details, and the payment
 /// options encrypted the same way (`crate::payments`).
-pub const COLUMNS: [Column; 11] = [
+pub const COLUMNS: [Column; 9] = [
     Column {
         table: "account",
         column: "email_encrypted",
@@ -102,23 +98,9 @@ pub const COLUMNS: [Column; 11] = [
         bound: Bound::Row,
     },
     Column {
-        table: "invitation",
-        column: "bound_email_encrypted",
-        field: Field::INVITATION_EMAIL,
-        primary_key: ("id", "uuid"),
-        bound: Bound::Record,
-    },
-    Column {
-        table: "invitation",
-        column: "bound_phone_encrypted",
-        field: Field::INVITATION_PHONE,
-        primary_key: ("id", "uuid"),
-        bound: Bound::Record,
-    },
-    Column {
-        table: "combine_notice",
+        table: "account_notice",
         column: "email_encrypted",
-        field: Field::COMBINE_NOTICE_EMAIL,
+        field: Field::ACCOUNT_NOTICE_EMAIL,
         primary_key: ("id", "bigint"),
         bound: Bound::Row,
     },

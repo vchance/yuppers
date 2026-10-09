@@ -1,3 +1,4 @@
+import { noticeText } from '@yuppers/shared';
 import { useState } from 'react';
 
 import { useI18n, useSession } from '../lib/context';
@@ -5,27 +6,27 @@ import { api } from '../lib/session';
 import { Actions, Button, Card, P } from './ui';
 
 /**
- * The notice that another account was combined into this one, shown once
- * where neither account had an email address to tell, as on the web
- * (`apps/web/src/components/CombinedNotice.tsx`). Nothing is texted.
+ * A notice about the account shown once where there was no email address to
+ * tell, as on the web (`apps/web/src/components/CombinedNotice.tsx`):
+ * another account combined into this one, or its phone number replaced or
+ * removed. Nothing is texted.
  */
 export function CombinedNotice() {
-  const { wording, fmt, moment } = useI18n();
+  const { wording, moment, language } = useI18n();
   const { account, setAccount } = useSession();
   const [busy, setBusy] = useState(false);
-  const at = account?.combined_notice;
-  if (!at) return null;
-  const w = wording.combine;
+  const notice = account?.notice;
+  if (!notice) return null;
   return (
     <Card>
-      <P>{fmt(w.noticeBanner, { date: moment(at) })}</P>
+      <P>{noticeText(wording, notice.kind, moment(notice.at), language)}</P>
       <Actions>
         <Button
-          label={w.noticeDismiss}
+          label={wording.combine.noticeDismiss}
           disabled={busy}
           onPress={() => {
             setBusy(true);
-            api.updateMe({ dismiss_combined_notice: true }).then(setAccount, () => setBusy(false));
+            api.updateMe({ dismiss_notice: true }).then(setAccount, () => setBusy(false));
           }}
         />
       </Actions>

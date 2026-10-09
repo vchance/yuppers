@@ -1055,7 +1055,7 @@ async fn a_number_is_verified_by_a_code_and_replacing_it_ends_the_old_numbers_up
 
     // The way a party with no number adds one: a code by text, then the
     // code back.
-    let add = |phone: String| {
+    let add = |phone: String, proof: Option<String>| {
         let (app, codes, ben) = (&app, &codes, &deal.ben);
         async move {
             app.call(
@@ -1073,18 +1073,37 @@ async fn a_number_is_verified_by_a_code_and_replacing_it_ends_the_old_numbers_up
             app.post(
                 ben,
                 "/v1/me/identifiers",
-                json!({ "identifier": phone, "code": code }),
+                json!({ "identifier": phone, "code": code, "proof": proof }),
             )
             .await
             .ok()
         }
     };
     let first = number();
-    assert_eq!(add(first.clone()).await["phone"], first);
+    assert_eq!(add(first.clone(), None).await["phone"], first);
     turn_on(&app, &deal.ben, &deal).await;
 
+    // Replacing it takes a proof of one of the account's own: here, a code
+    // to the number it replaces.
+    app.call(
+        Some(&deal.ben),
+        Method::POST,
+        "/v1/auth/codes",
+        Some(json!({ "identifier": first, "sms_consent": common::sms_consent() })),
+        &[],
+    )
+    .await;
+    let (_, _, code) = codes.sent().pop().unwrap();
+    let proved = app
+        .post(
+            &deal.ben,
+            "/v1/me/identifiers/proof",
+            json!({ "channel": "PHONE", "code": code }),
+        )
+        .await
+        .ok();
     let second = number();
-    add(second.clone()).await;
+    add(second.clone(), proved["proof"].as_str().map(str::to_owned)).await;
     let view = app.get(&deal.ben, &path(&deal)).await.ok();
     assert_eq!(
         (view["on"].clone(), view["phone"].clone()),

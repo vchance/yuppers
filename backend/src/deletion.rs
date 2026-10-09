@@ -75,7 +75,7 @@
 //! address, number or name, and their places are this account's, so leaving
 //! the exchanges above covers theirs. What still refers to them goes with
 //! this account: their revoked sessions, offers to combine either way, and
-//! the notices that they were combined. Their own lines stay in the deletion
+//! the notices about the account. Their own lines stay in the deletion
 //! log, before this one, so a replay combines them into this account and
 //! then deletes it.
 //!
@@ -477,8 +477,7 @@ async fn attempt(
     sqlx::query(
         "UPDATE invitation i
          SET revoked_at = coalesce(i.revoked_at, now()),
-             bound_email_index = NULL, bound_phone_index = NULL,
-             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
+             bound_email_index = NULL, bound_phone_index = NULL
          FROM participant p
          WHERE p.exchange_id = i.exchange_id AND p.slot = 'A' AND p.account_id = $1
            AND i.claimed_by IS NULL",
@@ -492,8 +491,7 @@ async fn attempt(
     // itself is not needed again.
     sqlx::query(
         "UPDATE invitation
-         SET bound_email_index = NULL, bound_phone_index = NULL,
-             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
+         SET bound_email_index = NULL, bound_phone_index = NULL
          WHERE claimed_by = $1
             OR claimed_by IN (SELECT id FROM account WHERE merged_into = $1)",
     )
@@ -507,8 +505,7 @@ async fn attempt(
     sqlx::query(
         "UPDATE invitation
          SET revoked_at = coalesce(revoked_at, now()),
-             bound_email_index = NULL, bound_phone_index = NULL,
-             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
+             bound_email_index = NULL, bound_phone_index = NULL
          WHERE claimed_by IS NULL
            AND ((bound_email_index IS NOT NULL AND bound_email_index = $1)
              OR (bound_phone_index IS NOT NULL AND bound_phone_index = $2))",
@@ -554,8 +551,13 @@ async fn attempt(
     .bind(account)
     .execute(&mut *tx)
     .await?;
-    // Notices that accounts were combined, with the addresses they went to.
-    sqlx::query("DELETE FROM combine_notice WHERE account_id = $1")
+    // Notices about the account, with the addresses they went to, and
+    // proofs of its own addresses.
+    sqlx::query("DELETE FROM account_notice WHERE account_id = $1")
+        .bind(account)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM account_proof WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)
         .await?;

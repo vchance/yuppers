@@ -207,6 +207,10 @@ pub struct CombineOffer {
     pub payment_options_move: bool,
     /// The other account's text updates end, because its number is dropped.
     pub text_updates_end: bool,
+    /// This account's own identifier of the kind proved would be replaced:
+    /// combining then needs a proof of one of its own
+    /// (`POST /v1/me/identifiers/proof`), as replacing it directly does.
+    pub proof_required: bool,
 }
 
 /// The answer when an address proved belongs to another account: the
@@ -460,6 +464,7 @@ pub async fn offer(
         phone: outcome_of(&outcomes, Kind::Phone),
         payment_options_move: their_options && !our_options,
         text_updates_end: text_updates && !phone_kept,
+        proof_required: stays.index(kind).is_some(),
     })
 }
 
@@ -505,16 +510,20 @@ fn is_retryable(error: &sqlx::Error) -> bool {
 }
 
 /// Combines into `account` the account its offer `token` names, as the
-/// person signed in to `account` asked. With an idempotency key, a repeat
-/// of a request that went through changes nothing and succeeds.
+/// person signed in to `account` asked. Where `account`'s own identifier of
+/// the kind proved would be replaced, `proof` must be a proof of one of its
+/// own ([`issue_proof`]). With an idempotency key, a repeat of a request
+/// that went through changes nothing and succeeds.
 pub async fn combine(
     db: &PgPool,
     rules: &Rules,
     account: Uuid,
     token: &str,
+    proof: Option<&str>,
     idempotency: &Idempotency<'_>,
 ) -> Result<(), ApiError> {
     let hash = token_hash(token.trim());
+    let proof = proof.map(|proof| token_hash(proof.trim()));
     let mut wait = FIRST_WAIT;
     for _ in 0..ATTEMPTS {
         let mut tx = db.begin().await?;
@@ -546,6 +555,7 @@ pub async fn combine(
             other,
             kind,
             Some(&index),
+            proof.as_ref(),
             Origin::Person,
         )
         .await
@@ -609,6 +619,7 @@ impl From<ApiError> for Failure {
 /// Combines `other` into `stays`, in the caller's transaction, by an
 /// identifier of `kind`; with `proved`, only while `other` still has that
 /// one. Everything moves or ends as the module says, or nothing does.
+#[allow(clippy::too_many_arguments)]
 async fn merge(
     conn: &mut PgConnection,
     rules: &Rules,
@@ -616,6 +627,7 @@ async fn merge(
     other: Uuid,
     kind: Kind,
     proved: Option<&[u8]>,
+    proof: Option<&[u8; 32]>,
     source: Origin,
 ) -> Result<Attempt, Failure> {
     // Both rows, in a fixed order, so that two combinations of the same pair
@@ -642,6 +654,15 @@ async fn merge(
     {
         return Err(Failure::Refused(ErrorCode::CombineExpired));
     }
+    // A's own identifier of that kind would be replaced: that takes a proof
+    // from A's side as well, a code to it or to A's other one, as replacing
+    // one directly does. A session alone does not take A's ways in away.
+    if source == Origin::Person && a.index(kind).is_some() {
+        let Some(proof) = proof else {
+            return Err(Failure::Refused(ErrorCode::ProofRequired));
+        };
+        take_proof(conn, stays, proof).await?;
+    }
     let at = match source {
         Origin::Person => OffsetDateTime::now_utc(),
         Origin::Replay(at) => at,
@@ -655,14 +676,20 @@ async fn merge(
     .bind(other)
     .fetch_all(&mut *conn)
     .await?;
+    // Asked again with B's yups held: A may have taken a place beside B in
+    // one of them a moment ago.
+    if let Some(code) = refusal(conn, &a, &b).await? {
+        return Err(Failure::Refused(code));
+    }
 
-    // Whom to tell, as both accounts stand before anything changes.
-    let mut told: Vec<Identifier> = Vec::new();
+    // Whom to tell, as both accounts stand before anything changes, each in
+    // its own account's language.
+    let mut told: Vec<(Identifier, String)> = Vec::new();
     if source == Origin::Person {
         for account in [&a, &b] {
             for kind in [Kind::Email, Kind::Phone] {
                 if let Some(found) = account.identifier(kind)? {
-                    told.push(found);
+                    told.push((found, account.language.clone()));
                 }
             }
         }
@@ -711,6 +738,20 @@ async fn merge(
         .bind(stays)
         .execute(&mut *conn)
         .await?;
+    // The audit, before any place moves: the database lets a place pass only
+    // by a combination recorded here (migration 0028).
+    sqlx::query(
+        "INSERT INTO account_merge
+             (merged_account_id, into_account_id, identifier_kind, source, merged_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(other)
+    .bind(stays)
+    .bind(IdentifierKind::of(kind).as_str())
+    .bind(source.as_str())
+    .bind(at)
+    .execute(&mut *conn)
+    .await?;
     // A keeps its name and age confirmation, and takes B's where it has
     // none: the same person gave both.
     sqlx::query(
@@ -747,12 +788,25 @@ async fn merge(
     }
 
     // B's places, which the database lets pass only to the account B was
-    // combined into, ending B's holdings as combined (migration 0028).
-    sqlx::query("UPDATE participant SET account_id = $2 WHERE account_id = $1")
+    // combined into, by the combination recorded above, ending B's holdings
+    // as combined (migration 0028). Should A have taken a place beside B
+    // since the check, the two sides of one yup are refused here too.
+    let moved = sqlx::query("UPDATE participant SET account_id = $2 WHERE account_id = $1")
         .bind(other)
         .bind(stays)
         .execute(&mut *conn)
-        .await?;
+        .await;
+    match moved {
+        Ok(_) => {}
+        Err(error)
+            if error.as_database_error().is_some_and(|e| {
+                e.code().as_deref() == Some("23505") && e.constraint() == Some(PARTICIPANT_UNIQUE)
+            }) =>
+        {
+            return Err(Failure::Refused(ErrorCode::CombineSharedExchange));
+        }
+        Err(error) => return Err(error.into()),
+    }
     // The links B took, so that A is taken back to those yups as B was.
     sqlx::query("UPDATE invitation SET claimed_by = $2 WHERE claimed_by = $1")
         .bind(other)
@@ -828,18 +882,6 @@ async fn merge(
     }
 
     sqlx::query(
-        "INSERT INTO account_merge
-             (merged_account_id, into_account_id, identifier_kind, source, merged_at)
-         VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind(other)
-    .bind(stays)
-    .bind(IdentifierKind::of(kind).as_str())
-    .bind(source.as_str())
-    .bind(at)
-    .execute(&mut *conn)
-    .await?;
-    sqlx::query(
         "INSERT INTO deletion_log (account_id, deleted_at, merged_into, merged_by)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (account_id) DO NOTHING",
@@ -851,9 +893,16 @@ async fn merge(
     .execute(&mut *conn)
     .await?;
 
-    notify(conn, stays, &a.language, &told).await?;
+    // A replay tells nobody again, in the app or outside.
+    if source == Origin::Person {
+        notify(conn, stays, &told).await?;
+    }
     Ok(Attempt::Done)
 }
+
+/// One account per place in a yup (migration 0001): what a place moved to
+/// the account on the other side of the same yup breaks.
+const PARTICIPANT_UNIQUE: &str = "participant_exchange_id_account_id_key";
 
 /// Takes the rows outright, without waiting: `false` if one is not free.
 async fn free(conn: &mut PgConnection, accounts: &[Uuid]) -> Result<bool, sqlx::Error> {
@@ -1001,61 +1050,143 @@ async fn move_blocks(
     Ok(())
 }
 
-/// Queues the notice that two accounts were combined, by email, to every
-/// email address either had. It says that, and nothing about any yup. Each
-/// address is kept encrypted, bound to its row, until the worker has sent
-/// it ([`purge`]). Phone numbers are not texted: the SMS program covers
+/// Tells, after two accounts were combined, every email address either had,
+/// by email, each in its own account's language. It says that, and nothing
+/// about any yup. Phone numbers are not texted: the SMS program covers
 /// agreement updates only. Where neither account had an email address,
 /// nothing goes outside, and the combined account shows the notice in the
-/// app instead, once (`combined_notice_at`, dismissed through `PATCH /v1/me`).
+/// app instead, once ([`notice_in_app`]).
 async fn notify(
     conn: &mut PgConnection,
     account: Uuid,
-    language: &str,
-    told: &[Identifier],
+    told: &[(Identifier, String)],
 ) -> Result<(), sqlx::Error> {
-    let keys = contact::keys();
-    let emails: Vec<&str> = told
-        .iter()
-        .filter_map(|identifier| match identifier {
-            Identifier::Email(email) => Some(email.as_str()),
-            Identifier::Phone(_) => None,
-        })
-        .collect();
-    if emails.is_empty() {
-        sqlx::query("UPDATE account SET combined_notice_at = now() WHERE id = $1")
-            .bind(account)
-            .execute(&mut *conn)
-            .await?;
-        return Ok(());
+    let mut emailed = false;
+    for (identifier, language) in told {
+        if let Identifier::Email(email) = identifier {
+            notice_email(conn, account, NoticeKind::AccountsCombined, email, language).await?;
+            emailed = true;
+        }
     }
-    for email in emails {
-        let id: i64 = sqlx::query_scalar("SELECT nextval('combine_notice_id_seq')")
-            .fetch_one(&mut *conn)
-            .await?;
-        sqlx::query(
-            "INSERT INTO combine_notice (id, account_id, email_encrypted, language)
-             OVERRIDING SYSTEM VALUE VALUES ($1, $2, $3, $4)",
-        )
-        .bind(id)
-        .bind(account)
-        .bind(keys.seal(Field::COMBINE_NOTICE_EMAIL.row(id), email))
-        .bind(language)
-        .execute(&mut *conn)
-        .await?;
-        sqlx::query(
-            "INSERT INTO outbox (kind, recipient_account_id, payload) VALUES ('EMAIL', $1, $2)",
-        )
-        .bind(account)
-        .bind(json!({ NOTICE_PAYLOAD: id }))
-        .execute(&mut *conn)
-        .await?;
+    if !emailed {
+        notice_in_app(conn, account, InAppNotice::AccountsCombined).await?;
     }
     Ok(())
 }
 
-/// A notice as stored: its address, encrypted, and the language.
-type NoticeRow = (Vec<u8>, String);
+/// What an email about the account says (`account_notice.kind`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeKind {
+    /// Two accounts were combined.
+    AccountsCombined,
+    /// This email address was replaced on its account by another.
+    EmailChanged,
+    /// This email address was removed from its account.
+    EmailRemoved,
+}
+
+impl NoticeKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            NoticeKind::AccountsCombined => "ACCOUNTS_COMBINED",
+            NoticeKind::EmailChanged => "EMAIL_CHANGED",
+            NoticeKind::EmailRemoved => "EMAIL_REMOVED",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "ACCOUNTS_COMBINED" => Some(NoticeKind::AccountsCombined),
+            "EMAIL_CHANGED" => Some(NoticeKind::EmailChanged),
+            "EMAIL_REMOVED" => Some(NoticeKind::EmailRemoved),
+            _ => None,
+        }
+    }
+}
+
+/// Queues an email about the account to `email`, which may no longer be the
+/// account's: the address is kept encrypted, bound to its row, until the
+/// worker has sent it, and a week at most ([`purge`]).
+pub(crate) async fn notice_email(
+    conn: &mut PgConnection,
+    account: Uuid,
+    kind: NoticeKind,
+    email: &str,
+    language: &str,
+) -> Result<(), sqlx::Error> {
+    let id: i64 = sqlx::query_scalar("SELECT nextval('account_notice_id_seq')")
+        .fetch_one(&mut *conn)
+        .await?;
+    sqlx::query(
+        "INSERT INTO account_notice (id, account_id, kind, email_encrypted, language)
+         OVERRIDING SYSTEM VALUE VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(id)
+    .bind(account)
+    .bind(kind.as_str())
+    .bind(contact::keys().seal(Field::ACCOUNT_NOTICE_EMAIL.row(id), email))
+    .bind(language)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "INSERT INTO outbox (kind, recipient_account_id, payload) VALUES ('EMAIL', $1, $2)",
+    )
+    .bind(account)
+    .bind(json!({ NOTICE_PAYLOAD: id }))
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// A notice the app shows once on the account, where there is no email
+/// address to tell (`account.notice_kind`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InAppNotice {
+    /// Another account was combined into this one.
+    AccountsCombined,
+    /// Its phone number was replaced by another.
+    PhoneChanged,
+    /// Its phone number was removed.
+    PhoneRemoved,
+}
+
+impl InAppNotice {
+    fn as_str(self) -> &'static str {
+        match self {
+            InAppNotice::AccountsCombined => "ACCOUNTS_COMBINED",
+            InAppNotice::PhoneChanged => "PHONE_CHANGED",
+            InAppNotice::PhoneRemoved => "PHONE_REMOVED",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "ACCOUNTS_COMBINED" => Some(InAppNotice::AccountsCombined),
+            "PHONE_CHANGED" => Some(InAppNotice::PhoneChanged),
+            "PHONE_REMOVED" => Some(InAppNotice::PhoneRemoved),
+            _ => None,
+        }
+    }
+}
+
+/// Puts a notice on the account for the app to show once, until dismissed
+/// (`dismiss_notice` in `PATCH /v1/me`). A newer one replaces an older.
+pub(crate) async fn notice_in_app(
+    conn: &mut PgConnection,
+    account: Uuid,
+    notice: InAppNotice,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE account SET notice_kind = $2, notice_at = now() WHERE id = $1")
+        .bind(account)
+        .bind(notice.as_str())
+        .execute(conn)
+        .await?;
+    Ok(())
+}
+
+/// A notice as stored: what it says, its address, encrypted, and the language.
+type NoticeRow = (String, Vec<u8>, String);
 
 /// An offer as stored: for whom, which account, by which kind and index,
 /// until when, and when it was used.
@@ -1068,33 +1199,36 @@ type OfferRow = (
     Option<OffsetDateTime>,
 );
 
-/// The key of an outbox payload that names a notice: `{"combine_notice": 7}`.
-pub const NOTICE_PAYLOAD: &str = "combine_notice";
+/// The key of an outbox payload that names a notice: `{"account_notice": 7}`.
+pub const NOTICE_PAYLOAD: &str = "account_notice";
 
-/// Where a queued notice goes and in which language: an email address,
-/// decrypted to send to it. `None` once it is gone.
+/// What a queued notice says, where it goes and in which language: an email
+/// address, decrypted to send to it. `None` once it is gone.
 pub async fn notice_destination(
     conn: &mut PgConnection,
     id: i64,
-) -> Result<Option<(String, String)>, sqlx::Error> {
+) -> Result<Option<(NoticeKind, String, String)>, sqlx::Error> {
     let row: Option<NoticeRow> =
-        sqlx::query_as("SELECT email_encrypted, language FROM combine_notice WHERE id = $1")
+        sqlx::query_as("SELECT kind, email_encrypted, language FROM account_notice WHERE id = $1")
             .bind(id)
             .fetch_optional(conn)
             .await?;
-    let Some((sealed, language)) = row else {
+    let Some((kind, sealed, language)) = row else {
         return Ok(None);
     };
-    let email = contact::keys().open(Field::COMBINE_NOTICE_EMAIL.row(id), &sealed)?;
-    Ok(Some((email, language)))
+    let Some(kind) = NoticeKind::parse(&kind) else {
+        return Ok(None);
+    };
+    let email = contact::keys().open(Field::ACCOUNT_NOTICE_EMAIL.row(id), &sealed)?;
+    Ok(Some((kind, email, language)))
 }
 
 /// Removes notices older than [`NOTICE_RETENTION`], sent or not, with the
-/// addresses they held, and offers to combine that ended more than a day
+/// addresses they held, and offers and proofs that ended more than a day
 /// ago. Returns how many rows went. Called by the worker.
 pub async fn purge(db: &PgPool) -> Result<u64, sqlx::Error> {
     let notices = sqlx::query(
-        "DELETE FROM combine_notice WHERE created_at < now() - $1 * interval '1 second'",
+        "DELETE FROM account_notice WHERE created_at < now() - $1 * interval '1 second'",
     )
     .bind(NOTICE_RETENTION.whole_seconds() as f64)
     .execute(db)
@@ -1106,7 +1240,79 @@ pub async fn purge(db: &PgPool) -> Result<u64, sqlx::Error> {
     .execute(db)
     .await?
     .rows_affected();
-    Ok(notices + offers)
+    let proofs =
+        sqlx::query("DELETE FROM account_proof WHERE expires_at < now() - interval '1 day'")
+            .execute(db)
+            .await?
+            .rows_affected();
+    Ok(notices + offers + proofs)
+}
+
+// ---- Proving one of the account's own identifiers --------------------------------
+
+/// How long a proof lasts.
+pub const PROOF_TTL: Duration = Duration::minutes(10);
+
+/// A proof that the person signed in controls one of the account's own
+/// identifiers, from a code sent to it: what replacing an identifier needs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AccountProof {
+    /// Good once, for ten minutes, for this account only.
+    pub proof: String,
+    /// RFC 3339.
+    pub expires_at: String,
+}
+
+/// Records a proof for `account`, whose identifier with blind index `index`
+/// a code was just checked for, and returns its token once.
+pub async fn issue_proof(
+    conn: &mut PgConnection,
+    account: Uuid,
+    index: &[u8; 32],
+) -> Result<AccountProof, sqlx::Error> {
+    let token = generate_token();
+    let expires_at = OffsetDateTime::now_utc() + PROOF_TTL;
+    sqlx::query(
+        "INSERT INTO account_proof (token_hash, account_id, identifier_index, expires_at)
+         VALUES ($1, $2, $3, $4)",
+    )
+    .bind(token_hash(&token).as_slice())
+    .bind(account)
+    .bind(index.as_slice())
+    .bind(expires_at)
+    .execute(conn)
+    .await?;
+    Ok(AccountProof {
+        proof: token,
+        expires_at: rfc3339(expires_at),
+    })
+}
+
+/// Uses up the proof `hash` of `account`, in the caller's transaction:
+/// refused with `PROOF_REQUIRED` unless it is this account's, unused,
+/// unexpired, and of an identifier the account still has. Rolling back the
+/// transaction leaves it unused.
+pub(crate) async fn take_proof(
+    conn: &mut PgConnection,
+    account: Uuid,
+    hash: &[u8; 32],
+) -> Result<(), ApiError> {
+    let used = sqlx::query(
+        "UPDATE account_proof p SET used_at = now()
+         FROM account a
+         WHERE p.token_hash = $1 AND p.account_id = $2 AND p.used_at IS NULL
+           AND p.expires_at > now() AND a.id = p.account_id
+           AND p.identifier_index IN (a.email_index, a.phone_index)",
+    )
+    .bind(hash.as_slice())
+    .bind(account)
+    .execute(conn)
+    .await?
+    .rows_affected();
+    if used == 0 {
+        return Err(ErrorCode::ProofRequired.into());
+    }
+    Ok(())
 }
 
 // ---- Replaying ----------------------------------------------------------------
@@ -1177,6 +1383,7 @@ pub async fn replay(
             into,
             account,
             kind.kind(),
+            None,
             None,
             Origin::Replay(at),
         )

@@ -489,7 +489,9 @@ pub(crate) async fn end_open_proposals(
 /// standing with no way to lift it. So someone who once held the invited
 /// party's place can still lift, through that exchange, a block they have
 /// on its initiator. That is all it answers them: with no such block there
-/// is, for them as for any stranger, no such exchange.
+/// is, for them as for any stranger, no such exchange. A place held by an
+/// account since combined into the caller's counts as the caller's own: the
+/// block moved with it (`crate::combine`).
 pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
     service::acting(&mut tx, blocker).await?;
@@ -502,9 +504,11 @@ pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), A
         let lifted = sqlx::query(
             "DELETE FROM account_block b
              USING slot_holding mine, participant theirs
-             WHERE mine.exchange_id = $1 AND mine.account_id = $2
+             WHERE mine.exchange_id = $1
+               AND (mine.account_id = $2
+                    OR mine.account_id IN (SELECT id FROM account WHERE merged_into = $2))
                AND theirs.exchange_id = mine.exchange_id AND theirs.slot <> mine.slot
-               AND b.blocker_account_id = mine.account_id
+               AND b.blocker_account_id = $2
                AND b.blocked_account_id = theirs.account_id",
         )
         .bind(exchange)
@@ -539,7 +543,8 @@ pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), A
 /// they only once held a place in, which is all there is to show for a block
 /// that took them out of it; there the other party is named as the last
 /// proposal they saw named them, since what the exchange has called them
-/// since is none of their business.
+/// since is none of their business. Places held by accounts combined into
+/// the caller's count as the caller's, as their blocks do.
 pub async fn blocked_people(db: &PgPool, blocker: Uuid) -> Result<Vec<BlockedPerson>, ApiError> {
     let rows: Vec<(Uuid, String, String, OffsetDateTime, bool)> = sqlx::query_as(
         "SELECT exchange_id, display_code, name, blocked_at, left_it
@@ -557,7 +562,10 @@ pub async fn blocked_people(db: &PgPool, blocker: Uuid) -> Result<Vec<BlockedPer
                     END AS name,
                     b.created_at AS blocked_at, mine.ended_at IS NOT NULL AS left_it
              FROM account_block b
-             JOIN slot_holding mine ON mine.account_id = b.blocker_account_id
+             JOIN slot_holding mine
+               ON mine.account_id = b.blocker_account_id
+               OR mine.account_id IN (SELECT id FROM account
+                                      WHERE merged_into = b.blocker_account_id)
              JOIN participant theirs
                ON theirs.exchange_id = mine.exchange_id
               AND theirs.slot <> mine.slot

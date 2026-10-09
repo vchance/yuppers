@@ -71,6 +71,16 @@ pub enum ErrorCode {
     /// The account already has an email address (or phone number) of its
     /// own, and only one of each is kept: the request must say to replace it.
     IdentifierKindTaken,
+    /// Replacing the account's email address or phone number needs a proof
+    /// of one of its own, from a code sent to the one being replaced or to
+    /// the other (`POST /v1/me/identifiers/proof`), and none was given, or
+    /// it is used, expired or another account's.
+    ProofRequired,
+    /// The address typed is not the one the invitation was sent to. Says
+    /// nothing more about it.
+    NotInvitedAddress,
+    /// No code could be sent to that address. Says nothing more about why.
+    CodeNotSent,
     /// The account's only email address or phone number cannot be removed:
     /// it is how the account is signed in to. Add the other kind first.
     LastIdentifier,
@@ -145,6 +155,7 @@ impl From<ErrorCode> for ApiError {
             InvalidRequest
             | InvalidIdentifier
             | PhoneCountryNotServed
+            | NotInvitedAddress
             | SmsConsentRequired
             | InvalidRevision
             | IdempotencyKeyReused => StatusCode::UNPROCESSABLE_ENTITY,
@@ -161,6 +172,8 @@ impl From<ErrorCode> for ApiError {
             | IdentifierInUse
             | IdentifierOnOtherAccount
             | IdentifierKindTaken
+            | ProofRequired
+            | CodeNotSent
             | LastIdentifier
             | CombineExpired
             | CombineSuspended

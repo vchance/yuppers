@@ -2,7 +2,13 @@ import type { ApiClient } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { ApiFailure, combineOffer, createExchangeApi, type CombineOffer } from './api'
-import { combineAccountLines, combineEffects, combineHeading, shownIdentifier } from './identifiers'
+import {
+  combineAccountLines,
+  combineEffects,
+  combineHeading,
+  noticeText,
+  shownIdentifier,
+} from './identifiers'
 import { wordingFor } from './language'
 
 const en = wordingFor('en')
@@ -25,6 +31,7 @@ function offer(over: Partial<CombineOffer> = {}): CombineOffer {
     phone: 'ADDED',
     payment_options_move: true,
     text_updates_end: false,
+    proof_required: false,
     ...over,
   }
 }
@@ -67,6 +74,14 @@ test('the offer says what moves, what is dropped and that the other account ends
   expect(kept).not.toContain(en.combine.devices)
 })
 
+test('a notice in the app says what happened to the account, and when', () => {
+  expect(noticeText(en, 'PHONE_CHANGED', 'Oct 8', 'en')).toBe(
+    'The phone number on your Yuppers account was changed on Oct 8. If you didn’t do this, write to support@yuppers.app.',
+  )
+  expect(noticeText(en, 'PHONE_REMOVED', 'Oct 8', 'en')).toContain('was removed on Oct 8')
+  expect(noticeText(en, 'ACCOUNTS_COMBINED', 'Oct 8', 'en')).toContain('were combined')
+})
+
 test('a phone number is shown formatted and an address as it is', () => {
   expect(shownIdentifier('+18565488780')).toBe('(856) 548-8780')
   expect(shownIdentifier('ana@example.com')).toBe('ana@example.com')
@@ -79,6 +94,8 @@ test('a refusal that offers to combine carries the offer, and the new calls send
     { status: 200, data: {} },
     { status: 200, data: {} },
     { status: 204 },
+    { status: 200, data: {} },
+    { status: 200, data: { proof: 'p', expires_at: '2026-10-08T12:10:00Z' } },
     { status: 200, data: {} },
   ]
   const call =
@@ -113,22 +130,47 @@ test('a refusal that offers to combine carries the offer, and the new calls send
   expect(combineOffer(refused)?.token).toBe('t'.repeat(64))
   expect(combineOffer(new ApiFailure('INVALID_CODE'))).toBeNull()
 
-  await api.combineAccounts('t'.repeat(64))
+  await api.combineAccounts('t'.repeat(64), 'p')
   await api.removeIdentifier('phone', '654321')
-  await api.requestInvitationAddressCode('a'.repeat(64), { version: 'v', language: 'en' })
-  await api.addInvitationAddress('a'.repeat(64), '111111', true)
+  await api.requestInvitationAddressCode('a'.repeat(64), '+18565488780', {
+    version: 'v',
+    language: 'en',
+  })
+  await api.addInvitationAddress('a'.repeat(64), '+18565488780', '111111', true, 'p')
+  expect((await api.proveIdentifier('EMAIL', '222222')).proof).toBe('p')
+  await api.addIdentifier('new@example.com', '333333', 'p')
   expect(calls.map((each) => `${each.method} ${each.path}`)).toEqual([
     'POST /v1/me/identifiers',
     'POST /v1/me/combine',
     'DELETE /v1/me/identifiers/{kind}',
     'POST /v1/invitations/address/codes',
     'POST /v1/invitations/address',
+    'POST /v1/me/identifiers/proof',
+    'POST /v1/me/identifiers',
   ])
+  expect(calls[1].init.body).toEqual({ token: 't'.repeat(64), proof: 'p' })
+  expect(calls[3].init.body).toEqual({
+    token: 'a'.repeat(64),
+    identifier: '+18565488780',
+    sms_consent: { version: 'v', language: 'en' },
+  })
+  expect(calls[5].init.body).toEqual({ channel: 'EMAIL', code: '222222' })
+  expect(calls[6].init.body).toEqual({
+    identifier: 'new@example.com',
+    code: '333333',
+    proof: 'p',
+  })
   // Both changes carry an idempotency key, and the removal names its kind.
   expect(calls[1].init.params).toEqual({ header: { 'Idempotency-Key': 'key-1' } })
   expect(calls[2].init.params).toEqual({
     path: { kind: 'phone' },
     header: { 'Idempotency-Key': 'key-2' },
   })
-  expect(calls[4].init.body).toEqual({ token: 'a'.repeat(64), code: '111111', replace: true })
+  expect(calls[4].init.body).toEqual({
+    token: 'a'.repeat(64),
+    identifier: '+18565488780',
+    code: '111111',
+    replace: true,
+    proof: 'p',
+  })
 })

@@ -343,7 +343,7 @@ impl Texting {
         .ok();
 
         // Dora, signed in by phone, proves Cleo's address and combines
-        // Cleo's account into hers, which tells both by email and text;
+        // Cleo's account into hers, which tells Cleo's address by email;
         // then removes her number, with a code sent to that address.
         let dora_phone = number();
         let dora = self.sign_in(&dora_phone, "Dora").await;

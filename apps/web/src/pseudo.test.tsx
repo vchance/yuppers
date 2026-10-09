@@ -276,6 +276,22 @@ describe('every word on the main web screens comes from the wording', () => {
       await check()
       await press(button(pseudo.deletion.open))
       await check()
+      // Payment options: the list (a number for Zelle has no letters), choosing, one field, removing.
+      await start('/account/payments', ana, pseudo, (fake) => {
+        fake.handles = { venmo: null, cash_app: null, paypal: null, zelle: '+12025550142' }
+      })
+      await h1(pseudo.payments.heading)
+      await until(() => document.querySelector('.payment-row') !== null, 'the list')
+      await check()
+      await press(button(pseudo.payments.add))
+      await check()
+      await press(button(pseudo.payments.apps.paypal))
+      await press(button(pseudo.payments.saveOne))
+      await check()
+      await press(button(pseudo.common.cancel))
+      await until(() => document.querySelector('.payment-row') !== null, 'the list again')
+      await press(document.querySelector<HTMLButtonElement>('.payment-row button[aria-haspopup]')!)
+      await check()
       await start('/nowhere', ana, pseudo)
       await h1(pseudo.common.notFoundTitle)
       await check()

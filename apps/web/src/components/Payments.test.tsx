@@ -3,7 +3,7 @@ import { act } from 'react'
 import { afterEach, expect, test } from 'vitest'
 
 import { ACTIVE, DISPUTED, ana } from '../test/fake-service'
-import { button, field, press, settle, start, stop, type, until, violations } from '../test/harness'
+import { button, field, press, start, stop, type, until, violations } from '../test/harness'
 
 /*
  * Payment options (`payments.ts`): saving them on the account screen,
@@ -30,46 +30,159 @@ function sectionHeaded(text: string): HTMLElement | null {
   return found?.closest('section') ?? null
 }
 
-test('the account saves payment options, says which entries are wrong, and removes them', async () => {
-  const { service, wording } = await start('/account', ana)
+/** A button by its accessible name, where several show the same word ("Edit"). */
+function named(name: string): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)
+}
+
+const fill = (message: string, app: string) => message.replace('{app}', app)
+
+test('the account shows one row for payment options, with what is added, that opens their screen', async () => {
+  const { wording } = await start('/account', ana, 'en', (fake) => {
+    fake.handles = { venmo: 'ana-pays', cash_app: null, paypal: null, zelle: '+12025550142' }
+  })
   const w = wording.payments
-  await until(() => sectionHeaded(w.heading) !== null, 'the payment options section')
-  await until(() => !(field(w.venmoLabel) as HTMLInputElement).disabled, 'the form to load')
+  await until(() => sectionHeaded(w.heading) !== null, 'the payment options row')
+  const row = sectionHeaded(w.heading)!
+  await until(() => row.textContent!.includes('Venmo, Zelle'), 'the summary')
+  // No fields on the account screen any more: a link, described by the summary.
+  expect(row.querySelectorAll('input').length).toBe(0)
+  const link = row.querySelector('h2 a') as HTMLAnchorElement
+  expect(link.textContent).toBe(w.heading)
+  expect(link.getAttribute('href')).toBe('/account/payments')
+  expect(document.getElementById(link.getAttribute('aria-describedby')!)?.textContent).toBe('Venmo, Zelle')
   expect(await violations()).toEqual([])
 
-  // Wrong entries are named, and the keyboard goes to the first; nothing is sent.
-  await type(field(w.venmoLabel), 'ana')
-  await type(field(w.paypalLabel), 'ana_pays')
-  await press(button(w.save))
-  await settle()
-  const section = sectionHeaded(w.heading)!
-  expect(section.textContent).toContain(w.venmoInvalid)
-  expect(section.textContent).toContain(w.paypalInvalid)
-  expect(field(w.venmoLabel).getAttribute('aria-invalid')).toBe('true')
-  expect(document.activeElement).toBe(field(w.venmoLabel))
-  expect(lastSent(service, 'PUT /v1/me/payment-handles')).toBeUndefined()
+  await press(link)
+  await until(() => document.querySelector('h1')?.textContent === w.heading, 'the payment options screen')
+  expect(window.location.pathname).toBe('/account/payments')
+})
 
-  await type(field(w.venmoLabel), '@ana-pays')
-  await type(field(w.paypalLabel), 'paypal.me/AnaPays')
-  // A US number typed any usual way, written the American way on leaving.
+test('with none added, the row says so', async () => {
+  const { wording } = await start('/account', ana)
+  const w = wording.payments
+  await until(() => sectionHeaded(w.heading)?.textContent?.includes(w.noneAdded) ?? false, 'None added')
+})
+
+test('payment options are added one app at a time, edited, and removed after asking', async () => {
+  const { service, wording } = await start('/account/payments', ana)
+  const w = wording.payments
+  await until(() => document.body.textContent!.includes(w.empty), 'the empty screen')
+  // What they are for, with none added.
+  expect(document.body.textContent).toContain(w.intro)
+  const back = [...document.querySelectorAll('a')].find((a) => a.textContent === w.back)
+  expect(back?.getAttribute('href')).toBe('/account')
+  expect(await violations()).toEqual([])
+
+  // Venmo: chosen first, then its one field.
+  await press(button(w.add))
+  await until(() => document.activeElement?.textContent === w.pickHeading, 'the choice, focused')
+  const picks = [...document.querySelectorAll('.payment-picks button')].map((b) => b.textContent)
+  expect(picks).toEqual(['Venmo', 'Cash App', 'PayPal', 'Zelle'])
+  expect(await violations()).toEqual([])
+  await press(button('Venmo'))
+  await until(() => document.activeElement?.textContent === fill(w.addHeading, 'Venmo'), 'the field step')
+  expect(document.querySelectorAll('input').length).toBe(1)
+  const venmo = field(w.venmoLabel) as HTMLInputElement
+  expect(document.getElementById(venmo.getAttribute('aria-describedby')!.split(' ')[0])?.textContent).toBe(
+    w.venmoHint,
+  )
+  // Empty, or not one: said beside it, the keyboard back on it, nothing sent.
+  await press(button(w.saveOne))
+  await until(() => document.body.textContent!.includes(w.venmoInvalid), 'the error')
+  await type(venmo, 'ana')
+  await press(button(w.saveOne))
+  await until(() => venmo.getAttribute('aria-invalid') === 'true', 'invalid')
+  expect(document.activeElement).toBe(venmo)
+  expect(service.sent.some((sent) => sent.call.startsWith('PUT /v1/me/payment-handles'))).toBe(false)
+  await type(venmo, '@ana-pays')
+  await press(button(w.saveOne))
+  await until(() => document.activeElement?.textContent === fill(w.savedOne, 'Venmo'), 'saved, and said')
+  expect(lastSent(service, 'PUT /v1/me/payment-handles/venmo')).toEqual({ value: 'ana-pays' })
+
+  // Zelle: Venmo is no longer offered; a US number written the American way.
+  await press(button(w.add))
+  await until(() => document.querySelector('.payment-picks') !== null, 'the choice')
+  expect([...document.querySelectorAll('.payment-picks button')].map((b) => b.textContent)).toEqual([
+    'Cash App',
+    'PayPal',
+    'Zelle',
+  ])
+  await press(button('Zelle'))
   const zelle = field(w.zelleLabel) as HTMLInputElement
   await act(async () => zelle.focus())
   await type(zelle, '202.555.0142')
-  await press(button(w.save))
-  expect(zelle.value).toBe('(202) 555-0142')
-  await until(() => section.textContent!.includes(w.saved), 'saved')
-  expect(lastSent(service, 'PUT /v1/me/payment-handles')).toEqual({
-    venmo: 'ana-pays',
-    cash_app: null,
-    paypal: 'AnaPays',
-    zelle: '+12025550142',
-  })
-  expect((field(w.zelleLabel) as HTMLInputElement).value).toBe('(202) 555-0142')
+  await press(button(w.saveOne))
+  await until(() => document.querySelectorAll('.payment-row').length === 2, 'two rows')
+  expect(lastSent(service, 'PUT /v1/me/payment-handles/zelle')).toEqual({ value: '+12025550142' })
+  const rows = [...document.querySelectorAll('.payment-row')].map((row) => row.querySelector('h2')!.textContent)
+  expect(rows).toEqual(['Venmo', 'Zelle'])
+  expect(document.body.textContent).toContain('(202) 555-0142')
+  expect(await violations()).toEqual([])
 
-  await press(button(w.remove))
-  await until(() => section.textContent!.includes(w.removed), 'removed')
-  expect(service.sent.some((sent) => sent.call === 'DELETE /v1/me/payment-handles')).toBe(true)
-  expect((field(w.venmoLabel) as HTMLInputElement).value).toBe('')
+  // Edit: the same field, filled in; cancelling goes back to its Edit button.
+  await press(named(fill(w.editWhat, 'Zelle'))!)
+  await until(() => document.activeElement?.textContent === fill(w.editHeading, 'Zelle'), 'editing')
+  expect((field(w.zelleLabel) as HTMLInputElement).value).toBe('(202) 555-0142')
+  await press(button(wording.common.cancel))
+  await until(() => document.activeElement === named(fill(w.editWhat, 'Zelle')), 'back on Edit')
+  await press(named(fill(w.editWhat, 'Venmo'))!)
+  await type(field(w.venmoLabel), 'ana-fixes')
+  await press(button(w.saveOne))
+  await until(() => document.body.textContent!.includes('ana-fixes'), 'edited')
+  expect(lastSent(service, 'PUT /v1/me/payment-handles/venmo')).toEqual({ value: 'ana-fixes' })
+
+  // Remove asks first, in a dialog on the page; keeping it changes nothing.
+  await press(named(fill(w.removeWhat, 'Venmo'))!)
+  await until(() => document.querySelector('dialog.confirm') !== null, 'the confirmation')
+  let dialog = document.querySelector('dialog.confirm') as HTMLDialogElement
+  expect(dialog.getAttribute('role')).toBe('alertdialog')
+  expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent).toBe(
+    fill(w.confirmTitle, 'Venmo'),
+  )
+  expect(document.getElementById(dialog.getAttribute('aria-describedby')!)?.textContent).toBe(w.confirmText)
+  expect(document.activeElement).toBe(button(w.keep))
+  expect(await violations()).toEqual([])
+  await press(button(w.keep))
+  await until(() => document.querySelector('dialog.confirm') === null, 'kept')
+  expect(document.activeElement).toBe(named(fill(w.removeWhat, 'Venmo')))
+  expect(service.sent.some((sent) => sent.call.startsWith('DELETE'))).toBe(false)
+
+  await press(named(fill(w.removeWhat, 'Venmo'))!)
+  await until(() => document.querySelector('dialog.confirm') !== null, 'the confirmation')
+  await press(button(fill(w.removeWhat, 'Venmo')))
+  await until(() => document.activeElement?.textContent === fill(w.removedOne, 'Venmo'), 'removed, and said')
+  expect(service.sent.some((sent) => sent.call === 'DELETE /v1/me/payment-handles/venmo')).toBe(true)
+  expect(document.querySelectorAll('.payment-row').length).toBe(1)
+
+  // The last one: the confirmation says it turns them off on every yup.
+  service.shown.add(ACTIVE)
+  await press(named(fill(w.removeWhat, 'Zelle'))!)
+  await until(() => document.querySelector('dialog.confirm') !== null, 'the confirmation')
+  dialog = document.querySelector('dialog.confirm') as HTMLDialogElement
+  expect(document.getElementById(dialog.getAttribute('aria-describedby')!)?.textContent).toBe(w.confirmLast)
+  await press(button(fill(w.removeWhat, 'Zelle')))
+  await until(() => document.activeElement?.textContent === fill(w.removedLast, 'Zelle'), 'the last removed')
+  expect(service.shown.size).toBe(0)
+  expect(document.body.textContent).toContain(w.empty)
+})
+
+test('with all four added there is nothing left to add, and a refusal is said', async () => {
+  const { service, wording } = await start('/account/payments', ana, 'en', (fake) => {
+    fake.handles = { ...DANA }
+  })
+  const w = wording.payments
+  await until(() => document.querySelectorAll('.payment-row').length === 4, 'four rows')
+  expect([...document.querySelectorAll('button')].some((b) => b.textContent === w.add)).toBe(false)
+  expect(document.body.textContent).toContain(w.allAdded)
+
+  service.refuseHandles = 'TOO_MANY_REQUESTS'
+  await press(named(fill(w.editWhat, 'PayPal'))!)
+  await type(field(w.paypalLabel), 'AnaPays')
+  await press(button(w.saveOne))
+  await until(() => document.body.textContent!.includes(wording.errors.TOO_MANY_REQUESTS), 'refused')
+  // Still editing, with what was typed.
+  expect((field(w.paypalLabel) as HTMLInputElement).value).toBe('AnaPays')
 })
 
 test('a payee shows their options on a yup with a box that is off until ticked', async () => {
@@ -84,6 +197,8 @@ test('a payee shows their options on a yup with a box that is off until ticked',
   expect(document.getElementById(box.getAttribute('aria-describedby')!)?.textContent).toBe(
     w.showHint.replace('{name}', 'Ben Ortiz'),
   )
+  const manage = [...document.querySelectorAll('a')].find((a) => a.textContent === w.manage)
+  expect(manage?.getAttribute('href')).toBe('/account/payments')
   await press(box)
   await until(() => service.shown.has(ACTIVE), 'shown')
   expect(lastSent(service, `PUT /v1/exchanges/${ACTIVE}/payment-options`)).toEqual({ on: true })
@@ -94,12 +209,12 @@ test('a payee shows their options on a yup with a box that is off until ticked',
   expect(await violations()).toEqual([])
 })
 
-test('a payee with nothing saved is pointed to the account instead', async () => {
+test('a payee with nothing saved is pointed to the payment options screen instead', async () => {
   const { wording } = await start(`/exchanges/${ACTIVE}`, ana)
   const w = wording.payments
   await until(() => sectionHeaded(w.showHeading) !== null, 'the payment options box')
   const link = [...document.querySelectorAll('a')].find((a) => a.textContent === w.addInAccount)
-  expect(link?.getAttribute('href')).toBe('/account')
+  expect(link?.getAttribute('href')).toBe('/account/payments')
 })
 
 test('the payer sees Pay, and a dialog of text-only links with the amount and note', async () => {

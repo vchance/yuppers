@@ -1,5 +1,5 @@
 import type { Account, ErrorCode, ExchangeView } from '@yuppers/api-client';
-import type { RevisionView, Wording } from '@yuppers/shared';
+import type { PaymentHandles, RevisionView, Wording } from '@yuppers/shared';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { answerRecordAndSafety } from './fake-record';
@@ -172,6 +172,8 @@ export interface FakeService {
   textUpdates: Set<string>;
   /** Whether the account's number replied STOP. */
   optedOut: boolean;
+  /** The account's own payment options. */
+  handles: PaymentHandles;
   fetch: typeof fetch;
 }
 
@@ -192,6 +194,7 @@ export function fakeService(): FakeService {
     texting: true,
     textUpdates: new Set(),
     optedOut: false,
+    handles: { venmo: null, cash_app: null, paypal: null, zelle: null },
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const text = await request.text();
@@ -279,6 +282,14 @@ function respond(
   }
 
   if (call === 'GET /v1/me') return [200, service.account];
+  if (call === 'GET /v1/me/payment-handles') return [200, service.handles];
+  const oneHandle = /^(PUT|DELETE) \/v1\/me\/payment-handles\/(venmo|cash_app|paypal|zelle)$/.exec(call);
+  if (oneHandle) {
+    const kind = oneHandle[2] as keyof PaymentHandles;
+    const value = oneHandle[1] === 'PUT' ? (body as { value: string }).value : null;
+    service.handles = { ...service.handles, [kind]: value };
+    return [200, service.handles];
+  }
   if (call === 'POST /v1/me/identifiers') {
     const { code, identifier } = body as { code: string; identifier: string };
     if (code !== '123456') return [401, { code: 'INVALID_CODE' }];

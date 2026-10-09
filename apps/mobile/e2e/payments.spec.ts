@@ -22,13 +22,37 @@ test('the payee shows payment options; the payer opens the app and says they pai
   await signUp(ana)
   await ana.page.getByRole('link', { name: en.nav.account }).click()
   await expect(title(ana.page, en.nav.account)).toBeVisible()
-  await expect(ana.page.getByLabel(w.venmoLabel, { exact: true })).toBeEditable()
-  await ana.page.getByLabel(w.venmoLabel, { exact: true }).fill('@ana-fixes')
+  // One row on the account; its own screen, where each app is added on its own.
+  await button(ana.page, `${w.heading}, ${w.noneAdded}`).click()
+  await expect(title(ana.page, w.heading)).toBeVisible()
+  await expect(ana.page.getByText(w.empty)).toBeVisible()
+  for (const [app, label, value] of [
+    ['venmo', w.venmoLabel, '@ana-fixes'],
+    ['cash_app', w.cashAppLabel, '$AnaFixes'],
+    ['paypal', w.paypalLabel, 'AnaFixes'],
+    ['zelle', w.zelleLabel, 'ana@zelle.example'],
+  ] as const) {
+    await button(ana.page, w.add).click()
+    await button(ana.page, w.apps[app]).click()
+    await ana.page.getByLabel(label, { exact: true }).fill(value)
+    await button(ana.page, w.saveOne).click()
+    await expect(ana.page.getByText(fill(w.savedOne, { app: w.apps[app] }))).toBeVisible()
+  }
+  await expect(button(ana.page, w.add)).toHaveCount(0)
+  // Edited, and one removed after asking, then added back.
+  await button(ana.page, fill(w.editWhat, { app: 'PayPal' })).click()
+  await expect(ana.page.getByLabel(w.paypalLabel, { exact: true })).toHaveValue('AnaFixes')
+  await button(ana.page, en.common.cancel).click()
+  await button(ana.page, fill(w.removeWhat, { app: 'Cash App' })).click()
+  const confirm = ana.page.getByTestId('payment-confirm')
+  await expect(confirm.getByText(w.confirmText)).toBeVisible()
+  await button(confirm, fill(w.removeWhat, { app: 'Cash App' })).click()
+  await expect(ana.page.getByText(fill(w.removedOne, { app: 'Cash App' }))).toBeVisible()
+  await button(ana.page, w.add).click()
+  await button(ana.page, w.apps.cash_app).click()
   await ana.page.getByLabel(w.cashAppLabel, { exact: true }).fill('$AnaFixes')
-  await ana.page.getByLabel(w.paypalLabel, { exact: true }).fill('AnaFixes')
-  await ana.page.getByLabel(w.zelleLabel, { exact: true }).fill('ana@zelle.example')
-  await button(ana.page, w.save).click()
-  await expect(ana.page.getByText(w.saved)).toBeVisible()
+  await button(ana.page, w.saveOne).click()
+  await expect(ana.page.getByText(fill(w.savedOne, { app: 'Cash App' }))).toBeVisible()
 
   // Ana proposes the fence job from a second session of hers; Ben signs in the app.
   const anaApi = await ApiPerson.signUp('Ana', ana.email)

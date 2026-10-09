@@ -215,6 +215,30 @@ describe('every word on the main mobile screens comes from the wording', () => {
     expect([...found]).toEqual([]);
   });
 
+  test('payment options: the list, choosing an app, its field and removing one', async () => {
+    // A number for Zelle has no letters of its own.
+    await open('/account/payments', true, (fake) => {
+      fake.handles = { venmo: null, cash_app: null, paypal: null, zelle: '+12025550142' };
+    });
+    await screen.findByText('(202) 555-0142');
+    check();
+    await fireEvent.press(screen.getByRole('button', { name: w.payments.add }));
+    check();
+    await fireEvent.press(screen.getByRole('button', { name: w.payments.apps.paypal }));
+    await fireEvent.press(screen.getByRole('button', { name: w.payments.saveOne }));
+    await screen.findByText(w.payments.paypalInvalid);
+    check();
+    await fireEvent.press(screen.getByRole('button', { name: w.common.cancel }));
+    await fireEvent.press(
+      await screen.findByRole('button', {
+        name: w.payments.removeWhat.replace('{app}', w.payments.apps.zelle),
+      }),
+    );
+    await screen.findByText(w.payments.confirmLast);
+    check();
+    expect([...found]).toEqual([]);
+  });
+
   test('notifications: the offer on the list, the switch, and a phone-only account', async () => {
     notifications.projectId = 'test-project-id';
     try {

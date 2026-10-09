@@ -7,7 +7,7 @@ import { Appearance } from '../components/Appearance'
 import { BuildVersion } from '../components/BuildVersion'
 import { Identifiers } from '../components/Identifiers'
 import { LegalLink } from '../components/LegalLink'
-import { PaymentHandles } from '../components/PaymentHandles'
+import { PaymentOptionsRow } from '../components/PaymentOptionsRow'
 import { PageHeading } from '../components/ui'
 import { api } from '../lib/api'
 import { BlockedPeople } from './BlockedPeople'
@@ -43,7 +43,7 @@ export default function AccountPage() {
       <PageHeading>{w.title}</PageHeading>
       <Identifiers account={account} />
       <ProfileForm account={account} first={false} />
-      <PaymentHandles />
+      <PaymentOptionsRow />
       <Appearance />
       <BlockedPeople />
       <hr />

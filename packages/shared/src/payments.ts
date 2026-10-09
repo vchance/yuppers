@@ -118,36 +118,38 @@ export function normalizeHandle(app: PaymentApp, input: string): string | null {
   return input.trim() === '' ? '' : NORMALIZE[app](input)
 }
 
-/** Payment options as typed, one string per app. */
-export type HandleInputs = Record<PaymentApp, string>
+/**
+ * A saved option as its owner sees it, in the list and in its field: as
+ * stored, with a US number for Zelle written `(202) 555-0142`. `''` for one
+ * not saved.
+ */
+export function handleShown(app: PaymentApp, saved: PaymentHandles | null | undefined): string {
+  const value = saved?.[app]
+  if (!value) return ''
+  return app === 'zelle' ? zelleShown(value) : value
+}
 
-export const NO_HANDLE_INPUTS: HandleInputs = { venmo: '', cash_app: '', paypal: '', zelle: '' }
+/** The apps with an option saved, in the apps' order. */
+export function addedApps(saved: PaymentHandles | null | undefined): PaymentApp[] {
+  return PAYMENT_APPS.filter((app) => Boolean(saved?.[app]))
+}
 
-/** What was saved, for filling the form. */
-export function handleInputs(saved: PaymentHandles | null | undefined): HandleInputs {
-  return {
-    venmo: saved?.venmo ?? '',
-    cash_app: saved?.cash_app ?? '',
-    paypal: saved?.paypal ?? '',
-    zelle: saved?.zelle ? zelleShown(saved.zelle) : '',
-  }
+/** The apps that can still be added: those with nothing saved. */
+export function appsToAdd(saved: PaymentHandles | null | undefined): PaymentApp[] {
+  return PAYMENT_APPS.filter((app) => !saved?.[app])
 }
 
 /**
- * The form's options as the service takes them, or the apps whose entry is
- * not one. An empty entry is no option.
+ * The account row's summary: the names of the apps added, such as
+ * "Venmo, Zelle", or `none` with none added.
  */
-export function readHandles(
-  inputs: HandleInputs,
-): { handles: PaymentHandles; invalid: PaymentApp[] } {
-  const handles: PaymentHandles = { venmo: null, cash_app: null, paypal: null, zelle: null }
-  const invalid: PaymentApp[] = []
-  for (const app of PAYMENT_APPS) {
-    const value = normalizeHandle(app, inputs[app])
-    if (value === null) invalid.push(app)
-    else handles[app] = value === '' ? null : value
-  }
-  return { handles, invalid }
+export function paymentOptionsSummary(
+  saved: PaymentHandles | null | undefined,
+  names: Record<PaymentApp, string>,
+  none: string,
+): string {
+  const added = addedApps(saved)
+  return added.length === 0 ? none : added.map((app) => names[app]).join(', ')
 }
 
 export function hasAnyHandle(handles: PaymentHandles | null | undefined): boolean {
@@ -327,68 +329,147 @@ export function paymentOptionsKey(exchange: Pick<ExchangeView, 'payment_options'
 
 export type PaymentHandlesApi = Pick<
   ExchangeApi,
-  'paymentHandles' | 'setPaymentHandles' | 'removePaymentHandles'
+  'paymentHandles' | 'setPaymentHandle' | 'removePaymentHandle'
 >
 
-/** The account screen's form: load, edit, save, remove. */
-export interface PaymentHandlesForm {
-  /** What is saved, once loaded. */
+/**
+ * Where the payment options screen is: the list of those added, choosing
+ * the app to add, or the one field for adding or editing an app's option.
+ */
+export type PaymentOptionsStep =
+  | { name: 'list' }
+  | { name: 'pick' }
+  | { name: 'field'; app: PaymentApp; adding: boolean }
+
+/** What last happened on the screen, to say so and to put the focus back. */
+export type PaymentOptionsDone =
+  | { what: 'saved'; app: PaymentApp }
+  | { what: 'removed'; app: PaymentApp; last: boolean }
+  /** Adding or editing was cancelled; the focus goes back where it came from. */
+  | { what: 'cancelled'; app: PaymentApp | null }
+
+/** The payment options screen (`usePaymentOptions`). */
+export interface PaymentOptionsScreen {
+  /** What is saved, once loaded; `null` until then. */
   saved: PaymentHandles | null
-  inputs: HandleInputs
-  set(app: PaymentApp, value: string): void
-  /** The apps whose entry is not one, once a save was tried. */
-  invalid: PaymentApp[]
+  /** Why it could not be loaded, if it could not. */
+  loadFailure: ErrorCode | null
+  step: PaymentOptionsStep
+  /** The field's text, while adding or editing. */
+  input: string
+  setInput(value: string): void
+  /** Whether the field's text was found not to be one, once saving was tried. */
+  invalid: boolean
   busy: boolean
+  /** A refusal from the service, for what was last tried. */
   failure: ErrorCode | null
-  /** What last happened, to say so. */
-  done: 'saved' | 'removed' | null
+  done: PaymentOptionsDone | null
+  /** The app whose removal waits to be confirmed. */
+  confirming: PaymentApp | null
+  /** "Add a payment option": choosing the app. */
+  startAdding(): void
+  /** An app chosen: its field, empty. */
+  pick(app: PaymentApp): void
+  /** "Edit": the app's field, filled in with what is saved. */
+  edit(app: PaymentApp): void
+  /** Back to the list without saving. */
+  cancel(): void
   save(): Promise<boolean>
+  /** "Remove": asks first. */
+  askToRemove(app: PaymentApp): void
+  /** Not removing it after all. */
+  keep(): void
+  /** Removing it, once confirmed. */
   remove(): Promise<boolean>
+  /** Loading again, after it failed. */
+  reload(): void
 }
 
-export function usePaymentHandles(api: PaymentHandlesApi): PaymentHandlesForm {
+/**
+ * The payment options screen, the same on both apps: the options added,
+ * each added, changed or removed on its own (`PUT`, `DELETE
+ * /v1/me/payment-handles/{kind}`), so that one is never saved or lost by
+ * accident with another. Removing the last one stops showing them on every
+ * yup; the confirmation says so.
+ */
+export function usePaymentOptions(api: PaymentHandlesApi): PaymentOptionsScreen {
   const [saved, setSaved] = useState<PaymentHandles | null>(null)
-  const [inputs, setInputs] = useState<HandleInputs>(NO_HANDLE_INPUTS)
-  const [invalid, setInvalid] = useState<PaymentApp[]>([])
+  const [loadFailure, setLoadFailure] = useState<ErrorCode | null>(null)
+  const [loads, setLoads] = useState(0)
+  const [step, setStep] = useState<PaymentOptionsStep>({ name: 'list' })
+  const [input, setInputText] = useState('')
+  const [invalid, setInvalid] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
-  const [done, setDone] = useState<'saved' | 'removed' | null>(null)
+  const [done, setDone] = useState<PaymentOptionsDone | null>(null)
+  const [confirming, setConfirming] = useState<PaymentApp | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    setLoadFailure(null)
     api.paymentHandles().then(
       (found) => {
-        if (cancelled) return
-        setSaved(found)
-        setInputs(handleInputs(found))
+        if (!cancelled) setSaved(found)
       },
       (error: unknown) => {
-        if (!cancelled) setFailure(failureCode(error))
+        if (!cancelled) setLoadFailure(failureCode(error))
       },
     )
     return () => {
       cancelled = true
     }
-  }, [api])
+  }, [api, loads])
 
-  const set = useCallback((app: PaymentApp, value: string) => {
-    setInputs((previous) => ({ ...previous, [app]: value }))
-    setInvalid((previous) => previous.filter((other) => other !== app))
-    setDone(null)
+  const reload = useCallback(() => setLoads((count) => count + 1), [])
+
+  const setInput = useCallback((value: string) => {
+    setInputText(value)
+    setInvalid(false)
   }, [])
 
-  const save = useCallback(async () => {
-    const read = readHandles(inputs)
-    setInvalid(read.invalid)
+  const open = useCallback((next: PaymentOptionsStep, text = '') => {
+    setStep(next)
+    setInputText(text)
+    setInvalid(false)
+    setFailure(null)
     setDone(null)
-    if (read.invalid.length > 0) return false
+    setConfirming(null)
+  }, [])
+
+  const startAdding = useCallback(() => open({ name: 'pick' }), [open])
+
+  const pick = useCallback(
+    (app: PaymentApp) => open({ name: 'field', app, adding: true }),
+    [open],
+  )
+
+  const edit = useCallback(
+    (app: PaymentApp) => open({ name: 'field', app, adding: false }, handleShown(app, saved)),
+    [open, saved],
+  )
+
+  const cancel = useCallback(() => {
+    const app = step.name === 'field' && !step.adding ? step.app : null
+    open({ name: 'list' })
+    setDone({ what: 'cancelled', app })
+  }, [open, step])
+
+  const save = useCallback(async () => {
+    if (step.name !== 'field') return false
+    const value = normalizeHandle(step.app, input)
+    // An empty field is not one either: an option is removed with "Remove".
+    if (!value) {
+      setInvalid(true)
+      return false
+    }
     setBusy(true)
     setFailure(null)
     try {
-      const stored = await api.setPaymentHandles(read.handles)
+      const stored = await api.setPaymentHandle(step.app, value)
       setSaved(stored)
-      setInputs(handleInputs(stored))
-      setDone('saved')
+      setStep({ name: 'list' })
+      setInputText('')
+      setDone({ what: 'saved', app: step.app })
       return true
     } catch (error) {
       setFailure(failureCode(error))
@@ -396,49 +477,93 @@ export function usePaymentHandles(api: PaymentHandlesApi): PaymentHandlesForm {
     } finally {
       setBusy(false)
     }
-  }, [api, inputs])
+  }, [api, input, step])
+
+  const askToRemove = useCallback((app: PaymentApp) => {
+    setFailure(null)
+    setDone(null)
+    setConfirming(app)
+  }, [])
+
+  const keep = useCallback(() => setConfirming(null), [])
 
   const remove = useCallback(async () => {
+    const app = confirming
+    if (!app) return false
     setBusy(true)
     setFailure(null)
-    setDone(null)
     try {
-      await api.removePaymentHandles()
-      const none = { venmo: null, cash_app: null, paypal: null, zelle: null }
-      setSaved(none)
-      setInputs(NO_HANDLE_INPUTS)
-      setInvalid([])
-      setDone('removed')
+      const left = await api.removePaymentHandle(app)
+      setSaved(left)
+      setDone({ what: 'removed', app, last: !hasAnyHandle(left) })
       return true
     } catch (error) {
       setFailure(failureCode(error))
       return false
     } finally {
+      setConfirming(null)
       setBusy(false)
     }
-  }, [api])
+  }, [api, confirming])
 
-  return { saved, inputs, set, invalid, busy, failure, done, save, remove }
+  return {
+    saved,
+    loadFailure,
+    step,
+    input,
+    setInput,
+    invalid,
+    busy,
+    failure,
+    done,
+    confirming,
+    startAdding,
+    pick,
+    edit,
+    cancel,
+    save,
+    askToRemove,
+    keep,
+    remove,
+    reload,
+  }
+}
+
+/**
+ * The account's saved payment options, for the account screen's summary
+ * and a yup's box: `undefined` until known, `null` if they cannot be known.
+ * A new `refresh` reads them again, for a screen shown again after they
+ * may have changed elsewhere.
+ */
+export function useSavedPaymentHandles(
+  api: Pick<ExchangeApi, 'paymentHandles'>,
+  refresh = 0,
+): PaymentHandles | null | undefined {
+  const [saved, setSaved] = useState<PaymentHandles | null | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    api.paymentHandles().then(
+      (found) => {
+        if (!cancelled) setSaved(found)
+      },
+      () => {
+        if (!cancelled) setSaved(null)
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [api, refresh])
+  return saved
 }
 
 /** Whether the account has any payment options saved; `null` until known, `false` if it cannot be known. */
-export function useHasPaymentHandles(api: Pick<ExchangeApi, 'paymentHandles'>): boolean | null {
-  const [has, setHas] = useState<boolean | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    api.paymentHandles().then(
-      (found) => {
-        if (!cancelled) setHas(hasAnyHandle(found))
-      },
-      () => {
-        if (!cancelled) setHas(false)
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [api])
-  return has
+export function useHasPaymentHandles(
+  api: Pick<ExchangeApi, 'paymentHandles'>,
+  refresh = 0,
+): boolean | null {
+  const saved = useSavedPaymentHandles(api, refresh)
+  return saved === undefined ? null : hasAnyHandle(saved)
 }
 
 /**
@@ -478,8 +603,10 @@ export function useShowPaymentOptions(
   api: PaymentOptionsApi,
   exchange: Pick<ExchangeView, 'id' | 'payment_options'>,
   onChanged: () => void,
+  /** A new value reads the saved options again, as `useSavedPaymentHandles`. */
+  refresh = 0,
 ): ShowPaymentOptions {
-  const hasHandles = useHasPaymentHandles(api)
+  const hasHandles = useHasPaymentHandles(api, refresh)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [changed, setChanged] = useState<'shown' | 'hidden' | null>(null)

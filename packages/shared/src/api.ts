@@ -602,16 +602,31 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
       return send(() => client.GET('/v1/me/payment-handles', { headers: headers() }))
     },
 
-    /** Saves the account's payment options, replacing what was saved: one left null is removed. */
-    setPaymentHandles(handles: PaymentHandles): Promise<PaymentHandles> {
+    /**
+     * Saves one of the account's payment options, adding or changing it and
+     * leaving the others as they are; answers with all that are now saved.
+     */
+    setPaymentHandle(kind: keyof PaymentHandles, value: string): Promise<PaymentHandles> {
       return send(() =>
-        client.PUT('/v1/me/payment-handles', { headers: headers(), body: handles }),
+        client.PUT('/v1/me/payment-handles/{kind}', {
+          headers: headers(),
+          params: { path: { kind } },
+          body: { value },
+        }),
       )
     },
 
-    /** Removes all of the account's payment options, and stops showing them on every yup. */
-    removePaymentHandles(): Promise<void> {
-      return send(() => client.DELETE('/v1/me/payment-handles', { headers: headers() }))
+    /**
+     * Removes one of the account's payment options, leaving the others; with
+     * none left, they stop being shown on every yup. Answers with what is left.
+     */
+    removePaymentHandle(kind: keyof PaymentHandles): Promise<PaymentHandles> {
+      return send(() =>
+        client.DELETE('/v1/me/payment-handles/{kind}', {
+          headers: headers(),
+          params: { path: { kind } },
+        }),
+      )
     },
 
     /** Shows the account's payment options to the other party of a yup, or stops. */

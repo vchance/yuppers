@@ -55,6 +55,8 @@ test('staff review is /staff, and one report /staff/reports/{id}', () => {
 test('the other pages, and everything else', () => {
   expect(matchRoute('/')).toEqual({ name: 'home' })
   expect(matchRoute('/account')).toEqual({ name: 'account' })
+  expect(matchRoute('/account/payments')).toEqual({ name: 'payments' })
+  expect(matchRoute('/account/payments/')).toEqual({ name: 'payments' })
   for (const path of [
     '/exchanges',
     '/exchanges/not-an-id',

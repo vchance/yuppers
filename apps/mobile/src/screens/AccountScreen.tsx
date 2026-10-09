@@ -7,7 +7,7 @@ import { BuildVersion } from '../components/BuildVersion';
 import { Identifiers } from '../components/Identifiers';
 import { NotificationsSetting } from '../components/Notifications';
 import { LegalLinks } from '../components/LegalLinks';
-import { PaymentHandles } from '../components/PaymentHandles';
+import { PaymentOptionsRow } from '../components/PaymentOptionsRow';
 import { Actions, Button, Heading, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { openHelp } from '../lib/help';
@@ -44,7 +44,7 @@ export function AccountScreen() {
       <Heading>{w.title}</Heading>
       <Identifiers account={account} />
       <ProfileForm account={account} first={false} />
-      <PaymentHandles />
+      <PaymentOptionsRow />
       <NotificationsSetting account={account} />
       <Appearance />
       <BlockedPeople />

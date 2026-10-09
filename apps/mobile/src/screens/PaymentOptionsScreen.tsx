@@ -8,7 +8,7 @@ import {
   type PaymentHandlesApi,
   type PaymentOptionsScreen as Screenful,
 } from '@yuppers/shared';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Modal, StyleSheet, Text, View, type TextInputProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -80,10 +80,11 @@ export function PaymentOptionsScreen({ client = api }: Props) {
     asked.current = null;
   }, [confirming]);
 
-  const track = (key: string) => (control: View | null) => {
+  // Kept by key as each button is drawn, to put a screen reader back on it.
+  const track = useCallback((key: string, control: View | null) => {
     if (control) buttons.current.set(key, control);
     else buttons.current.delete(key);
-  };
+  }, []);
 
   const added = addedApps(saved);
   const toAdd = appsToAdd(saved);
@@ -124,14 +125,14 @@ export function PaymentOptionsScreen({ client = api }: Props) {
                   label={w.edit}
                   accessibilityLabel={fmt(w.editWhat, { app: w.apps[app] })}
                   disabled={screen.busy}
-                  buttonRef={track(`edit-${app}`)}
+                  buttonRef={(control) => track(`edit-${app}`, control)}
                   onPress={() => screen.edit(app)}
                 />
                 <Button
                   label={w.removeOne}
                   accessibilityLabel={fmt(w.removeWhat, { app: w.apps[app] })}
                   disabled={screen.busy}
-                  buttonRef={track(`remove-${app}`)}
+                  buttonRef={(control) => track(`remove-${app}`, control)}
                   onPress={() => {
                     asked.current = app;
                     screen.askToRemove(app);
@@ -147,7 +148,7 @@ export function PaymentOptionsScreen({ client = api }: Props) {
                 variant="primary"
                 label={w.add}
                 disabled={screen.busy}
-                buttonRef={track('add')}
+                buttonRef={(control) => track('add', control)}
                 onPress={screen.startAdding}
               />
             </Actions>

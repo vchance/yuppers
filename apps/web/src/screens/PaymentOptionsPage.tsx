@@ -7,7 +7,7 @@ import {
   type PaymentApp,
   type PaymentOptionsScreen,
 } from '@yuppers/shared'
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
@@ -45,7 +45,7 @@ export default function PaymentOptionsPage() {
   const addButton = useRef<HTMLButtonElement>(null)
   const rowButtons = useRef(new Map<string, HTMLButtonElement>())
   // The Remove button whose dialog was last opened, to go back to if the option is kept.
-  const [asked, setAsked] = useState<PaymentApp | null>(null)
+  const asked = useRef<PaymentApp | null>(null)
 
   const { done, confirming, step } = screen
   useEffect(() => {
@@ -59,11 +59,11 @@ export default function PaymentOptionsPage() {
   }, [done])
 
   useEffect(() => {
-    if (confirming || !asked) return
+    if (confirming || !asked.current) return
     // Kept: back to its Remove button. Removed: `done` takes the focus instead.
-    rowButtons.current.get(`remove-${asked}`)?.focus()
-    setAsked(null)
-  }, [confirming, asked])
+    rowButtons.current.get(`remove-${asked.current}`)?.focus()
+    asked.current = null
+  }, [confirming])
 
   const saved = screen.saved
   const added = addedApps(saved)
@@ -136,7 +136,7 @@ export default function PaymentOptionsPage() {
                         else rowButtons.current.delete(`remove-${app}`)
                       }}
                       onClick={() => {
-                        setAsked(app)
+                        asked.current = app
                         screen.askToRemove(app)
                       }}
                     >

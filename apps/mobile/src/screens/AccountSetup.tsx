@@ -36,6 +36,7 @@ import {
   Screen,
   TextField,
 } from '../components/ui';
+import { BrandHero } from '../components/Brand';
 import { ConsentCheckbox } from '../components/ConsentCheckbox';
 import { LegalLinks } from '../components/LegalLinks';
 import { useI18n, useSession } from '../lib/context';
@@ -49,14 +50,21 @@ const languageOptions = languages.map((info) => ({ value: info.code, label: info
  * one-time code, then, for a new account, the profile. It shows whichever
  * step is next and nothing once both are done, so it can stand in for any
  * screen that needs an account.
+ *
+ * As a screen of its own it opens with the brand (`BrandHero`), taking over
+ * from the launch screen: the first thing someone sees of the product should
+ * look like the product. Below an invitation, which has a heading of its own,
+ * the steps open plain.
  */
 export function AccountSetup({ headingLevel = 1 }: { headingLevel?: 1 | 2 }) {
   const { wording } = useI18n();
   const { account } = useSession();
+  const standalone = headingLevel === 1;
 
   if (!account) {
     return (
       <>
+        {standalone ? <BrandHero /> : null}
         <Heading level={headingLevel}>{wording.signIn.title}</Heading>
         <SignIn />
       </>
@@ -65,6 +73,7 @@ export function AccountSetup({ headingLevel = 1 }: { headingLevel?: 1 | 2 }) {
   if (!isComplete(account)) {
     return (
       <>
+        {standalone ? <BrandHero /> : null}
         <Heading level={headingLevel}>{wording.profile.firstTitle}</Heading>
         <P>{wording.profile.firstIntro}</P>
         <ProfileForm account={account} first />

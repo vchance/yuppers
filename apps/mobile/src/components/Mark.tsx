@@ -20,6 +20,7 @@ export function Mark({ width, check = false }: { width: number; check?: boolean 
   const circle = { width: size, height: size, borderRadius: size / 2 };
   return (
     <View
+      testID="mark"
       aria-hidden
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"

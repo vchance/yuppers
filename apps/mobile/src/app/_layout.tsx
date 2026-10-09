@@ -89,7 +89,14 @@ function Navigation() {
               // `h1` above the screen's (React Navigation marks it as one);
               // there it is plain text. A device keeps the system's own bar,
               // whose title VoiceOver and TalkBack already treat as a heading.
-              headerTitle: Platform.OS === 'web' ? NavigationTitle : undefined,
+              // An element, not the component: the bar calls `headerTitle` as
+              // a plain function, so a component's hooks would run as the
+              // bar's own, and a screen that sets a title of its own
+              // (`index.tsx`) would then change how many hooks the bar has.
+              headerTitle:
+                Platform.OS === 'web'
+                  ? ({ children }) => <NavigationTitle>{children}</NavigationTitle>
+                  : undefined,
               headerStyle: { backgroundColor: colors.background },
               contentStyle: { backgroundColor: colors.background },
               animation: reduceMotion ? 'none' : 'default',

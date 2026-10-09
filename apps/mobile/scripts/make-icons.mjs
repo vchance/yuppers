@@ -114,6 +114,11 @@ png(join(assets, 'android-icon-background.png'), 512, svg(512, '', { background:
 png(join(assets, 'android-icon-foreground.png'), 512, svg(512, mark({ size: 512, width: 300, colors: LIGHT })))
 png(join(assets, 'android-icon-monochrome.png'), 432, svg(432, mark({ size: 432, width: 252, rings: '#FFFFFF' })))
 
-// The splash image: the app icon's tile, rounded, on the app's background in
-// light and in dark (app.json, the expo-splash-screen plugin).
-png(join(assets, 'splash-icon.png'), 1024, svg(1024, mark({ size: 1024, width: 800, colors: LIGHT }), { background: INK, radius: 230 }))
+// The splash images: the mark alone, with no tile, on the app's background in
+// light and in dark (app.json, the expo-splash-screen plugin), each in that
+// palette's colours. It is the picture the sign-in screen then opens with
+// (src/components/Brand.tsx), so the app does not drop from its mark into a
+// plain form. The mark fills the image's width, so `imageWidth` in app.json
+// is the mark's own width on screen.
+png(join(assets, 'splash-icon.png'), 1024, svg(1024, mark({ size: 1024, width: 1024, colors: LIGHT })))
+png(join(assets, 'splash-icon-dark.png'), 1024, svg(1024, mark({ size: 1024, width: 1024, colors: DARK })))

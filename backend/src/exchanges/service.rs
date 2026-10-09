@@ -617,10 +617,7 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
                 other_party_name: row.other_name,
                 updated_at: rfc3339(row.updated_at),
                 counterparty,
-                invitation_shared_at: row
-                    .shared_at
-                    .filter(|_| waiting_for_a_claim)
-                    .map(rfc3339),
+                invitation_shared_at: row.shared_at.filter(|_| waiting_for_a_claim).map(rfc3339),
             }
         })
         .collect())

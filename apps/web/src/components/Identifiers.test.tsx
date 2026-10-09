@@ -69,7 +69,12 @@ test('a phone number is added after a code to the email, with a code by text onc
   expect(sent(service, 'POST /v1/auth/codes').at(-1)).toMatchObject({ identifier: '+18565488780' })
   await type(field(wording.signIn.codeLabel), GOOD_CODE)
   await press(button(w.confirm))
-  await until(() => text().includes('(856) 548-8780') && !text().includes(w.none), 'the number added')
+  // The account's own rows: the payment options row below says "None added" too.
+  const noneShown = () =>
+    [...document.querySelectorAll('.identifier-row dd > span:first-child')].some(
+      (shown) => shown.textContent === w.none,
+    )
+  await until(() => text().includes('(856) 548-8780') && !noneShown(), 'the number added')
   expect(text()).toContain(formatMessage(w.added, { identifier: '(856) 548-8780' }, 'en'))
   expect(sent(service, 'POST /v1/me/identifiers').at(-1)).toEqual({
     identifier: '+18565488780',

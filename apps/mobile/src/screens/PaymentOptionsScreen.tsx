@@ -172,7 +172,7 @@ export function PaymentOptionsScreen({ client = api }: Props) {
             ))}
           </Actions>
           <Actions>
-            <Button variant="link" label={wording.common.cancel} onPress={screen.cancel} />
+            <Button label={wording.common.cancel} onPress={screen.cancel} />
           </Actions>
         </>
       ) : null}

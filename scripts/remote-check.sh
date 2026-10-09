@@ -50,6 +50,9 @@ psql_admin "CREATE DATABASE $db OWNER exchange"
 export MIGRATION_DATABASE_URL="$base/$db" DATABASE_URL="$app_url/$db"
 sed -i -E "s|^MIGRATION_DATABASE_URL=.*|MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL|; s|^DATABASE_URL=.*|DATABASE_URL=$DATABASE_URL|" .env
 export CARGO_TARGET_DIR="$repo/backend/target"
+# The end-to-end suites look for the binaries under the checkout; they are in
+# the shared target directory instead.
+export E2E_API_BIN="$CARGO_TARGET_DIR/debug/api" E2E_WORKER_BIN="$CARGO_TARGET_DIR/debug/worker" E2E_STAFF_BIN="$CARGO_TARGET_DIR/debug/staff"
 
 status=0
 step() { echo "== $1"; shift; if "$@" </dev/null; then echo "   ok"; else echo "   FAILED"; status=1; fi; }
@@ -57,8 +60,10 @@ step() { echo "== $1"; shift; if "$@" </dev/null; then echo "   ok"; else echo "
 if [ "$what" = all ] || [ "$what" = web ] || [ "$what" = e2e ]; then
   step "npm ci" npm ci --silent
 fi
-if [ "$what" = all ] || [ "$what" = backend ]; then
+if [ "$what" != web ]; then
   step "migrate" bash -c 'cd backend && cargo run -q --bin migrate >/dev/null'
+fi
+if [ "$what" = all ] || [ "$what" = backend ]; then
   step "cargo fmt" bash -c 'cd backend && cargo fmt --check'
   step "cargo clippy" bash -c 'cd backend && cargo clippy -q --all-targets -- -D warnings'
   step "cargo test" bash -c 'cd backend && cargo test -q --no-fail-fast 2>&1 | tee /tmp/'"$tag"'.cargo.log | grep -E "^test result: FAILED|^---- " ; ! grep -q "test result: FAILED" /tmp/'"$tag"'.cargo.log'

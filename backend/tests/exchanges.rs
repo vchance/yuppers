@@ -1270,6 +1270,88 @@ async fn invitation_links_cannot_be_reissued_without_limit() {
 }
 
 #[tokio::test]
+async fn the_initiator_records_having_shared_the_link_and_is_shown_it_back() {
+    let app = app().await;
+    let deal = app.negotiating().await;
+    let shared = format!("/v1/exchanges/{}/invitation/shared", deal.exchange);
+
+    // Nothing shared yet: the view says so, and so does the list, which also
+    // says nobody is in the invited party's place.
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    assert_eq!(view["invitation_open"], true);
+    assert!(view["invitation_shared_at"].is_null());
+    let listed = app.get(&deal.ana, "/v1/exchanges").await.ok();
+    assert_eq!(listed[0]["counterparty"], "UNCLAIMED");
+    assert!(listed[0]["invitation_shared_at"].is_null());
+
+    // Only the initiator has a link to send; to anyone else the exchange
+    // does not exist.
+    let stranger = app.user("Sam").await;
+    app.post(&stranger, &shared, json!({}))
+        .await
+        .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+
+    // Recorded, and again: the latest time is kept.
+    let first = app.post(&deal.ana, &shared, json!({})).await;
+    assert_eq!(first.status, StatusCode::NO_CONTENT);
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    let at = view["invitation_shared_at"].as_str().unwrap().to_owned();
+    assert!(moment(&view["invitation_shared_at"]) <= time::OffsetDateTime::now_utc());
+    let listed = app.get(&deal.ana, "/v1/exchanges").await.ok();
+    assert_eq!(listed[0]["invitation_shared_at"], at);
+    let again = app.post(&deal.ana, &shared, json!({})).await;
+    assert_eq!(again.status, StatusCode::NO_CONTENT);
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    assert!(moment(&view["invitation_shared_at"]) >= moment(&json!(at)));
+
+    // A new link has not been shared: the old one's time does not carry over.
+    app.post(
+        &deal.ana,
+        &format!("/v1/exchanges/{}/invitation", deal.exchange),
+        json!({ "for_anyone": true }),
+    )
+    .await
+    .ok();
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    assert_eq!(view["invitation_open"], true);
+    assert!(view["invitation_shared_at"].is_null());
+    let shared_again = app.post(&deal.ana, &shared, json!({})).await;
+    assert_eq!(shared_again.status, StatusCode::NO_CONTENT);
+
+    // Once someone has joined there is nothing left to send, and the view
+    // and the list say nothing about sharing to either party.
+    let ben = app.user("Ben").await;
+    let newer = app
+        .post(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/invitation", deal.exchange),
+            json!({ "for_anyone": true }),
+        )
+        .await
+        .ok();
+    app.post(
+        &ben,
+        "/v1/invitations/claim",
+        json!({ "token": newer["invitation_token"] }),
+    )
+    .await
+    .ok();
+    app.post(&deal.ana, &shared, json!({}))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    app.post(&ben, &shared, json!({}))
+        .await
+        .refused(StatusCode::FORBIDDEN, "WRONG_ACTOR");
+    for user in [&deal.ana, &ben] {
+        let view = app.view(user, &deal.exchange).await;
+        assert!(view["invitation_shared_at"].is_null());
+        let listed = app.get(user, "/v1/exchanges").await.ok();
+        assert_eq!(listed[0]["counterparty"], "CLAIMED");
+        assert!(listed[0]["invitation_shared_at"].is_null());
+    }
+}
+
+#[tokio::test]
 async fn the_claim_is_recorded_with_who_claimed() {
     let app = app().await;
     let deal = app.active().await;

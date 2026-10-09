@@ -9,9 +9,10 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::dto::{
-    BoundAddress, Claimant, CommandDto, Consent, CreateExchange, ExchangeSummary, ExchangeView,
-    InvitationIssued, InvitationOptions, InvitationPreview, PaymentOptionsView, RevisionSent,
-    RevisionView, RunCommand, SendRevision, ViewContext, rfc3339, state_dto,
+    BoundAddress, Claimant, CommandDto, Consent, CounterpartyDto, CreateExchange, ExchangeSummary,
+    ExchangeView, InvitationIssued, InvitationOptions, InvitationPreview, PaymentOptionsView,
+    RevisionSent, RevisionView, RunCommand, SendRevision, StateDto, ViewContext, rfc3339,
+    state_dto,
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
@@ -307,19 +308,24 @@ async fn view(
     let waiting_for_a_claim = you == Slot::A
         && aggregate.exchange.state == State::Negotiating
         && aggregate.exchange.counterparty == Counterparty::Unclaimed;
-    let invitation_open = if waiting_for_a_claim {
-        let open: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM invitation
-                            WHERE exchange_id = $1 AND claimed_by IS NULL
-                              AND revoked_at IS NULL AND expires_at > $2)",
+    // With it, whether they have opened a way to send that link yet: Yuppers
+    // never sends it for them, so until they do, nobody can join.
+    let (invitation_open, invitation_shared_at) = if waiting_for_a_claim {
+        let live: Option<(Option<OffsetDateTime>,)> = sqlx::query_as(
+            "SELECT shared_at FROM invitation
+             WHERE exchange_id = $1 AND claimed_by IS NULL
+               AND revoked_at IS NULL AND expires_at > $2",
         )
         .bind(id)
         .bind(now())
-        .fetch_one(&mut *conn)
+        .fetch_optional(&mut *conn)
         .await?;
-        Some(open)
+        (
+            Some(live.is_some()),
+            live.and_then(|(shared_at,)| shared_at).map(rfc3339),
+        )
     } else {
-        None
+        (None, None)
     };
 
     let draft: Option<Value> = sqlx::query_scalar(
@@ -382,6 +388,7 @@ async fn view(
         ViewContext {
             claimant,
             invitation_open,
+            invitation_shared_at,
             other_party_left,
             draft,
             status_since,
@@ -542,53 +549,80 @@ pub async fn create(
 }
 
 /// id, display code, state, closed outcome, closed reason, the caller's slot,
-/// the other party's name, last change.
-type SummaryRow = (
-    Uuid,
-    String,
-    String,
-    Option<String>,
-    Option<String>,
-    String,
-    String,
-    OffsetDateTime,
-);
+/// the other party's name, last change, whether someone is in the invited
+/// party's place and whether the initiator has confirmed them, and when the
+/// link that can still bring someone in was last shared.
+#[derive(sqlx::FromRow)]
+struct SummaryRow {
+    id: Uuid,
+    display_code: String,
+    state: String,
+    closed_outcome: Option<String>,
+    closed_reason: Option<String>,
+    slot: String,
+    other_name: String,
+    updated_at: OffsetDateTime,
+    claimed: bool,
+    confirmed: bool,
+    shared_at: Option<OffsetDateTime>,
+}
 
 pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>, ApiError> {
     let rows: Vec<SummaryRow> = sqlx::query_as(
         "SELECT e.id, e.display_code, e.state, e.closed_outcome, e.closed_reason,
-                    mine.slot, other.display_name, e.updated_at
+                    mine.slot, other.display_name AS other_name, e.updated_at,
+                    invited.account_id IS NOT NULL AS claimed,
+                    invited.initiator_confirmed_at IS NOT NULL AS confirmed,
+                    (SELECT i.shared_at FROM invitation i
+                      WHERE i.exchange_id = e.id AND i.claimed_by IS NULL
+                        AND i.revoked_at IS NULL AND i.expires_at > $2) AS shared_at
              FROM participant mine
              JOIN exchange e ON e.id = mine.exchange_id
              JOIN participant other ON other.exchange_id = e.id AND other.slot <> mine.slot
+             JOIN participant invited ON invited.exchange_id = e.id AND invited.slot = 'B'
              WHERE mine.account_id = $1
              ORDER BY e.updated_at DESC
              LIMIT 100",
     )
     .bind(session.account_id)
+    .bind(now())
     .fetch_all(db)
     .await?;
 
     Ok(rows
         .into_iter()
-        .map(
-            |(id, display_code, state, outcome, reason, slot, other, updated_at)| {
-                let (state, closed_outcome) = state_dto(repo::parse_state(
-                    &state,
-                    outcome.as_deref(),
-                    reason.as_deref(),
-                ));
-                ExchangeSummary {
-                    id,
-                    display_code,
-                    state,
-                    closed_outcome,
-                    you: if slot == "A" { Slot::A } else { Slot::B },
-                    other_party_name: other,
-                    updated_at: rfc3339(updated_at),
-                }
-            },
-        )
+        .map(|row| {
+            let (state, closed_outcome) = state_dto(repo::parse_state(
+                &row.state,
+                row.closed_outcome.as_deref(),
+                row.closed_reason.as_deref(),
+            ));
+            let you = if row.slot == "A" { Slot::A } else { Slot::B };
+            let counterparty = match (row.claimed, row.confirmed) {
+                (false, _) => CounterpartyDto::Unclaimed,
+                (true, false) => CounterpartyDto::Claimed,
+                (true, true) => CounterpartyDto::Confirmed,
+            };
+            // As on the view: said to the initiator alone, and only while the
+            // link they hold is what brings the other party in.
+            let waiting_for_a_claim = you == Slot::A
+                && state == StateDto::Negotiating
+                && counterparty == CounterpartyDto::Unclaimed;
+            ExchangeSummary {
+                id: row.id,
+                display_code: row.display_code,
+                state,
+                closed_outcome,
+                you,
+                other_party_name: row.other_name,
+                updated_at: rfc3339(row.updated_at),
+                counterparty,
+                invitation_shared_at: row
+                    .shared_at
+                    .filter(|_| waiting_for_a_claim)
+                    .map(rfc3339),
+            }
+        })
         .collect())
 }
 
@@ -1093,6 +1127,35 @@ pub async fn reissue_invitation(
 
     tx.commit().await?;
     Ok(InvitationIssued { invitation_token })
+}
+
+/// Records that the initiator opened a way to pass the current link on: the
+/// share sheet, a text message, an email, WhatsApp, a copy or its QR code.
+/// Yuppers never sends the link itself (DESIGN.md §8), so this is all the
+/// service can know of it, and it says only that, not that the link arrived.
+/// The latest time is kept, so sending it again after a while shows as such.
+/// Nothing to record once someone is in the invited party's place.
+pub async fn invitation_shared(db: &PgPool, session: &Session, id: Uuid) -> Result<(), ApiError> {
+    let mut tx = db.begin().await?;
+    let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+    if slot != Slot::A {
+        return Err(ErrorCode::WrongActor.into());
+    }
+    if aggregate.exchange.state != State::Negotiating
+        || aggregate.exchange.counterparty != Counterparty::Unclaimed
+    {
+        return Err(ErrorCode::ActionNotAllowed.into());
+    }
+    sqlx::query(
+        "UPDATE invitation SET shared_at = $2
+         WHERE exchange_id = $1 AND claimed_by IS NULL AND revoked_at IS NULL",
+    )
+    .bind(id)
+    .bind(now())
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 struct InvitationRow {

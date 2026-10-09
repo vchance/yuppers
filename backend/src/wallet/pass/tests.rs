@@ -84,6 +84,7 @@ fn view() -> ExchangeView {
         counterparty: CounterpartyDto::Confirmed,
         claimant: None,
         invitation_open: None,
+        invitation_shared_at: None,
         other_party_left: false,
         open_revision: None,
         in_force_revision: Some(revision(Slot::A)),

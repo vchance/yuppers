@@ -167,17 +167,45 @@ impl Texting {
         user
     }
 
-    /// Adds an identifier to a signed-in account, with the code sent to it.
+    /// Adds an identifier to a signed-in account, with the code sent to it
+    /// and a proof of one the account has (`own_proof`).
     pub async fn add(&self, user: &User, identifier: &str) -> Value {
+        let proof = self.own_proof(user).await;
         self.ask(Some(user), identifier).await;
         self.app
             .post(
                 user,
                 "/v1/me/identifiers",
-                json!({ "identifier": identifier, "code": self.code(identifier) }),
+                json!({ "identifier": identifier, "code": self.code(identifier), "proof": proof }),
             )
             .await
             .ok()
+    }
+
+    /// A proof of the user's own email address (or, without one, phone
+    /// number), from a code sent to it: what adding or replacing one takes.
+    pub async fn own_proof(&self, user: &User) -> String {
+        let me = self.app.get(user, "/v1/me").await.ok();
+        let (channel, own) = match me["email"].as_str() {
+            Some(email) => ("EMAIL", email.to_owned()),
+            None => ("PHONE", me["phone"].as_str().unwrap().to_owned()),
+        };
+        self.proof_by(user, channel, &own).await
+    }
+
+    /// A proof of `own`, the user's identifier of `channel`.
+    pub async fn proof_by(&self, user: &User, channel: &str, own: &str) -> String {
+        self.ask(Some(user), own).await;
+        let proved = self
+            .app
+            .post(
+                user,
+                "/v1/me/identifiers/proof",
+                json!({ "channel": channel, "code": self.code(own) }),
+            )
+            .await
+            .ok();
+        proved["proof"].as_str().unwrap().to_owned()
     }
 
     /// Posts a text from `from` to the webhook, signed as Twilio signs it.
@@ -342,6 +370,52 @@ impl Texting {
         .await
         .ok();
 
+        // Dora, signed in by phone, proves her number and Cleo's address and
+        // combines Cleo's account into hers, which tells Cleo's address by
+        // email; a day later she removes her number, with a code sent to
+        // that address.
+        let dora_phone = number();
+        let dora = self.sign_in(&dora_phone, "Dora").await;
+        let proof = self.proof_by(&dora, "PHONE", &dora_phone).await;
+        self.ask(Some(&dora), &cleo_email).await;
+        let reply = app
+            .post(
+                &dora,
+                "/v1/me/identifiers",
+                json!({ "identifier": cleo_email, "code": self.code(&cleo_email), "proof": proof }),
+            )
+            .await;
+        reply.refused(StatusCode::CONFLICT, "IDENTIFIER_ON_OTHER_ACCOUNT");
+        app.post(
+            &dora,
+            "/v1/me/combine",
+            json!({ "token": reply.body["combine"]["token"], "proof": proof }),
+        )
+        .await
+        .ok();
+        sqlx::query(
+            "UPDATE account SET email_added_at = now() - interval '25 hours' WHERE id = $1",
+        )
+        .bind(dora.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+        self.ask(Some(&dora), &cleo_email).await;
+        let me = app
+            .call(
+                Some(&dora),
+                Method::DELETE,
+                "/v1/me/identifiers/phone",
+                Some(json!({ "code": self.code(&cleo_email) })),
+                &[],
+            )
+            .await
+            .ok();
+        assert_eq!(
+            (me["email"].as_str(), me["phone"].clone()),
+            (Some(cleo_email.as_str()), Value::Null)
+        );
+
         // Ben deletes his account with a code by text.
         let reply = app
             .post(
@@ -393,14 +467,21 @@ impl Texting {
                 .unwrap();
         assert_eq!(ben_handles, 0, "a deleted account keeps no payment options");
 
-        [&ana_email, &ben_email, &cleo_email, &ana_phone, &ben_phone]
-            .into_iter()
-            .cloned()
-            .chain([&ana_phone, &ben_phone, &ben_zelle].map(|phone| phone[1..].to_owned()))
-            .chain([
-                ana_venmo, ana_cash, ana_paypal, ana_zelle, ben_venmo, ben_zelle,
-            ])
-            .collect()
+        [
+            &ana_email,
+            &ben_email,
+            &cleo_email,
+            &ana_phone,
+            &ben_phone,
+            &dora_phone,
+        ]
+        .into_iter()
+        .cloned()
+        .chain([&ana_phone, &ben_phone, &ben_zelle, &dora_phone].map(|phone| phone[1..].to_owned()))
+        .chain([
+            ana_venmo, ana_cash, ana_paypal, ana_zelle, ben_venmo, ben_zelle,
+        ])
+        .collect()
     }
 }
 

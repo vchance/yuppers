@@ -220,8 +220,8 @@ describe('inline pieces', () => {
   })
 
   test('the effective date is written in each language', () => {
-    expect(legalEffectiveDate('privacy', 'en')).toBe('October 8, 2026')
-    expect(legalEffectiveDate('terms', 'es')).toBe('8 de octubre de 2026')
+    expect(legalEffectiveDate('privacy', 'en')).toBe('October 9, 2026')
+    expect(legalEffectiveDate('terms', 'es')).toBe('9 de octubre de 2026')
   })
 })
 
@@ -257,6 +257,7 @@ describe('the figures the documents state', () => {
       endedSessionDays: constant(sweep, 'ENDED_SESSION_RETENTION'),
       idempotencyKeyDays: constant(sweep, 'IDEMPOTENCY_KEY_RETENTION'),
       notificationDays: constant(sweep, 'FINISHED_NOTIFICATION_RETENTION'),
+      combineNoticeDays: constant(backend('combine.rs'), 'NOTICE_RETENTION'),
     })
   })
 })

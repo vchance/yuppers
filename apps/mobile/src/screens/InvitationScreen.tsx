@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { YupCard } from '../components/Callouts';
+import { InvitationAddress } from '../components/InvitationAddress';
 import { TermsView } from '../components/TermsView';
 import {
   Actions,
@@ -302,12 +303,25 @@ function Proposal({ token, onAnother }: { token: string; onAnother(): void }) {
             <Hint>{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</Hint>
           </Card>
 
-          {preview.bound && <P>{w.boundSignedIn}</P>}
+          {preview.bound && !preview.sent_to && <P>{w.boundSignedIn}</P>}
           {refusal}
+
+          {/* Sent to an address this account does not have: add it first. */}
+          {preview.sent_to && (
+            <InvitationAddress
+              token={token}
+              sentTo={preview.sent_to}
+              onOpened={(exchange) => {
+                forgetInvitation();
+                router.replace(`/exchanges/${exchange.id}`);
+              }}
+              onSignOut={() => void signOut()}
+            />
+          )}
 
           {responding && able && <Notice>{w.opening}</Notice>}
           {responding && !able && <AccountSetup headingLevel={2} />}
-          {!responding && (
+          {!responding && !preview.sent_to && (
             <Actions>
               <Button
                 variant="primary"

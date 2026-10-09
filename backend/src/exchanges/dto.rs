@@ -494,6 +494,24 @@ pub struct InvitationPreview {
     /// The exchange's IANA timezone, which its due dates are read in.
     pub timezone: String,
     pub revision: RevisionView,
+    /// Present when the invitation names an email address or phone number
+    /// the signed-in account does not have: only which kind, never the
+    /// address, in full or masked. Someone who knows it can type it, and
+    /// with a code sent there add it to their account and open the
+    /// invitation (`POST /v1/invitations/address/codes`); claiming it as it
+    /// is is refused with `INVITATION_NOT_FOR_YOU`.
+    pub sent_to: Option<BoundAddress>,
+}
+
+/// Whom an invitation names, as someone signed in with another address is
+/// told it: the kind alone.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BoundAddress {
+    pub kind: crate::combine::IdentifierKind,
+    /// The account already has another address of this kind: adding this
+    /// one replaces it, which needs `replace: true` and a proof of one of
+    /// the account's own (`POST /v1/me/identifiers/proof`).
+    pub replaces: bool,
 }
 
 pub fn rfc3339(at: OffsetDateTime) -> String {

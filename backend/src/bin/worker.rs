@@ -24,7 +24,7 @@ use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
 use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
-use yuppers_backend::{code_consent, db, shutdown, sweep, telemetry};
+use yuppers_backend::{code_consent, combine, db, shutdown, sweep, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
 
@@ -194,6 +194,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "one-time codes past use removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "one-time code purge failed"),
+                }
+                match combine::purge(&db).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "old account notices, offers and proofs removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "combine purge failed"),
                 }
                 if last_sweep.is_none_or(|last| last.elapsed() >= sweep::SWEEP_EVERY) {
                     last_sweep = Some(std::time::Instant::now());

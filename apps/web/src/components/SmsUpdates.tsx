@@ -30,10 +30,17 @@ export function SmsUpdates({ exchange }: Props) {
   const session = useSession()
   const w = wording.smsUpdates
   // A number added here is the account's from now on, on every screen.
-  const control = useSmsUpdates(api, exchange, language, session.setAccount)
+  const control = useSmsUpdates(
+    api,
+    exchange,
+    language,
+    session.setAccount,
+    session.account?.email ?? null,
+  )
   const id = useId()
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
+  const [proofCode, setProofCode] = useState('')
   const codeInput = useRef<HTMLInputElement>(null)
   const phoneInput = useRef<HTMLInputElement>(null)
   const { step, standing, pending, saved, phoneAdded } = control
@@ -62,7 +69,7 @@ export function SmsUpdates({ exchange }: Props) {
   const waitId = `${id}-wait`
   const submitCode = (event: FormEvent) => {
     event.preventDefault()
-    void control.verify(code)
+    void control.verify(code, proofCode)
   }
   const submitConsent = (event: FormEvent) => {
     event.preventDefault()
@@ -152,6 +159,30 @@ export function SmsUpdates({ exchange }: Props) {
               />
             )}
           </Field>
+          {control.proofTo && (
+            <>
+              <p>{fmt(w.proofCodeSent, { email: control.proofTo })}</p>
+              <Field
+                label={w.proofCodeLabel}
+                hint={wording.signIn.codeHint}
+                required
+                problem={control.failure ? failureId : null}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={6}
+                    className="code"
+                    value={proofCode}
+                    onChange={(event) => setProofCode(event.target.value)}
+                  />
+                )}
+              </Field>
+            </>
+          )}
           <Failure code={control.failure} id={failureId} />
           <div className="actions">
             <button type="submit" className="primary" disabled={control.busy}>
@@ -163,6 +194,7 @@ export function SmsUpdates({ exchange }: Props) {
               disabled={control.busy}
               onClick={() => {
                 setCode('')
+                setProofCode('')
                 control.changePhone()
               }}
             >

@@ -88,6 +88,24 @@ pub async fn set_phone(db: &PgPool, account: Uuid, phone: &str, drop_email: bool
     .unwrap();
 }
 
+/// A proof that the account's holder controls one of its own identifiers,
+/// as a code to it gives (`POST /v1/me/identifiers/proof`), made directly:
+/// what adding or replacing one takes. For tests about something else.
+pub async fn own_proof(db: &PgPool, account: Uuid) -> String {
+    let index: Vec<u8> =
+        sqlx::query_scalar("SELECT coalesce(email_index, phone_index) FROM account WHERE id = $1")
+            .bind(account)
+            .fetch_one(db)
+            .await
+            .unwrap();
+    let mut conn = db.acquire().await.unwrap();
+    let index: [u8; 32] = index.try_into().unwrap();
+    yuppers_backend::combine::issue_proof(&mut conn, account, &index)
+        .await
+        .unwrap()
+        .proof
+}
+
 /// The address every test request appears to come from.
 pub const PEER: SocketAddr = SocketAddr::new(
     std::net::IpAddr::V4(std::net::Ipv4Addr::new(198, 51, 100, 23)),

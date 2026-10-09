@@ -94,7 +94,12 @@ function stand(prepare: Partial<Stand> = {}): Stand {
       service.codes.push(identifier);
       service.consents.push(smsConsent);
     },
-    addIdentifier: async (identifier: string, code: string) => {
+    proveIdentifier: async (_channel: 'EMAIL' | 'PHONE', code: string) => {
+      if (code !== '654321') throw new ApiFailure('INVALID_CODE');
+      return { proof: 'p0', expires_at: '2026-10-22T09:10:00Z' };
+    },
+    addIdentifier: async (identifier: string, code: string, proof?: string) => {
+      if (proof !== 'p0') throw new ApiFailure('PROOF_REQUIRED');
       if (code !== '123456') throw new ApiFailure('INVALID_CODE');
       service.phone = identifier;
       return { ...account, phone: identifier };
@@ -115,7 +120,7 @@ function standing(service: Stand, state: string): Standing {
 
 async function show(client: SmsUpdatesApi, language: 'en' | 'es' = 'en', state: ExchangeView['state'] = 'ACTIVE') {
   const wording = wordingFor(language);
-  const session = { setAccount: jest.fn() } as unknown as Session;
+  const session = { account, setAccount: jest.fn() } as unknown as Session;
   await render(
     <I18nContext.Provider value={createI18n(language, wording, () => {})}>
       <SessionContext.Provider value={session}>
@@ -175,10 +180,18 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   await fireEvent.press(codeBox());
   await fireEvent.press(send());
   expect(await screen.findByText('We texted a code to (•••) •••-5678.')).toBeTruthy();
-  expect(service.codes).toEqual([PHONE]);
-  expect(service.consents).toEqual([{ version: SMS_CODE_CONSENT_VERSION, language: 'en' }]);
+  // And one by email to the account's own address, which adding takes.
+  expect(service.codes).toEqual([PHONE, 'ana@example.test']);
+  expect(service.consents).toEqual([
+    { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
+    undefined,
+  ]);
+  expect(
+    screen.getByText('To make sure it’s you, we also emailed a code to ana@example.test.'),
+  ).toBeTruthy();
 
   await fireEvent.changeText(screen.getByLabelText(w.codeLabel), '123456');
+  await fireEvent.changeText(screen.getByLabelText(w.proofCodeLabel), '654321');
   await fireEvent.press(screen.getByRole('button', { name: w.addPhone }));
   const box = await screen.findByRole('checkbox');
   expect(session.setAccount).toHaveBeenCalledWith({ ...account, phone: PHONE });

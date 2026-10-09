@@ -115,17 +115,19 @@ async fn an_address_is_one_account_whatever_its_case() {
     let again = test.sign_in(&email, "Ana").await;
     assert_eq!(first.id, again.id, "the same account");
 
-    // Nobody else may add it, in any case.
-    let ben = test.sign_in(&address(), "Ben").await;
+    // Nobody else may add it, in any case: whoever proves it is offered to
+    // combine the two accounts instead.
+    let ben = test.sign_in(&number(), "Ben").await;
+    let proof = test.own_proof(&ben).await;
     test.ask(Some(&ben), &email).await;
     let code = test.code(&email);
     app.post(
         &ben,
         "/v1/me/identifiers",
-        json!({ "identifier": email.to_uppercase(), "code": code }),
+        json!({ "identifier": email.to_uppercase(), "code": code, "proof": proof }),
     )
     .await
-    .refused(StatusCode::CONFLICT, "IDENTIFIER_IN_USE");
+    .refused(StatusCode::CONFLICT, "IDENTIFIER_ON_OTHER_ACCOUNT");
 
     // And the database itself refuses a second account with its index.
     let sealed = common::sealed(&email);

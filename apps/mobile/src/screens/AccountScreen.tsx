@@ -1,18 +1,18 @@
-import { formatPhone } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Appearance } from '../components/Appearance';
 import { BuildVersion } from '../components/BuildVersion';
+import { Identifiers } from '../components/Identifiers';
 import { NotificationsSetting } from '../components/Notifications';
 import { LegalLinks } from '../components/LegalLinks';
 import { PaymentHandles } from '../components/PaymentHandles';
-import { Actions, Button, Heading, Label, Screen } from '../components/ui';
+import { Actions, Button, Heading, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { openHelp } from '../lib/help';
 import { APP_BUILD } from '../lib/session';
-import { space, type, useColors } from '../lib/theme';
+import { useColors } from '../lib/theme';
 import { ProfileForm } from './AccountSetup';
 import { BlockedPeople } from './BlockedPeople';
 import { DeleteAccount } from './DeleteAccount';
@@ -42,23 +42,7 @@ export function AccountScreen() {
   return (
     <Screen>
       <Heading>{w.title}</Heading>
-      {account.email ? (
-        <View style={styles.detail}>
-          <Label>{w.emailLabel}</Label>
-          <Text selectable style={[type.body, { color: colors.text }]}>
-            {account.email}
-          </Text>
-        </View>
-      ) : null}
-      {account.phone ? (
-        <View style={styles.detail}>
-          <Label>{w.phoneLabel}</Label>
-          {/* A phone number reads left to right in every language. */}
-          <Text selectable style={[type.body, styles.ltr, { color: colors.text }]}>
-            {formatPhone(account.phone)}
-          </Text>
-        </View>
-      ) : null}
+      <Identifiers account={account} />
       <ProfileForm account={account} first={false} />
       <PaymentHandles />
       <NotificationsSetting account={account} />
@@ -85,7 +69,5 @@ export function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  detail: { gap: space.xs },
-  ltr: { writingDirection: 'ltr' },
   rule: { height: StyleSheet.hairlineWidth },
 });

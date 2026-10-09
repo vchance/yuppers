@@ -36,6 +36,11 @@ export type PaymentHandles = Schemas['PaymentHandles']
 export type PaymentHandleChanges = Schemas['PaymentHandleChanges']
 export type PaymentOptionsShown = Schemas['PaymentOptionsShown']
 export type PaymentOptionsView = Schemas['PaymentOptionsView']
+export type CombineOffer = Schemas['CombineOffer']
+export type BoundAddress = Schemas['BoundAddress']
+export type AccountProof = Schemas['AccountProof']
+export type InAppNotice = Schemas['InAppNotice']
+export type IdentifierKind = Schemas['IdentifierKind']
 
 /**
  * A refusal from the service, or no answer from it. Screens show
@@ -45,13 +50,24 @@ export class ApiFailure extends Error {
   readonly code: ErrorCode
   /** No reply from the service itself, so whether the request took effect is unknown. */
   readonly unanswered: boolean
+  /**
+   * With `IDENTIFIER_ON_OTHER_ACCOUNT`: the offer to combine the other
+   * account into this one (`identifiers.ts`).
+   */
+  readonly combine: CombineOffer | null
 
-  constructor(code: ErrorCode, unanswered = false) {
+  constructor(code: ErrorCode, unanswered = false, combine: CombineOffer | null = null) {
     super(code)
     this.name = 'ApiFailure'
     this.code = code
     this.unanswered = unanswered
+    this.combine = combine
   }
+}
+
+/** The offer to combine accounts a refusal carries, if it carries one. */
+export function combineOffer(error: unknown): CombineOffer | null {
+  return error instanceof ApiFailure ? error.combine : null
 }
 
 /** The error code to show for anything a request can throw. */
@@ -135,7 +151,11 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
     if (code === null) throw new ApiFailure('SERVICE_UNAVAILABLE', true)
     if (code === 'UNAUTHENTICATED') signedOut()
     if (code === 'CLIENT_TOO_OLD') tooOld()
-    throw new ApiFailure(code)
+    const combine =
+      code === 'IDENTIFIER_ON_OTHER_ACCOUNT'
+        ? ((body as { combine?: CombineOffer }).combine ?? null)
+        : null
+    throw new ApiFailure(code, false, combine)
   }
 
   /**
@@ -463,12 +483,90 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
 
     /**
      * Attaches a verified email address or phone number to the account, with
-     * the code sent to it (`requestCode`), or replaces the one of its kind.
+     * the code sent to it (`requestCode`), or, with `proof` of one of the
+     * account's own (`proveIdentifier`), replaces the one of its kind.
      */
-    addIdentifier(identifier: string, code: string): Promise<Account> {
+    addIdentifier(identifier: string, code: string, proof?: string): Promise<Account> {
+      const body = proof ? { identifier, code, proof } : { identifier, code }
+      return send(() => client.POST('/v1/me/identifiers', { headers: headers(), body }))
+    },
+
+    /**
+     * Turns a code sent to one of the account's own (`requestCode`) into a
+     * proof that the person controls it, good once for ten minutes: what
+     * replacing an email address or phone number needs.
+     */
+    proveIdentifier(channel: 'EMAIL' | 'PHONE', code: string): Promise<AccountProof> {
       return send(() =>
-        client.POST('/v1/me/identifiers', { headers: headers(), body: { identifier, code } }),
+        client.POST('/v1/me/identifiers/proof', { headers: headers(), body: { channel, code } }),
       )
+    },
+
+    /**
+     * Removes the account's email address or phone number, with a code sent
+     * to the other one, which stays (`requestCode`). Refused for the only one.
+     */
+    removeIdentifier(kind: 'email' | 'phone', code: string): Promise<Account> {
+      const body = { code }
+      return change(`identifiers/${kind}`, body, (key) =>
+        client.DELETE('/v1/me/identifiers/{kind}', {
+          headers: headers(),
+          params: { path: { kind }, header: { 'Idempotency-Key': key } },
+          body,
+        }),
+      )
+    },
+
+    /**
+     * Combines into this account the one an offer names. It cannot be undone.
+     * `proof` where the offer says `proof_required`.
+     */
+    combineAccounts(token: string, proof?: string): Promise<Account> {
+      const body = proof ? { token, proof } : { token }
+      return change('combine', body, (key) =>
+        client.POST('/v1/me/combine', {
+          headers: headers(),
+          params: { header: { 'Idempotency-Key': key } },
+          body,
+        }),
+      )
+    },
+
+    /**
+     * Sends a code to `identifier`, typed as the address an invitation was
+     * sent to (`sent_to`), if it is that address; the client is never told
+     * the address. For a number, `smsConsent` says the box was ticked.
+     */
+    requestInvitationAddressCode(
+      invitation: string,
+      identifier: string,
+      smsConsent?: SmsCodeConsent,
+    ): Promise<void> {
+      const body = smsConsent
+        ? { token: invitation, identifier, sms_consent: smsConsent }
+        : { token: invitation, identifier }
+      return send(() =>
+        client.POST('/v1/invitations/address/codes', { headers: headers(), body }),
+      )
+    },
+
+    /**
+     * Adds the address an invitation was sent to, typed as `identifier`, to
+     * the account, with the code sent there, and opens the invitation.
+     * `replace`, with `proof` of one of the account's own, for an account
+     * that has another of that kind.
+     */
+    addInvitationAddress(
+      invitation: string,
+      identifier: string,
+      code: string,
+      replace: boolean,
+      proof?: string,
+    ): Promise<ExchangeView> {
+      const body = proof
+        ? { token: invitation, identifier, code, replace, proof }
+        : { token: invitation, identifier, code, replace }
+      return send(() => client.POST('/v1/invitations/address', { headers: headers(), body }))
     },
 
     // Text updates for an agreement (DESIGN.md §12): "Yuppers.app agreement updates".

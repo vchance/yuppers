@@ -40,6 +40,7 @@ use uuid::Uuid;
 
 use super::wording::{Links, Wording};
 use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
+use crate::combine;
 use crate::contact::{self, Field};
 use crate::domain::notification::Notice;
 use crate::domain::reminder;
@@ -537,6 +538,9 @@ async fn prepare(
     if payload["staff"].as_str() == Some(review::ALERT_PAYLOAD) {
         return staff_alert(conn, delivery, row).await;
     }
+    if let Some(notice) = payload[combine::NOTICE_PAYLOAD].as_i64() {
+        return accounts_combined(conn, delivery, row, notice).await;
+    }
     let Some(notice) = payload["notice"].as_str().and_then(Notice::parse) else {
         return Ok(Err(unreadable()));
     };
@@ -627,6 +631,39 @@ fn recipient(encrypted: Option<Vec<u8>>) -> Result<Option<String>, Attempt> {
     contact::keys()
         .reveal(Field::ACCOUNT_EMAIL, encrypted.as_deref())
         .map_err(|unreadable| Attempt::Failed(unreadable.to_string()))
+}
+
+/// The email telling an address that the account it was on was combined
+/// with another (`crate::combine`). It goes to the address as it was then,
+/// kept for this alone, whether or not an account has it now; it says that,
+/// and nothing about any yup.
+async fn accounts_combined(
+    conn: &mut PgConnection,
+    delivery: &Delivery,
+    row: Row<'_>,
+    notice: i64,
+) -> Result<Result<Email, Attempt>, sqlx::Error> {
+    let found = match combine::notice_destination(conn, notice).await {
+        Ok(found) => found,
+        // Does not decrypt: a failure, tried again like any other, naming
+        // no address.
+        Err(error) => return Ok(Err(Attempt::Failed(Redacted(&error).to_string()))),
+    };
+    let Some((kind, to, language)) = found else {
+        return Ok(Err(Attempt::Dropped(
+            "not sent: the notice and its address are gone",
+        )));
+    };
+    let link = format!("{}/account", delivery.web_origin);
+    let rendered = delivery.wording.account_notice(kind, &language, &link);
+    Ok(Ok(Email {
+        to,
+        subject: rendered.subject,
+        body: rendered.body,
+        html: Some(rendered.html),
+        reference: row.id,
+        key: row.key,
+    }))
 }
 
 /// The email telling a reviewer that a report is waiting (`crate::review`).

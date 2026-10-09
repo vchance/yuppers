@@ -453,6 +453,15 @@ function Report({ detail }: { detail: ReportDetail }) {
       {fmt(w.account, { id: account.id })}
       {' · '}
       {w.standing[account.status]}
+      {account.merged_into && (
+        <>
+          <br />
+          {fmt(w.mergedInto, {
+            id: account.merged_into,
+            date: account.merged_at ? moment(account.merged_at) : '',
+          })}
+        </>
+      )}
       {account.name && (
         <>
           <br />

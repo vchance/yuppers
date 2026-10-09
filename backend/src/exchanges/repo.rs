@@ -340,13 +340,14 @@ pub async fn load_revision(
         .collect();
 
     // A signature counts for as long as the signer holds the slot they
-    // signed in. One left behind by a claimant who was removed before being
-    // confirmed is still in the record, and is nobody's acceptance.
+    // signed in, or the account they were combined into holds it
+    // (`holding_void_since`, migration 0028). One left behind by a claimant
+    // who was removed before being confirmed is still in the record, and is
+    // nobody's acceptance.
     let accepted_by = sqlx::query_scalar::<_, String>(
-        "SELECT a.slot FROM acceptance a
-         JOIN slot_holding h
-           ON h.exchange_id = a.exchange_id AND h.slot = a.slot AND h.holding = a.holding
-         WHERE a.revision_id = $1 AND h.ended_at IS NULL
+        "SELECT DISTINCT a.slot FROM acceptance a
+         WHERE a.revision_id = $1
+           AND holding_void_since(a.exchange_id, a.slot, a.holding) IS NULL
          ORDER BY a.slot",
     )
     .bind(id)

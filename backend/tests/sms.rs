@@ -229,7 +229,11 @@ async fn each_code_goes_to_its_purposes_verify_service() {
                 Some(&ana),
                 Method::POST,
                 "/v1/me/identifiers",
-                Some(json!({ "identifier": added, "code": CODE })),
+                Some(json!({
+                    "identifier": added,
+                    "code": CODE,
+                    "proof": common::own_proof(&app.db, ana.id).await,
+                })),
                 &[],
             )
             .await;

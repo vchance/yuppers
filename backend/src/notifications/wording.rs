@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use super::html;
 use crate::auth::Purpose;
+use crate::combine::NoticeKind;
 use crate::domain::notification::Notice;
 use crate::languages;
 
@@ -61,6 +62,16 @@ struct Notifications {
     /// (`crate::review`). It says nothing about the report.
     #[serde(rename = "staffAlert")]
     staff_alert: Message,
+    /// The email telling an address that its account was combined with
+    /// another (`crate::combine`). It says nothing about any yup.
+    #[serde(rename = "accountsCombined")]
+    accounts_combined: Message,
+    /// The email telling an address that it was replaced on its account.
+    #[serde(rename = "emailChanged")]
+    email_changed: Message,
+    /// The email telling an address that it was removed from its account.
+    #[serde(rename = "emailRemoved")]
+    email_removed: Message,
 }
 
 #[derive(Deserialize)]
@@ -365,11 +376,40 @@ impl Wording {
     /// otherwise. It names no report, exchange or person, and links to the
     /// review screen, which asks the reader to sign in.
     pub fn staff_alert(&self, language: &str, link: &str) -> Rendered {
+        self.linked(language, link, |file| &file.notifications.staff_alert)
+    }
+
+    /// The email telling an address that the account it was on was combined
+    /// with another (`crate::combine`), in `language` where that language
+    /// has wording and in the default language otherwise. It names no yup,
+    /// person or address, and links to the account page, which asks the
+    /// reader to sign in.
+    pub fn accounts_combined(&self, language: &str, link: &str) -> Rendered {
+        self.linked(language, link, |file| &file.notifications.accounts_combined)
+    }
+
+    /// The email to an address about its account (`crate::combine`), as
+    /// [`Self::accounts_combined`]: combined, replaced or removed.
+    pub fn account_notice(&self, kind: NoticeKind, language: &str, link: &str) -> Rendered {
+        match kind {
+            NoticeKind::AccountsCombined => self.accounts_combined(language, link),
+            NoticeKind::EmailChanged => {
+                self.linked(language, link, |file| &file.notifications.email_changed)
+            }
+            NoticeKind::EmailRemoved => {
+                self.linked(language, link, |file| &file.notifications.email_removed)
+            }
+        }
+    }
+
+    /// An email with no exchange behind it, whose paragraph ending in
+    /// `{link}` becomes a button.
+    fn linked(&self, language: &str, link: &str, message: fn(&File) -> &Message) -> Rendered {
         let (language, file) = languages::resolve_among(self.supported, language)
             .and_then(|language| self.languages.get_key_value(language))
             .or_else(|| self.languages.get_key_value(self.default))
             .expect("the default language has wording; checked when loading");
-        let message = &file.notifications.staff_alert;
+        let message = message(file);
         let values = [("productName", file.product_name.as_str()), ("link", link)];
         let subject = fill(&message.subject, &values);
 
@@ -623,6 +663,9 @@ mod tests {
                 "email": { "layout": "{body} {link}", "messages": messages },
                 "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
                 "staffAlert": { "subject": format!("{product} review"), "body": "Waiting.\n\nOpen: {link}" },
+                "accountsCombined": { "subject": format!("{product} combined"), "body": "Combined.\n\nOpen: {link}" },
+                "emailChanged": { "subject": format!("{product} changed"), "body": "Changed.\n\nOpen: {link}" },
+                "emailRemoved": { "subject": format!("{product} removed"), "body": "Removed.\n\nOpen: {link}" },
             },
             "push": { "body": format!("{product} news") },
             "sms": {
@@ -787,7 +830,8 @@ mod tests {
             let target = &html[at + 6..];
             assert!(
                 target.starts_with("https://app.test/exchanges/7")
-                    || target.starts_with("https://app.test/staff\""),
+                    || target.starts_with("https://app.test/staff\"")
+                    || target.starts_with("https://app.test/account\""),
                 "{language} {what}: a link to {}",
                 &target[..target.find('"').unwrap()]
             );
@@ -877,6 +921,41 @@ mod tests {
         assert_eq!(
             wording.staff_alert("en", link).subject,
             "A report is waiting for review"
+        );
+    }
+
+    #[test]
+    fn the_accounts_combined_notice_says_only_that_in_every_language() {
+        let wording = Wording::embedded().unwrap();
+        let link = "https://app.test/account";
+        for language in languages::supported() {
+            for kind in [
+                NoticeKind::AccountsCombined,
+                NoticeKind::EmailChanged,
+                NoticeKind::EmailRemoved,
+            ] {
+                let email = wording.account_notice(kind, language, link);
+                check_html(language, "account notice", &email);
+                assert!(email.body.contains(link), "{language} {kind:?}: the link");
+                assert!(
+                    email.html.contains(&format!("<a href=\"{link}\"")),
+                    "{language} {kind:?}: the button"
+                );
+                assert!(
+                    !email.body.contains('{') && !email.subject.contains('{'),
+                    "{language} {kind:?}: every variable"
+                );
+            }
+        }
+        assert_eq!(
+            wording
+                .account_notice(NoticeKind::EmailChanged, "en", link)
+                .subject,
+            "Your Yuppers email address was changed"
+        );
+        assert_eq!(
+            wording.accounts_combined("en", link).subject,
+            "Two of your Yuppers accounts were combined"
         );
     }
 

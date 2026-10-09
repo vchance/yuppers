@@ -59,8 +59,48 @@ pub enum ErrorCode {
     /// No valid session.
     Unauthenticated,
     AccountSuspended,
-    /// The email address or phone number belongs to another account.
+    /// The email address or phone number belongs to another account. No
+    /// longer answered once its code is right: that is
+    /// `IDENTIFIER_ON_OTHER_ACCOUNT`, with an offer to combine the two.
     IdentifierInUse,
+    /// The code was right, and the email address or phone number belongs to
+    /// another account, which the person has now shown they control. The
+    /// body carries `combine`: what that account has, and a token for
+    /// combining the two (`POST /v1/me/combine`).
+    IdentifierOnOtherAccount,
+    /// The account already has an email address (or phone number) of its
+    /// own, and only one of each is kept: the request must say to replace it.
+    IdentifierKindTaken,
+    /// Adding or replacing an email address or phone number, while the
+    /// account has one, needs a proof of one it already has, from a code
+    /// sent to it (`POST /v1/me/identifiers/proof`), and none was given, or
+    /// it is used, expired or another account's.
+    ProofRequired,
+    /// The code or proof is from an email address or phone number that came
+    /// to the account in the last 24 hours, and would remove or replace one
+    /// the account had before it. Use the older one, or wait.
+    IdentifierTooRecent,
+    /// The address typed is not the one the invitation was sent to. Says
+    /// nothing more about it.
+    NotInvitedAddress,
+    /// No code could be sent to that address. Says nothing more about why.
+    CodeNotSent,
+    /// The account's only email address or phone number cannot be removed:
+    /// it is how the account is signed in to. Add the other kind first.
+    LastIdentifier,
+    /// The offer to combine accounts is used, expired, or no longer true:
+    /// the address or number proved has since left the other account, or
+    /// that account is gone. Prove the address again for a new offer.
+    CombineExpired,
+    /// One of the two accounts is suspended, so they cannot be combined.
+    CombineSuspended,
+    /// The other account reviews reports, so it cannot be combined into
+    /// another. The owner removes the role first.
+    CombineReviewer,
+    /// The two accounts are on the two sides of the same yup (or one opened
+    /// the other's invitation), so they cannot be combined: one person
+    /// cannot be both parties to an agreement.
+    CombineSharedExchange,
     /// The exchange changed since the client last read it.
     VersionConflict,
     /// A display name and confirmation of age are needed before signing.
@@ -119,6 +159,7 @@ impl From<ErrorCode> for ApiError {
             InvalidRequest
             | InvalidIdentifier
             | PhoneCountryNotServed
+            | NotInvitedAddress
             | SmsConsentRequired
             | InvalidRevision
             | IdempotencyKeyReused => StatusCode::UNPROCESSABLE_ENTITY,
@@ -133,6 +174,16 @@ impl From<ErrorCode> for ApiError {
             | CounterpartyNotConfirmed
             | AwaitingConfirmation
             | IdentifierInUse
+            | IdentifierOnOtherAccount
+            | IdentifierKindTaken
+            | ProofRequired
+            | IdentifierTooRecent
+            | CodeNotSent
+            | LastIdentifier
+            | CombineExpired
+            | CombineSuspended
+            | CombineReviewer
+            | CombineSharedExchange
             | PhoneOptedOut
             | VersionConflict
             | ProfileIncomplete

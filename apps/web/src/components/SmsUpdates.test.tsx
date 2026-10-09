@@ -3,7 +3,7 @@ import { SMS_CODE_CONSENT_VERSION, SMS_CONSENT_VERSION } from '@yuppers/shared'
 import { act } from 'react'
 import { afterEach, expect, test } from 'vitest'
 
-import { ACTIVE, DRAFT, ENDED, GOOD_CODE, ana } from '../test/fake-service'
+import { ACTIVE, DRAFT, ENDED, GOOD_CODE, GOOD_PROOF, ana } from '../test/fake-service'
 import {
   announced,
   button,
@@ -89,19 +89,34 @@ test('a party with no number adds one with a code, then ticks the box and saves'
   expect(number.value).toBe('(555) 234-5678')
   expect((field(wording.smsCode.verifyNumber) as HTMLInputElement).checked).toBe(true)
   await press(button(w.sendCode))
-  expect(lastSent(service, 'POST /v1/auth/codes')).toEqual({
-    identifier: '+15552345678',
-    sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
-  })
+  // A code by text to the number, and one by email to the account's own
+  // address, which adding a number takes.
+  const codes = service.sent.filter((sent) => sent.call === 'POST /v1/auth/codes')
+  expect(codes.map((sent) => sent.body)).toEqual([
+    {
+      identifier: '+15552345678',
+      sms_consent: { version: SMS_CODE_CONSENT_VERSION, language: 'en' },
+    },
+    { identifier: 'ana@example.test' },
+  ])
   await until(() => control.textContent!.includes('We texted a code to (•••) •••-5678.'), 'the code step')
+  expect(control.textContent).toContain(
+    'To make sure it’s you, we also emailed a code to ana@example.test.',
+  )
   expect(document.activeElement).toBe(field(w.codeLabel))
   expect(await violations()).toEqual([])
 
   await type(field(w.codeLabel), GOOD_CODE)
+  await type(field(w.proofCodeLabel), GOOD_CODE)
   await press(button(w.addPhone))
+  expect(lastSent(service, 'POST /v1/me/identifiers/proof')).toEqual({
+    channel: 'EMAIL',
+    code: GOOD_CODE,
+  })
   expect(lastSent(service, 'POST /v1/me/identifiers')).toEqual({
     identifier: '+15552345678',
     code: GOOD_CODE,
+    proof: GOOD_PROOF,
   })
   await until(() => control.querySelector('input[type="checkbox"]') !== null, 'the box')
   expect(control.textContent).toContain('(•••) •••-5678 is now on your account.')

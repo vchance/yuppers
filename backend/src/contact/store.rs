@@ -17,11 +17,12 @@ use crate::error::Redacted;
 /// The columns that hold encrypted contact details, as `(table, column)`.
 /// The payment options (`crate::payments`) are encrypted the same way, under
 /// the same key.
-pub const ENCRYPTED_COLUMNS: [(&str, &str); 8] = [
+pub const ENCRYPTED_COLUMNS: [(&str, &str); 9] = [
     ("account", "email_encrypted"),
     ("account", "phone_encrypted"),
     ("sms_consent", "phone_encrypted"),
     ("sms_code_consent", "phone_encrypted"),
+    ("account_notice", "email_encrypted"),
     ("payment_handle", "venmo_encrypted"),
     ("payment_handle", "cash_app_encrypted"),
     ("payment_handle", "paypal_encrypted"),

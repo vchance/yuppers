@@ -68,7 +68,7 @@ impl Column {
 
 /// Every column that holds encrypted contact details, and the payment
 /// options encrypted the same way (`crate::payments`).
-pub const COLUMNS: [Column; 8] = [
+pub const COLUMNS: [Column; 9] = [
     Column {
         table: "account",
         column: "email_encrypted",
@@ -94,6 +94,13 @@ pub const COLUMNS: [Column; 8] = [
         table: "sms_code_consent",
         column: "phone_encrypted",
         field: Field::SMS_CODE_CONSENT_PHONE,
+        primary_key: ("id", "bigint"),
+        bound: Bound::Row,
+    },
+    Column {
+        table: "account_notice",
+        column: "email_encrypted",
+        field: Field::ACCOUNT_NOTICE_EMAIL,
         primary_key: ("id", "bigint"),
         bound: Bound::Row,
     },

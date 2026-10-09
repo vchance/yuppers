@@ -7,6 +7,7 @@ pub mod auth;
 pub mod build_info;
 pub mod client_version;
 pub mod code_consent;
+pub mod combine;
 pub mod config;
 pub mod contact;
 pub mod db;

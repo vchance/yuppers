@@ -450,6 +450,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/invitations/address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adds to the signed-in account the email address or phone number an
+         *     invitation was sent to, with the code sent there, and opens the
+         *     invitation: the account takes the invited party's place, as named, so
+         *     nobody has to confirm it. Both happen, or neither does. If the address
+         *     belongs to another account the answer is `IDENTIFIER_ON_OTHER_ACCOUNT`
+         *     with the offer to combine the two; once combined, claiming the
+         *     invitation (`POST /v1/invitations/claim`) opens it.
+         */
+        post: operations["add_invitation_address"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/address/codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sends a one-time code to the email address or phone number an invitation
+         *     was sent to, for someone signed in with another who wants to add it to
+         *     their account and open the invitation (`sent_to` in its preview). The
+         *     person types the address; unless it is the one the invitation was sent
+         *     to, nothing is sent and the answer is `NOT_INVITED_ADDRESS`, which says
+         *     nothing more. Requests are counted by account and by invitation
+         *     (`TOO_MANY_REQUESTS`), besides the usual limits on codes.
+         */
+        post: operations["request_invitation_address_code"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/invitations/claim": {
         parameters: {
             query?: never;
@@ -534,6 +584,32 @@ export interface paths {
         head?: never;
         /** Changes the display name or language, or records that the holder is an adult. */
         patch: operations["update_me"];
+        trace?: never;
+    };
+    "/v1/me/combine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Combines into the signed-in account the account an offer names. It
+         *     cannot be undone: that account's place in each of its yups, the address
+         *     or number proved and what else the offer lists move here, and it can no
+         *     longer be signed in to. Where it replaces this account's own address or
+         *     number, it needs `proof`. Every email address either account had is
+         *     told; with none, the app shows a notice. The offer is good once, for ten
+         *     minutes, from this account only; a repeat with the same
+         *     `Idempotency-Key` succeeds and changes nothing.
+         */
+        post: operations["combine_accounts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/me/deletion": {
@@ -644,12 +720,73 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verifies a second identifier and attaches it to the account, or replaces
-         *     the one of the same kind. An account with both a verified email and a
-         *     verified phone can meet the higher risk tier.
+         * Verifies an email address or phone number and attaches it to the
+         *     account, with a proof of one it already has (`proof`): adding one, or
+         *     replacing the one of the same kind. A proof from an identifier that came
+         *     in the last 24 hours does not replace an older one. The address replaced
+         *     is told by email; a number replaced, by a notice in the app. An account
+         *     with both a verified email and a verified phone can meet the higher risk
+         *     tier. If the code is right and the identifier belongs to another
+         *     account, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an offer to
+         *     combine the two (`POST /v1/me/combine`); until the code is right, an
+         *     identifier with an account is answered like any other.
          */
         post: operations["add_identifier"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/identifiers/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Proves, with a code sent to one of the account's own identifiers, that
+         *     the person signed in controls it: what adding or replacing an email
+         *     address or phone number needs, directly, from an invitation, or by
+         *     combining another account into this one (`proof`). Good once, for ten
+         *     minutes, for this account only, and only while the account still has
+         *     the identifier proved.
+         */
+        post: operations["prove_identifier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/identifiers/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Removes the account's email address or phone number, keeping the other:
+         *     an account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a
+         *     code sent to the one that stays, so that a session alone cannot take a
+         *     way in away, and the person knows they can still sign in; a code to one
+         *     that came in the last 24 hours does not remove one the account had
+         *     before it (`IDENTIFIER_TOO_RECENT`). An email
+         *     address removed is told by email; a phone number removed, by a notice in
+         *     the app. Removing the phone number ends text updates for every
+         *     agreement. Invitations named for the address or number removed are left
+         *     as they are. Removing one the account does not have changes nothing and
+         *     succeeds, as a repeat finds; so does a repeat with the same
+         *     `Idempotency-Key`.
+         */
+        delete: operations["remove_identifier"];
         options?: never;
         head?: never;
         patch?: never;
@@ -893,13 +1030,30 @@ export interface components {
             id: string;
             /** @description A supported language tag, such as `en` or `es`. */
             language: string;
+            notice?: components["schemas"]["AccountNotice"] | null;
             phone?: string | null;
+        };
+        /** @description A notice the app shows once on the account. */
+        AccountNotice: {
+            /** @description When it happened, as RFC 3339. */
+            at: string;
+            kind: components["schemas"]["InAppNotice"];
+        };
+        /**
+         * @description A proof that the person signed in controls one of the account's own
+         *     identifiers, from a code sent to it: what replacing an identifier needs.
+         */
+        AccountProof: {
+            /** @description RFC 3339. */
+            expires_at: string;
+            /** @description Good once, for ten minutes, for this account only. */
+            proof: string;
         };
         /**
          * @description Where an account stands.
          * @enum {string}
          */
-        AccountStanding: "ACTIVE" | "SUSPENDED" | "DELETED";
+        AccountStanding: "ACTIVE" | "SUSPENDED" | "DELETED" | "MERGED";
         /** @enum {string} */
         Action: "CLAIM" | "RETRACT_CLAIM" | "CONFIRM" | "DISPUTE" | "WAIVE";
         /**
@@ -917,6 +1071,34 @@ export interface components {
              *     or 1 and ten (`(856) 548-8780`), which is taken as `+1`.
              */
             identifier: string;
+            /**
+             * @description While the account has an identifier, of either kind: a proof of one
+             *     it has (`POST /v1/me/identifiers/proof`). Without a good one the
+             *     request is refused with `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`),
+             *     before the code is looked at.
+             */
+            proof?: string | null;
+        };
+        AddInvitationAddress: {
+            /** @description The code sent to the address the invitation was sent to. */
+            code: string;
+            /** @description The address the code was sent to, as typed for it. */
+            identifier: string;
+            /**
+             * @description A proof of one of the account's own identifiers
+             *     (`POST /v1/me/identifiers/proof`): adding one takes it. Without a
+             *     good one the request is refused, before the code is looked at, with
+             *     `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`).
+             */
+            proof?: string | null;
+            /**
+             * @description The account has another address of this kind (`sent_to.replaces`):
+             *     `true` replaces it. Without it such a request is refused, before the
+             *     code is looked at, with `IDENTIFIER_KIND_TAKEN`.
+             */
+            replace?: boolean;
+            /** @description The invitation link's token. */
+            token: string;
         };
         /**
          * @description Whether the caller has blocked the other party of an exchange. Says
@@ -949,6 +1131,19 @@ export interface components {
             /** @description Their name as written in that exchange. */
             name: string;
         };
+        /**
+         * @description Whom an invitation names, as someone signed in with another address is
+         *     told it: the kind alone.
+         */
+        BoundAddress: {
+            kind: components["schemas"]["IdentifierKind"];
+            /**
+             * @description The account already has another address of this kind: adding this
+             *     one replaces it, which needs `replace: true` and a proof of one of
+             *     the account's own (`POST /v1/me/identifiers/proof`).
+             */
+            replaces: boolean;
+        };
         ClaimInvitation: {
             /**
              * @description Only open the exchange if the signed-in account already holds the
@@ -971,6 +1166,54 @@ export interface components {
          * @enum {string}
          */
         CodeChannel: "EMAIL" | "PHONE";
+        CombineAccounts: {
+            /**
+             * @description Where the offer says `proof_required`: a proof of one of this
+             *     account's own identifiers (`POST /v1/me/identifiers/proof`).
+             */
+            proof?: string | null;
+            /**
+             * @description The token of the offer: `combine.token` in an
+             *     `IDENTIFIER_ON_OTHER_ACCOUNT` answer.
+             */
+            token: string;
+        };
+        /**
+         * @description What combining another account into this one would do, and the token
+         *     that does it (`POST /v1/me/combine`). It cannot be undone.
+         */
+        CombineOffer: {
+            email: components["schemas"]["IdentifierOutcome"];
+            /** @description RFC 3339. */
+            expires_at: string;
+            other: components["schemas"]["OtherAccount"];
+            /**
+             * @description The other account's payment options become this one's, because this
+             *     one has none. With options of its own, the other's are dropped.
+             */
+            payment_options_move: boolean;
+            phone: components["schemas"]["IdentifierOutcome"];
+            /**
+             * @description This account's own identifier of the kind proved would be replaced:
+             *     combining then needs a proof of one of its own
+             *     (`POST /v1/me/identifiers/proof`), as replacing it directly does.
+             */
+            proof_required: boolean;
+            /** @description The kind of identifier proved, which comes to this account. */
+            proved: components["schemas"]["IdentifierKind"];
+            /** @description The other account's text updates end, because its number is dropped. */
+            text_updates_end: boolean;
+            /** @description Good once, for [`OFFER_TTL`], from this account only. */
+            token: string;
+        };
+        /**
+         * @description The answer when an address proved belongs to another account: the
+         *     refusal's code, `IDENTIFIER_ON_OTHER_ACCOUNT`, and the offer.
+         */
+        CombineOffered: {
+            code: components["schemas"]["ErrorCode"];
+            combine: components["schemas"]["CombineOffer"];
+        };
         CommandDto: {
             consent: components["schemas"]["Consent"];
             /** Format: uuid */
@@ -1169,7 +1412,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "IDENTIFIER_TOO_RECENT" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1285,6 +1528,33 @@ export interface components {
             /** @description Which side the reader is. */
             you: components["schemas"]["Slot"];
         };
+        /**
+         * @description A kind of identifier, as the API names it.
+         * @enum {string}
+         */
+        IdentifierKind: "EMAIL" | "PHONE";
+        /**
+         * @description What becomes of each kind of identifier when the two are combined, from
+         *     the point of view of the account that stays.
+         * @enum {string}
+         */
+        IdentifierOutcome: "NONE" | "KEPT" | "ADDED" | "REPLACED" | "THEIRS_DROPPED";
+        /**
+         * @description A notice the app shows once on the account, where there is no email
+         *     address to tell (`account.notice_kind`).
+         * @enum {string}
+         */
+        InAppNotice: "ACCOUNTS_COMBINED" | "PHONE_CHANGED" | "PHONE_REMOVED";
+        InvitationAddressCode: {
+            /**
+             * @description The email address or phone number the person says the invitation was
+             *     sent to, typed in full.
+             */
+            identifier: string;
+            sms_consent?: components["schemas"]["SmsCodeConsent"] | null;
+            /** @description The invitation link's token. */
+            token: string;
+        };
         InvitationIssued: {
             invitation_token: string;
         };
@@ -1315,6 +1585,7 @@ export interface components {
             display_code: string;
             expires_at: string;
             revision: components["schemas"]["RevisionView"];
+            sent_to?: components["schemas"]["BoundAddress"] | null;
             /** @description The exchange's IANA timezone, which its due dates are read in. */
             timezone: string;
         };
@@ -1452,6 +1723,26 @@ export interface components {
              */
             subject_account_id?: string | null;
         };
+        /**
+         * @description What the other account holds, as the person combining it is shown. Its
+         *     address and number are masked; the person proved one of them, and can
+         *     sign in to the account and read both anyway.
+         */
+        OtherAccount: {
+            /** @description A device of its gets push notifications. */
+            devices: boolean;
+            /** @description Its name; empty if it has none. */
+            display_name: string;
+            /** @description Masked: `a•••@example.com`. */
+            email?: string | null;
+            /** @description It has saved payment options. */
+            payment_options: boolean;
+            /** @description Masked. */
+            phone?: string | null;
+            /** @description It has text updates on for at least one agreement. */
+            text_updates: boolean;
+            yups: components["schemas"]["YupCounts"];
+        };
         /** @enum {string} */
         OutcomeDto: "NOT_AGREED" | "COMPLETED" | "ENDED_BY_AGREEMENT" | "UNRESOLVED";
         /** @description Which stretch of the record a document holds. */
@@ -1538,6 +1829,12 @@ export interface components {
          *     API description; the handler sends the bytes themselves.
          */
         Pkpass: string;
+        ProveIdentifier: {
+            /** @description Which of the account's own identifiers the code was sent to. */
+            channel: components["schemas"]["CodeChannel"];
+            /** @description A one-time code sent to it, asked for with `POST /v1/auth/codes`. */
+            code: string;
+        };
         QuantityDto: {
             /** @description A positive decimal number such as `2` or `1.5`. */
             amount: string;
@@ -1761,6 +2058,13 @@ export interface components {
             reason: components["schemas"]["ReportReason"];
             status: components["schemas"]["ReportStatus"];
         };
+        RemoveIdentifier: {
+            /**
+             * @description A one-time code sent to the identifier that stays (the account's
+             *     other one), asked for with `POST /v1/auth/codes`.
+             */
+            code: string;
+        };
         /**
          * @description A report opened for review: what it says, who it is about, the
          *     exchange's record, and what review has done about it so far.
@@ -1891,6 +2195,14 @@ export interface components {
         ReviewedAccount: {
             /** Format: uuid */
             id: string;
+            merged_at?: string | null;
+            /**
+             * Format: uuid
+             * @description The account this one was combined into, and when (RFC 3339), if it
+             *     was. Its side and name below are that account's, which holds its
+             *     place now; acting on this account acts on that one.
+             */
+            merged_into?: string | null;
             /** @description Their name as the exchange writes it; empty if they hold no side. */
             name: string;
             party?: components["schemas"]["Slot"] | null;
@@ -2125,6 +2437,8 @@ export interface components {
         UpdateAccount: {
             /** @description Only `true` is meaningful: a confirmation cannot be taken back. */
             adult_confirmed?: boolean | null;
+            /** @description `true` once the account's `notice` has been shown. */
+            dismiss_notice?: boolean | null;
             /** @description 1 to 100 characters. */
             display_name?: string | null;
             /**
@@ -2181,6 +2495,29 @@ export interface components {
          * @enum {string}
          */
         WalletPlatform: "APPLE" | "GOOGLE";
+        /** @description How many yups the other account is in, by where they stand. */
+        YupCounts: {
+            /**
+             * Format: int64
+             * @description Closed, whatever the outcome.
+             */
+            closed: number;
+            /**
+             * Format: int64
+             * @description Drafts never sent.
+             */
+            drafts: number;
+            /**
+             * Format: int64
+             * @description Agreements in force.
+             */
+            in_force: number;
+            /**
+             * Format: int64
+             * @description Sent, nothing agreed yet.
+             */
+            negotiating: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -3474,6 +3811,169 @@ export interface operations {
             };
         };
     };
+    add_invitation_address: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddInvitationAddress"];
+            };
+        };
+        responses: {
+            /** @description Added, and the invitation opened */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeView"];
+                };
+            };
+            /** @description Not signed in, or the code is wrong */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The invitation was made before its address was kept (`INVITATION_NOT_FOR_YOU`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The link is not valid, or no longer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`, `IDENTIFIER_TOO_RECENT`); or the two accounts cannot be combined */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CombineOffered"];
+                };
+            };
+            /** @description Not the address the invitation was sent to (`NOT_INVITED_ADDRESS`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes or attempts */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A code sent by text could not be checked */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    request_invitation_address_code: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationAddressCode"];
+            };
+        };
+        responses: {
+            /** @description A code was sent */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The invitation was made before its address was kept: only that address can open it (`INVITATION_NOT_FOR_YOU`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The link is not valid, or no longer (`INVITATION_UNAVAILABLE`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The invitation names nobody, or this account already (`ACTION_NOT_ALLOWED`), or no code could be sent there (`CODE_NOT_SENT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not the address the invitation was sent to (`NOT_INVITED_ADDRESS`), not an address at all (`INVALID_IDENTIFIER`), a phone number without `sms_consent` (`SMS_CONSENT_REQUIRED`), or of a country not served (`PHONE_COUNTRY_NOT_SERVED`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many codes or attempts asked for */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     claim_invitation: {
         parameters: {
             query?: never;
@@ -3696,6 +4196,60 @@ export interface operations {
             };
             /** @description Invalid request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    combine_accounts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique per attempt to make this change */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CombineAccounts"];
+            };
+        };
+        responses: {
+            /** @description Combined; the account as it now is */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The offer is used, expired or no longer true (`COMBINE_EXPIRED`), the two cannot be combined (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`), or the offer needs a proof and none good was given (`PROOF_REQUIRED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The accounts were busy and nothing was done; try again */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3953,13 +4507,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The identifier belongs to another account */
+            /** @description The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or the account has an identifier and no good `proof` was given (`PROOF_REQUIRED`), or one from an identifier too new to replace an older one (`IDENTIFIER_TOO_RECENT`) */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["CombineOffered"];
                 };
             };
             /** @description Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`) */
@@ -3981,6 +4535,132 @@ export interface operations {
                 };
             };
             /** @description A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    prove_identifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProveIdentifier"];
+            };
+        };
+        responses: {
+            /** @description The proof */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProof"];
+                };
+            };
+            /** @description Not signed in, or the code is wrong, expired or used up */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The account has no such identifier */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes for that identifier today */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A code sent by text could not be checked; nothing was counted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_identifier: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique per attempt to make this change */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description `email` or `phone` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveIdentifier"];
+            };
+        };
+        responses: {
+            /** @description The updated account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            /** @description Not signed in, or the code is wrong, expired or used up */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It is the account's only identifier (`LAST_IDENTIFIER`), or the one that stays came in the last 24 hours and the one removed is older (`IDENTIFIER_TOO_RECENT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes for the identifier that stays today */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A code sent by text could not be checked; nothing was counted */
             503: {
                 headers: {
                     [name: string]: unknown;

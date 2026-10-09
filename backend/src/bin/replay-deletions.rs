@@ -14,9 +14,12 @@
 //! suspension lifted, recorded in the review history as the owner's, and is
 //! deleted in the same transaction. A line whose time the database
 //! contradicts (before the account was created or last suspended there) is
-//! reported and left alone. It prints a line for each account and a count at
-//! the end, and exits with status 1 if any account is left undeleted (a
-//! failure, or a line left alone), 2 if the file cannot be read or is
+//! reported and left alone. An account combined into one the copy does not
+//! hold is followed through the later lines to where that one went; where
+//! the log does not say, it is reported as UNRESOLVED and left as it is. It
+//! prints a line for each account and a count at the end, and exits with
+//! status 1 if any account is left undeleted (a failure, a line left alone,
+//! or one unresolved), 2 if the file cannot be read or is
 //! damaged, in which case nothing is changed.
 //!
 //! When every account in the log is deleted, it clears the mark that

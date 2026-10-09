@@ -369,6 +369,9 @@ impl Field {
     pub const ACCOUNT_PHONE: Field = Field::new("account", "phone");
     pub const SMS_CONSENT_PHONE: Field = Field::new("sms_consent", "phone");
     pub const SMS_CODE_CONSENT_PHONE: Field = Field::new("sms_code_consent", "phone");
+    /// The email address a notice about the account goes to (`crate::combine`),
+    /// bound to its row ([`Field::row`]).
+    pub const ACCOUNT_NOTICE_EMAIL: Field = Field::new("account_notice", "email");
     /// The blind-index key itself, in `contact_key`.
     pub const INDEX_KEY: Field = Field::new("contact_key", "index_key");
 

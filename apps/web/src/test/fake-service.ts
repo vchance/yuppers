@@ -546,8 +546,38 @@ export interface FakeService {
   theirs: PaymentHandles | null
   /** When each of `theirs` changed, where recent enough to warn about. */
   theirsChanged: PaymentHandleChanges
+  /** An address or number on another of the person's accounts: proving it offers to combine. */
+  otherAccountAt: string | null
+  /** Whom the invitation names, when it is not the account signed in. */
+  sentTo: { kind: 'EMAIL' | 'PHONE'; replaces: boolean } | null
+  /** The address the invitation was sent to, as the service takes it: never shown. */
+  sentToAddress: string | null
   fetch: typeof fetch
 }
+
+/** The offer to combine that proving `otherAccountAt` brings. */
+export const COMBINE_OFFER = {
+  token: 'd6'.repeat(32),
+  expires_at: '2026-10-22T09:10:00Z',
+  proved: 'EMAIL' as const,
+  other: {
+    display_name: 'Ana R.',
+    email: 'a•••@old.example.test',
+    phone: null,
+    yups: { drafts: 0, negotiating: 1, in_force: 2, closed: 0 },
+    payment_options: true,
+    text_updates: false,
+    devices: false,
+  },
+  email: 'ADDED' as const,
+  phone: 'KEPT' as const,
+  payment_options_move: true,
+  text_updates_end: false,
+  proof_required: true,
+}
+
+/** The proof a right code to one of the account's own gives. */
+export const GOOD_PROOF = 'f0'.repeat(32)
 
 export function fakeService(account: Account | null): FakeService {
   const service: FakeService = {
@@ -564,6 +594,9 @@ export function fakeService(account: Account | null): FakeService {
     shown: new Set(),
     theirs: null,
     theirsChanged: { venmo: null, cash_app: null, paypal: null, zelle: null },
+    otherAccountAt: null,
+    sentTo: null,
+    sentToAddress: null,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -786,8 +819,56 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
         currency: offer.currency,
         timezone: offer.timezone,
         revision: offer.open_revision,
+        ...(service.sentTo ? { bound: true, sent_to: service.sentTo } : {}),
       },
     ]
+  }
+  if (call === 'POST /v1/invitations/address/codes') {
+    const { sms_consent, identifier } = body as { sms_consent?: unknown; identifier: string }
+    if (identifier !== service.sentToAddress) return [422, { code: 'NOT_INVITED_ADDRESS' }]
+    if (service.sentTo?.kind === 'PHONE' && !sms_consent) {
+      return [422, { code: 'SMS_CONSENT_REQUIRED' }]
+    }
+    return [204, null]
+  }
+  if (call === 'POST /v1/invitations/address') {
+    const { code, replace, identifier, proof } = body as {
+      code: string
+      replace: boolean
+      identifier: string
+      proof?: string
+    }
+    if (identifier !== service.sentToAddress) return [422, { code: 'NOT_INVITED_ADDRESS' }]
+    if (service.sentTo?.replaces && !replace) return [409, { code: 'IDENTIFIER_KIND_TAKEN' }]
+    if (proof !== GOOD_PROOF) return [409, { code: 'PROOF_REQUIRED' }]
+    if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
+    if (service.otherAccountAt) {
+      return [409, { code: 'IDENTIFIER_ON_OTHER_ACCOUNT', combine: COMBINE_OFFER }]
+    }
+    return [200, offerExchange()]
+  }
+  if (call === 'POST /v1/me/identifiers/proof') {
+    const { code } = body as { code: string }
+    if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
+    return [200, { proof: GOOD_PROOF, expires_at: '2026-10-22T09:10:00Z' }]
+  }
+  if (call === 'POST /v1/me/combine') {
+    const { proof } = body as { proof?: string }
+    if (proof !== GOOD_PROOF) return [409, { code: 'PROOF_REQUIRED' }]
+    service.account = { ...service.account, email: 'ana@old.example.test' }
+    service.otherAccountAt = null
+    return [200, service.account]
+  }
+  if (call === 'DELETE /v1/me/identifiers/email' || call === 'DELETE /v1/me/identifiers/phone') {
+    const { code } = body as { code: string }
+    const email = call.endsWith('email')
+    const other = email ? service.account.phone : service.account.email
+    if (!other) return [409, { code: 'LAST_IDENTIFIER' }]
+    if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
+    service.account = email
+      ? { ...service.account, email: null }
+      : { ...service.account, phone: null }
+    return [200, service.account]
   }
   if (call === 'POST /v1/invitations/report') return [204, null]
   if (call === 'POST /v1/invitations/claim') {
@@ -821,15 +902,31 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return [204, null]
   }
   if (call === 'POST /v1/me/identifiers') {
-    const { code, identifier } = body as { code: string; identifier: string }
+    const { code, identifier, proof } = body as {
+      code: string
+      identifier: string
+      proof?: string
+    }
+    const current = identifier.includes('@') ? service.account.email : service.account.phone
+    const any = service.account.email || service.account.phone
+    if (any && current !== identifier && proof !== GOOD_PROOF) {
+      return [409, { code: 'PROOF_REQUIRED' }]
+    }
     if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
+    if (identifier === service.otherAccountAt) {
+      return [409, { code: 'IDENTIFIER_ON_OTHER_ACCOUNT', combine: COMBINE_OFFER }]
+    }
     service.account = identifier.includes('@')
       ? { ...service.account, email: identifier }
       : { ...service.account, phone: identifier }
     return [200, service.account]
   }
   if (call === 'PATCH /v1/me') {
-    service.account = { ...service.account, ...(body as Partial<Account>) }
+    const { dismiss_notice: dismiss, ...rest } = body as Partial<Account> & {
+      dismiss_notice?: boolean
+    }
+    service.account = { ...service.account, ...rest }
+    if (dismiss) service.account = { ...service.account, notice: null }
     return [200, service.account]
   }
   if (call === 'GET /v1/exchanges') return [200, exchanges().map(summary)]

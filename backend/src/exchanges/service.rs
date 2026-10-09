@@ -9,12 +9,13 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::dto::{
-    Claimant, CommandDto, Consent, CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued,
-    InvitationOptions, InvitationPreview, PaymentOptionsView, RevisionSent, RevisionView,
-    RunCommand, SendRevision, ViewContext, rfc3339, state_dto,
+    BoundAddress, Claimant, CommandDto, Consent, CreateExchange, ExchangeSummary, ExchangeView,
+    InvitationIssued, InvitationOptions, InvitationPreview, PaymentOptionsView, RevisionSent,
+    RevisionView, RunCommand, SendRevision, ViewContext, rfc3339, state_dto,
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
+use crate::combine::IdentifierKind;
 use crate::contact::{self, Field};
 use crate::domain::Rules;
 use crate::domain::canonical::content_hash;
@@ -88,7 +89,7 @@ pub(crate) async fn acting(conn: &mut PgConnection, account: Uuid) -> Result<(),
 /// Records the idempotency key in the same transaction as the change it
 /// guards. Returns `true` when this key has already been applied, in which
 /// case the caller answers with the current state instead of acting again.
-async fn already_applied(
+pub(crate) async fn already_applied(
     conn: &mut PgConnection,
     account: Uuid,
     idempotency: &Idempotency<'_>,
@@ -1220,6 +1221,60 @@ impl Gate {
         let live = !record.revoked && !record.claimed && at < record.expires_at;
         (live && self.offer_open && self.initiator_active && !self.blocked).then_some(found)
     }
+
+    /// Whether the viewer has the address or number the invitation names.
+    fn viewer_named(&self, found: &InvitationRow) -> bool {
+        match found.record.bound_to {
+            None => true,
+            Some(invitation::Binding::Email(index)) => self.viewer_email == Some(index),
+            Some(invitation::Binding::Phone(index)) => self.viewer_phone == Some(index),
+        }
+    }
+
+    /// Whether the viewer has another address of the kind the invitation
+    /// names.
+    fn viewer_has_kind(&self, found: &InvitationRow) -> bool {
+        match found.record.bound_to {
+            None => false,
+            Some(invitation::Binding::Email(_)) => self.viewer_email.is_some(),
+            Some(invitation::Binding::Phone(_)) => self.viewer_phone.is_some(),
+        }
+    }
+}
+
+/// Whether `typed`, an address or number the viewer typed, is the one a live
+/// invitation names, for a viewer signed in with another: with whether
+/// adding it replaces one of theirs. Only the blind indexes are compared;
+/// nothing about the invitation's address is read back or shown. Refused, as
+/// everything about a link is, with `INVITATION_UNAVAILABLE` where the link
+/// cannot show its offer; with `ACTION_NOT_ALLOWED` where it names nobody,
+/// or the viewer already; and with `NOT_INVITED_ADDRESS`, saying nothing
+/// more, where `typed` is not the address.
+pub async fn invitation_address(
+    db: &PgPool,
+    viewer: Uuid,
+    token: &str,
+    typed: &Identifier,
+) -> Result<bool, ApiError> {
+    let mut conn = db.acquire().await?;
+    let gate = gate(&mut conn, viewer, token).await?;
+    let found = gate
+        .showable(now())
+        .ok_or(ErrorCode::InvitationUnavailable)?;
+    if gate.initiator == Some(viewer) || found.record.bound_to.is_none() || gate.viewer_named(found)
+    {
+        return Err(ErrorCode::ActionNotAllowed.into());
+    }
+    let index = contact::keys().index_of(typed);
+    let matches = match (found.record.bound_to, typed) {
+        (Some(invitation::Binding::Email(bound)), Identifier::Email(_)) => bound == index,
+        (Some(invitation::Binding::Phone(bound)), Identifier::Phone(_)) => bound == index,
+        _ => false,
+    };
+    if !matches {
+        return Err(ErrorCode::NotInvitedAddress.into());
+    }
+    Ok(gate.viewer_has_kind(found))
 }
 
 /// Locks an invitation row, once its exchange is locked, so that two claims
@@ -1268,6 +1323,21 @@ pub async fn preview_invitation(
         _ => return Err(unavailable()),
     };
 
+    // For a viewer who is not whom it names: only that, and of which kind.
+    // The address itself is never shown, in full or masked; they type it.
+    let sent_to = match found.record.bound_to {
+        Some(binding) if !gate.viewer_named(found) && gate.initiator != Some(viewer) => {
+            Some(BoundAddress {
+                kind: match binding {
+                    invitation::Binding::Email(_) => IdentifierKind::Email,
+                    invitation::Binding::Phone(_) => IdentifierKind::Phone,
+                },
+                replaces: gate.viewer_has_kind(found),
+            })
+        }
+        _ => None,
+    };
+
     Ok(InvitationPreview {
         display_code: aggregate.display_code.clone(),
         expires_at: rfc3339(found.record.expires_at),
@@ -1275,6 +1345,7 @@ pub async fn preview_invitation(
         currency: aggregate.currency.clone(),
         timezone: aggregate.timezone.clone(),
         revision: RevisionView::from_record(open),
+        sent_to,
     })
 }
 
@@ -1355,27 +1426,46 @@ pub async fn claim_invitation(
     token: &str,
     claim: Claim,
 ) -> Result<ExchangeView, ApiError> {
-    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
-    let account = session.account_id;
     let mut tx = db.begin().await?;
-    acting(&mut tx, account).await?;
+    let view = claim_in(&mut tx, rules, session.account_id, token, claim).await?;
+    tx.commit().await?;
+    Ok(view)
+}
 
-    let exchange = match claim_gate(&gate(&mut tx, account, token).await?, account, claim, now())? {
+/// [`claim_invitation`], in the caller's transaction: what it changes stands
+/// or falls with the rest of that transaction (adding the address an
+/// invitation names and claiming it, `crate::http::account`).
+pub(crate) async fn claim_in(
+    tx: &mut PgConnection,
+    rules: &Rules,
+    account: Uuid,
+    token: &str,
+    claim: Claim,
+) -> Result<ExchangeView, ApiError> {
+    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
+    acting(&mut *tx, account).await?;
+
+    let exchange = match claim_gate(
+        &gate(&mut *tx, account, token).await?,
+        account,
+        claim,
+        now(),
+    )? {
         Passed::Yours(exchange) | Passed::Take { exchange, .. } => exchange,
     };
 
     // The exchange first, then the invitation: the order every other change
     // takes them in. Then the gate again, under the lock: a block, a
     // revocation, a suspension or another claim may have come first.
-    let aggregate = repo::load(&mut tx, exchange, true)
+    let aggregate = repo::load(&mut *tx, exchange, true)
         .await?
         .ok_or_else(unavailable)?;
-    let gate = gate(&mut tx, account, token).await?;
+    let gate = gate(&mut *tx, account, token).await?;
     let found = gate.invitation.as_ref().ok_or_else(unavailable)?;
     if found.exchange != exchange {
         return Err(unavailable());
     }
-    lock_invitation(&mut tx, found.id).await?;
+    lock_invitation(&mut *tx, found.id).await?;
     let at = now();
 
     // Claiming twice with the same account is harmless, for as long as the
@@ -1383,7 +1473,7 @@ pub async fn claim_invitation(
     // spent like any other, and says so the same way.
     let pre_bound = match claim_gate(&gate, account, claim, at)? {
         Passed::Yours(_) if aggregate.accounts[1] == Some(account) => {
-            return view(&mut tx, rules, exchange, account).await;
+            return view(&mut *tx, rules, exchange, account).await;
         }
         Passed::Yours(_) => return Err(unavailable()),
         Passed::Take { pre_bound, .. } => pre_bound,
@@ -1414,11 +1504,9 @@ pub async fn claim_invitation(
     // in a row that can change.
     let mut claimed = aggregate.clone();
     claimed.accounts[1] = Some(account);
-    repo::persist(&mut tx, &claimed, &decision, actor, None, at).await?;
+    repo::persist(&mut *tx, &claimed, &decision, actor, None, at).await?;
 
-    let view = view(&mut tx, rules, exchange, account).await?;
-    tx.commit().await?;
-    Ok(view)
+    view(&mut *tx, rules, exchange, account).await
 }
 
 // ---- Timers -----------------------------------------------------------------

@@ -166,6 +166,11 @@ pub enum Source {
     /// The person was removed from the agreement, or left it, before the
     /// other party confirmed them.
     NoLongerAParty,
+    /// The account's phone number was removed (`DELETE /v1/me/identifiers`).
+    PhoneRemoved,
+    /// The account was combined into another that kept a number of its own,
+    /// so this one's was dropped (`crate::combine`).
+    AccountsCombined,
 }
 
 impl Source {
@@ -179,6 +184,8 @@ impl Source {
             Source::AccountDeleted => "ACCOUNT_DELETED",
             Source::PhoneChanged => "PHONE_CHANGED",
             Source::NoLongerAParty => "NO_LONGER_A_PARTY",
+            Source::PhoneRemoved => "PHONE_REMOVED",
+            Source::AccountsCombined => "ACCOUNTS_COMBINED",
         }
     }
 
@@ -551,17 +558,25 @@ pub async fn purge_consent(
         .execute(db)
         .await?
         .rows_affected();
+    // A record made by an account since combined into another is that
+    // account's, through `merged_into` (`crate::combine`): the opt-in keeps
+    // the updates that moved with the number, and is ended by what the
+    // account it went into does. The records themselves are never rewritten.
     let records = sqlx::query(
         "DELETE FROM sms_consent c
          WHERE c.created_at < $1
            AND NOT (c.action = 'OPT_IN' AND EXISTS (
                    SELECT 1 FROM sms_update u
-                   WHERE u.account_id = c.account_id AND u.exchange_id = c.exchange_id
+                   WHERE u.account_id IN (c.account_id, (SELECT m.merged_into FROM account m
+                                                         WHERE m.id = c.account_id))
+                     AND u.exchange_id = c.exchange_id
                      AND u.turned_on_at <= c.created_at))
            AND NOT (c.action = 'OPT_IN' AND COALESCE((
                    SELECT min(e.created_at) FROM sms_consent e
                    WHERE e.id > c.id
-                     AND ((e.account_id = c.account_id AND e.exchange_id = c.exchange_id
+                     AND ((e.account_id IN (c.account_id, (SELECT m.merged_into FROM account m
+                                                           WHERE m.id = c.account_id))
+                           AND e.exchange_id = c.exchange_id
                            AND e.action IN ('OPT_OUT', 'OPT_IN'))
                           OR (e.action = 'STOP' AND e.phone_index = c.phone_index))),
                    '-infinity') >= $1)

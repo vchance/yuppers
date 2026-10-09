@@ -19,6 +19,12 @@ const AccountSetup = lazy(() => import('./AccountSetup'))
 const InvitationReport = lazy(() =>
   import('./InvitationReport').then((module) => ({ default: module.InvitationReport })),
 )
+// Only someone signed in with another address than the one invited.
+const InvitationAddress = lazy(() =>
+  import('../components/InvitationAddress').then((module) => ({
+    default: module.InvitationAddress,
+  })),
+)
 
 /**
  * Where an invitation link lands. The proposal is read signed in: someone
@@ -253,8 +259,28 @@ function Proposal({ token }: { token: string }) {
             <p className="hint">{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</p>
           </section>
 
-          {preview.bound && <p>{w.boundSignedIn}</p>}
+          {preview.bound && !preview.sent_to && <p>{w.boundSignedIn}</p>}
           {refusal}
+
+          {/* Sent to an address this account does not have: add it first. */}
+          {preview.sent_to && (
+            <Suspense fallback={<p>{wording.common.loading}</p>}>
+              <InvitationAddress
+                token={token}
+                sentTo={preview.sent_to}
+                onOpened={(exchange) => {
+                  forgetInvitationToken(token)
+                  navigate(paths.exchange(exchange.id), { replace: true })
+                }}
+                onSignOut={() => {
+                  api.signOut().then(
+                    () => setAccount(null),
+                    () => setAccount(null),
+                  )
+                }}
+              />
+            </Suspense>
+          )}
 
           {responding && able && <p>{w.opening}</p>}
           {responding && !able && (
@@ -262,7 +288,7 @@ function Proposal({ token }: { token: string }) {
               <AccountSetup headingLevel="h2" />
             </Suspense>
           )}
-          {!responding && (
+          {!responding && !preview.sent_to && (
             <div className="actions">
               <button
                 type="button"

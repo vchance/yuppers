@@ -6,6 +6,7 @@ import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
+import { CombinedNotice } from '../components/CombinedNotice'
 import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
@@ -63,6 +64,7 @@ export default function HomePage() {
   return (
     <>
       <PageHeading>{w.title}</PageHeading>
+      <CombinedNotice />
       <div className="actions">
         <button type="button" className="primary" disabled={starting} onClick={start}>
           {w.start}

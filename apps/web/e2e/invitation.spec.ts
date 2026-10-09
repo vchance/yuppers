@@ -158,13 +158,15 @@ test('named, as the composer expects: the person it names can propose changes as
     { invitee: bruno.email },
   )
 
-  // Someone signed in with another address is told it is for someone else
-  // and how to put that right, and cannot take it.
+  // Someone signed in with another address is told only that it was sent
+  // to an email address that isn't theirs, and that it opens once that
+  // address is; nothing on the page takes it as it is.
   await carla.page.goto(link)
   await signIn(carla)
-  await carla.page.getByRole('button', { name: en.invitation.respondNew, exact: true }).click()
-  await setUpProfile(carla)
-  await expect(carla.page.getByText(en.errors.INVITATION_NOT_FOR_YOU)).toBeVisible()
+  await expect(carla.page.getByRole('heading', { name: en.invitation.sentToEmail })).toBeVisible()
+  await expect(carla.page.getByText(`${bruno.email[0]}•••`)).toHaveCount(0)
+  await expect(carla.page.getByRole('button', { name: en.invitation.respondNew })).toHaveCount(0)
+  await expect(carla.page.getByText(bruno.email)).toHaveCount(0)
   await expect(carla.page).toHaveURL(/\/en\/i$/)
 
   // Bruno, signed in with the address Ana gave, is told he can respond in

@@ -22,6 +22,9 @@ pub fn router() -> Router<AppState> {
         .route("/auth/session", delete(auth::delete_session))
         .route("/me", get(account::me).patch(account::update_me))
         .route("/me/identifiers", post(account::add_identifier))
+        .route("/me/identifiers/proof", post(account::prove_identifier))
+        .route("/me/identifiers/{kind}", delete(account::remove_identifier))
+        .route("/me/combine", post(account::combine_accounts))
         .route(
             "/me/deletion",
             get(deletion::deletion_preview).post(deletion::delete_account),
@@ -62,6 +65,14 @@ pub fn router() -> Router<AppState> {
         )
         .route("/invitations/preview", post(exchanges::preview_invitation))
         .route("/invitations/claim", post(exchanges::claim_invitation))
+        .route(
+            "/invitations/address/codes",
+            post(account::request_invitation_address_code),
+        )
+        .route(
+            "/invitations/address",
+            post(account::add_invitation_address),
+        )
         .merge(safety::routes())
         .merge(staff::routes())
         .merge(wallet::routes())

@@ -160,6 +160,22 @@ export interface Wording {
      * review screen; a paragraph ending in `{link}` becomes its button.
      */
     staffAlert: { subject: string; body: string }
+    /**
+     * The email telling every address on two accounts that they were
+     * combined (`backend/src/combine.rs`). Names no yup. Uses
+     * `{productName}` and `{link}`, the account page.
+     */
+    accountsCombined: { subject: string; body: string }
+    /**
+     * The email telling an address that it was replaced on its account by
+     * another, sent to the old one. Uses `{productName}` and `{link}`.
+     */
+    emailChanged: { subject: string; body: string }
+    /**
+     * The email telling an address that it was removed from its account,
+     * sent to it. Uses `{productName}` and `{link}`.
+     */
+    emailRemoved: { subject: string; body: string }
   }
   /**
    * The push notification the service sends, for every notice alike
@@ -291,6 +307,102 @@ export interface Wording {
     versionOnly: string
     versionBuild: string
     versionBuildCommit: string
+  }
+  /**
+   * The account's email address and phone number, each with Add, Change and
+   * Remove (`identifiers.ts`). `{identifier}` and `{staying}` are shown as
+   * written, phone numbers formatted.
+   */
+  identifiers: {
+    heading: string
+    intro: string
+    none: string
+    add: string
+    change: string
+    remove: string
+    addEmailTitle: string
+    addPhoneTitle: string
+    changeEmailTitle: string
+    changePhoneTitle: string
+    removeEmailTitle: string
+    removePhoneTitle: string
+    newEmailLabel: string
+    newPhoneLabel: string
+    changeNote: string
+    /**
+     * Changing one first takes a code to one of the account's own, the one
+     * being replaced or the other (`POST /v1/me/identifiers/proof`).
+     * `{identifier}` is where it goes.
+     */
+    proveIntro: string
+    /** As `proveIntro`, for adding one where the account has none of that kind. */
+    proveAddIntro: string
+    proveOther: string
+    proveSend: string
+    proveConfirm: string
+    /** The email address replaced is told; `{identifier}` is that one. */
+    changeEmailTold: string
+    sendCode: string
+    codeSent: string
+    confirm: string
+    /** Why Remove is not offered for the only one. */
+    onlyEmail: string
+    onlyPhone: string
+    removeIntro: string
+    removePhoneNote: string
+    removeEmailNote: string
+    sendRemovalCode: string
+    removeConfirm: string
+    added: string
+    removed: string
+    /**
+     * The notices shown once in the app for a phone number replaced or
+     * removed, which is not texted (`notice` in `GET /v1/me`). Use `{date}`.
+     */
+    noticePhoneChanged: string
+    noticePhoneRemoved: string
+  }
+  /**
+   * The offer to combine another account into this one, once a code proved
+   * its address (`IDENTIFIER_ON_OTHER_ACCOUNT`), and its confirmation.
+   * `{identifier}` is masked.
+   */
+  combine: {
+    headingEmail: string
+    headingPhone: string
+    intro: string
+    otherHeading: string
+    otherName: string
+    otherEmail: string
+    otherPhone: string
+    /** Uses `{count}`, a plural. */
+    yups: string
+    /** Uses `{inForce}`, `{negotiating}`, `{drafts}`, `{closed}`. */
+    yupsDetail: string
+    movesHeading: string
+    movesYups: string
+    emailAdded: string
+    emailReplaced: string
+    emailDropped: string
+    phoneAdded: string
+    phoneReplaced: string
+    phoneDropped: string
+    paymentMove: string
+    paymentDropped: string
+    textUpdatesMove: string
+    textUpdatesEnd: string
+    devices: string
+    ends: string
+    cannotUndo: string
+    expires: string
+    confirm: string
+    done: string
+    /**
+     * Shown once on the account another was combined into, where neither
+     * had an email address to tell (`combined_notice`). Uses `{date}`.
+     */
+    noticeBanner: string
+    noticeDismiss: string
   }
   /**
    * The appearance switch: System, Light or Dark, kept on this device only.
@@ -580,6 +692,19 @@ export interface Wording {
     missingTitle: string
     missing: string
     ownInvitation: string
+    /**
+     * An invitation sent to an address the account does not have
+     * (`sent_to`): only its kind is said, never the address, in full or in
+     * part. The person types it.
+     */
+    sentToEmail: string
+    sentToPhone: string
+    sentToReplacesEmail: string
+    sentToReplacesPhone: string
+    signInInstead: string
+    addressCodeSent: string
+    addAndOpen: string
+    replaceAndOpen: string
   }
   /**
    * Someone who opened an invitation that named nobody, until the initiator
@@ -695,6 +820,8 @@ export interface Wording {
     /** Uses `{name}`. */
     nameInYup: string
     standing: Record<Schemas['AccountStanding'], string>
+    /** An account combined into another: uses `{id}` and `{date}`. */
+    mergedInto: string
     /** Uses `{date}`. */
     filed: string
     back: string
@@ -1056,6 +1183,12 @@ export interface Wording {
     /** `{phone}`, masked. */
     codeSent: string
     codeLabel: string
+    /**
+     * Adding a number takes a code to the account's email address too:
+     * where it went (`{email}`), and its field.
+     */
+    proofCodeSent: string
+    proofCodeLabel: string
     addPhone: string
     changePhone: string
     /** `{phone}`, masked. */

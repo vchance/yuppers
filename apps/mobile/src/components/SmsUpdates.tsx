@@ -43,9 +43,16 @@ export function SmsUpdates({ exchange, client = api }: Props) {
   const session = useSession();
   const w = wording.smsUpdates;
   // A number added here is the account's from now on, on every screen.
-  const control = useSmsUpdates(client, exchange, language, session.setAccount);
+  const control = useSmsUpdates(
+    client,
+    exchange,
+    language,
+    session.setAccount,
+    session.account?.email ?? null,
+  );
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [proofCode, setProofCode] = useState('');
   const { step, standing, pending, saved, phoneAdded } = control;
 
   const number = standing?.phone ? maskPhone(standing.phone) : '';
@@ -119,13 +126,27 @@ export function SmsUpdates({ exchange, client = api }: Props) {
             value={code}
             onChangeText={setCode}
           />
+          {control.proofTo ? (
+            <>
+              <P>{fmt(w.proofCodeSent, { email: control.proofTo })}</P>
+              <TextField
+                label={w.proofCodeLabel}
+                hint={wording.signIn.codeHint}
+                required
+                keyboardType="number-pad"
+                maxLength={6}
+                value={proofCode}
+                onChangeText={setProofCode}
+              />
+            </>
+          ) : null}
           <Failure code={control.failure} />
           <Actions>
             <Button
               label={w.addPhone}
               variant="primary"
               disabled={control.busy}
-              onPress={() => void control.verify(code)}
+              onPress={() => void control.verify(code, proofCode)}
             />
             <Button
               label={w.changePhone}
@@ -133,6 +154,7 @@ export function SmsUpdates({ exchange, client = api }: Props) {
               disabled={control.busy}
               onPress={() => {
                 setCode('');
+                setProofCode('');
                 control.changePhone();
               }}
             />

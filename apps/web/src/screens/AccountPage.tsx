@@ -1,4 +1,3 @@
-import { formatPhone } from '@yuppers/shared'
 import { useState } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -6,6 +5,7 @@ import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { Appearance } from '../components/Appearance'
 import { BuildVersion } from '../components/BuildVersion'
+import { Identifiers } from '../components/Identifiers'
 import { LegalLink } from '../components/LegalLink'
 import { PaymentHandles } from '../components/PaymentHandles'
 import { PageHeading } from '../components/ui'
@@ -41,20 +41,7 @@ export default function AccountPage() {
   return (
     <>
       <PageHeading>{w.title}</PageHeading>
-      <dl>
-        {account.email && (
-          <>
-            <dt>{w.emailLabel}</dt>
-            <dd>{account.email}</dd>
-          </>
-        )}
-        {account.phone && (
-          <>
-            <dt>{w.phoneLabel}</dt>
-            <dd dir="ltr">{formatPhone(account.phone)}</dd>
-          </>
-        )}
-      </dl>
+      <Identifiers account={account} />
       <ProfileForm account={account} first={false} />
       <PaymentHandles />
       <Appearance />

@@ -103,7 +103,7 @@ export class ApiPerson {
   async propose(
     otherName: string,
     contributions: readonly Contribution[],
-    options: { note?: string; language?: string } = {},
+    options: { note?: string; language?: string; boundTo?: string } = {},
   ): Promise<{ id: string; link: string; contributionIds: string[] }> {
     const draft = (await this.call('POST', '/v1/exchanges', { timezone: 'UTC' })) as Exchange
     const contributionIds = contributions.map(() => randomUUID())
@@ -131,7 +131,7 @@ export class ApiPerson {
         terms,
         consent: CONSENT,
         note: options.note ?? null,
-        invitation: { for_anyone: true },
+        invitation: options.boundTo ? { bound_to: options.boundTo } : { for_anyone: true },
       },
       true,
     )) as { invitation_token: string }

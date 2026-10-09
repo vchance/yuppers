@@ -2,7 +2,7 @@ import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client';
 import { failureCode, groupExchanges, labelText } from '@yuppers/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import {
   Actions,
@@ -19,12 +19,13 @@ import {
   Written,
 } from '../components/ui';
 import { CombinedNotice } from '../components/CombinedNotice';
+import { Mark } from '../components/Mark';
 import { NotificationsOffer } from '../components/Notifications';
 import { useI18n } from '../lib/context';
 import { forgetInvitation } from '../lib/invitation';
 import { deviceTimezone } from '../lib/time-zone';
 import { api } from '../lib/session';
-import { TOUCH_TARGET } from '../lib/theme';
+import { space, TOUCH_TARGET } from '../lib/theme';
 
 /**
  * The signed-in person's exchanges, the way to start one, and the way to
@@ -32,6 +33,9 @@ import { TOUCH_TARGET } from '../lib/theme';
  * first, since that is what may be waiting on them; drafts they never sent
  * come next; what is closed is kept but folded away, so it never buries the
  * rest. Within a group, most recently changed first.
+ *
+ * With no exchanges yet, the screen is the mark, what to do, and the ways to
+ * start, in one place rather than buttons over an empty list.
  */
 export function HomeScreen() {
   const { wording, fmt } = useI18n();
@@ -79,6 +83,20 @@ export function HomeScreen() {
   }
 
   const groups = exchanges ? groupExchanges(exchanges) : null;
+  const empty = exchanges?.length === 0;
+  const actions = (
+    <Actions>
+      <Button variant="primary" label={w.start} disabled={starting} onPress={() => void start()} />
+      <Button
+        label={wording.mobile.openInvitation.title}
+        onPress={() => {
+          // Asking from here means a new one: an invitation looked at earlier is let go.
+          forgetInvitation();
+          router.push('/invitation');
+        }}
+      />
+    </Actions>
+  );
 
   return (
     <Screen
@@ -89,23 +107,19 @@ export function HomeScreen() {
       }}>
       <Heading>{w.title}</Heading>
       <CombinedNotice />
-      <Actions>
-        <Button variant="primary" label={w.start} disabled={starting} onPress={() => void start()} />
-        <Button
-          label={wording.mobile.openInvitation.title}
-          onPress={() => {
-            // Asking from here means a new one: an invitation looked at earlier is let go.
-            forgetInvitation();
-            router.push('/invitation');
-          }}
-        />
-      </Actions>
+      {empty ? null : actions}
       <Failure code={failure} />
       {tooMany && <ErrorNote>{w.tooManyToday}</ErrorNote>}
       <NotificationsOffer exchanges={exchanges} />
 
       {!exchanges && !failure && <P>{wording.common.loading}</P>}
-      {exchanges?.length === 0 && <P>{w.empty}</P>}
+      {empty ? (
+        <Card style={styles.empty}>
+          <Mark width={96} />
+          <P style={styles.emptyText}>{w.empty}</P>
+          <View style={styles.emptyActions}>{actions}</View>
+        </Card>
+      ) : null}
       {groups && (
         <>
           <Group heading={w.groupOpen} exchanges={groups.open} />
@@ -215,4 +229,8 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
 const styles = StyleSheet.create({
   row: { minHeight: TOUCH_TARGET },
   pressed: { opacity: 0.6 },
+  empty: { alignItems: 'center', paddingVertical: space.xl, gap: space.l },
+  emptyText: { textAlign: 'center', maxWidth: 400 },
+  // The buttons wrap as a row does, centred under the words.
+  emptyActions: { alignItems: 'center', maxWidth: '100%' },
 });

@@ -527,6 +527,8 @@ export interface FakeService {
   codeSender: string | null
   /** Whether the draft's first proposal has been sent. */
   proposed: boolean
+  /** The list of exchanges as someone new sees it: empty. */
+  noExchanges: boolean
   /** A refusal for every request for a code from now on, such as a limit. */
   refuseCodes: ErrorCode | null
   /** Whether the service texts agreement updates (`sms_updates` in its meta). */
@@ -588,6 +590,7 @@ export function fakeService(account: Account | null): FakeService {
     phone: true,
     codeSender: CODE_SENDER,
     proposed: false,
+    noExchanges: false,
     refuseCodes: null,
     texting: true,
     textUpdates: new Set(),
@@ -930,7 +933,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     if (dismiss) service.account = { ...service.account, notice: null }
     return [200, service.account]
   }
-  if (call === 'GET /v1/exchanges') return [200, exchanges().map(summary)]
+  if (call === 'GET /v1/exchanges') return [200, service.noExchanges ? [] : exchanges().map(summary)]
   if (call === 'GET /v1/blocks') return [200, []]
   // To anyone but a reviewer, every staff path is not found.
   if (call.includes(' /v1/staff/')) {

@@ -164,6 +164,8 @@ export interface FakeService {
   refuseCodes: ErrorCode | null;
   /** Whether the draft's first proposal has been sent. */
   proposed: boolean;
+  /** The list of exchanges as someone new sees it: empty. */
+  noExchanges: boolean;
   /** The devices registered for push, by ID, with what was registered. */
   devices: Map<string, unknown>;
   /** Whether the service texts agreement updates (`sms_updates` in its meta). */
@@ -190,6 +192,7 @@ export function fakeService(): FakeService {
     codeSender: CODE_SENDER,
     refuseCodes: null,
     proposed: false,
+    noExchanges: false,
     devices: new Map(),
     texting: true,
     textUpdates: new Set(),
@@ -349,6 +352,7 @@ function respond(
     return [204, null];
   }
   if (call === 'GET /v1/exchanges') {
+    if (service.noExchanges) return [200, []];
     return [
       200,
       [

@@ -7,14 +7,20 @@ import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { CombinedNotice } from '../components/CombinedNotice'
+import { Mark } from '../components/Mark'
 import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode } from '../lib/api'
+
+import '../components/brand.css'
 
 /**
  * The signed-in person's exchanges and the way to start one. What is in
  * progress comes first, since that is what may be waiting on them; drafts
  * they never sent come next; what is closed is kept but folded away, so it
  * never buries the rest. Within a group, most recently changed first.
+ *
+ * With no exchanges yet, the page is the mark, what to do, and the way to
+ * start, in one place rather than a button over an empty list.
  */
 export default function HomePage() {
   const { wording, fmt } = useI18n()
@@ -60,21 +66,31 @@ export default function HomePage() {
   }
 
   const groups = exchanges ? groupExchanges(exchanges) : null
+  const empty = exchanges?.length === 0
+  const startButton = (
+    <div className="actions">
+      <button type="button" className="primary" disabled={starting} onClick={start}>
+        {w.start}
+      </button>
+    </div>
+  )
 
   return (
     <>
       <PageHeading>{w.title}</PageHeading>
       <CombinedNotice />
-      <div className="actions">
-        <button type="button" className="primary" disabled={starting} onClick={start}>
-          {w.start}
-        </button>
-      </div>
+      {!empty && startButton}
       <Failure code={failure} />
       {tooMany && <ErrorNote>{w.tooManyToday}</ErrorNote>}
 
       {!exchanges && !failure && <p>{wording.common.loading}</p>}
-      {exchanges?.length === 0 && <p>{w.empty}</p>}
+      {empty && (
+        <div className="empty-state">
+          <Mark />
+          <p>{w.empty}</p>
+          {startButton}
+        </div>
+      )}
       {groups && (
         <>
           <Group id="open" heading={w.groupOpen} exchanges={groups.open} />

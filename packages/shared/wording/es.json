@@ -167,6 +167,10 @@
     "staffAlert": {
       "subject": "Hay una denuncia pendiente de revisión",
       "body": "Hay una nueva denuncia en {productName} pendiente de revisión. Cada denuncia se revisa en menos de 24 horas.\n\nAbre la cola de revisión: {link}\n\nRecibes este correo porque revisas denuncias en {productName}. Nunca dice de qué trata una denuncia; inicia sesión para leerla."
+    },
+    "accountsCombined": {
+      "subject": "Se combinaron dos de tus cuentas de Yuppers",
+      "body": "Dos cuentas de {productName}, cada una con uno de tus correos electrónicos o números de teléfono para iniciar sesión, se acaban de combinar en una. Todo lo de ambas está ahora en esa cuenta, y para iniciar sesión usas el correo electrónico o número de teléfono que conservó.\n\nVe tu cuenta: {link}\n\nSi no lo hiciste tú, escribe de inmediato a support@yuppers.app. Este correo no dice nada de tus yups; inicia sesión para verlos."
     }
   },
   "push": {
@@ -174,7 +178,8 @@
   },
   "sms": {
     "update": "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: {link}. Responde STOP para cancelar.",
-    "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar."
+    "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar.",
+    "accountsCombined": "Yuppers.app: se combinaron dos cuentas tuyas: {link} Si no lo hiciste, escribe a support@yuppers.app. Responde STOP para cancelar."
   },
   "common": {
     "loading": "Cargando…",
@@ -248,6 +253,64 @@
     "versionOnly": "Versión {version}",
     "versionBuild": "Versión {version} (compilación {build})",
     "versionBuildCommit": "Versión {version} (compilación {build}, {commit})"
+  },
+  "identifiers": {
+    "heading": "Correo electrónico y teléfono",
+    "intro": "Inicias sesión con un código enviado a cualquiera de los dos. Tu cuenta conserva al menos uno.",
+    "none": "Ninguno",
+    "add": "Agregar",
+    "change": "Cambiar",
+    "remove": "Quitar",
+    "addEmailTitle": "Agregar un correo electrónico",
+    "addPhoneTitle": "Agregar un número de teléfono",
+    "changeEmailTitle": "Cambiar tu correo electrónico",
+    "changePhoneTitle": "Cambiar tu número de teléfono",
+    "removeEmailTitle": "Quitar tu correo electrónico",
+    "removePhoneTitle": "Quitar tu número de teléfono",
+    "newEmailLabel": "Correo electrónico",
+    "newPhoneLabel": "Número de teléfono",
+    "changeNote": "El nuevo reemplaza a {identifier} cuando ingreses el código que te enviamos.",
+    "sendCode": "Enviar código",
+    "codeSent": "Enviamos un código a {identifier}.",
+    "confirm": "Confirmar",
+    "onlyEmail": "No puedes quitar tu correo electrónico: es tu única forma de iniciar sesión. Primero agrega un número de teléfono.",
+    "onlyPhone": "No puedes quitar tu número de teléfono: es tu única forma de iniciar sesión. Primero agrega un correo electrónico.",
+    "removeIntro": "Desde ahora iniciarás sesión con {staying}. Para asegurarnos de que te llega, te enviamos un código ahí.",
+    "removePhoneNote": "Las actualizaciones por mensaje de tus acuerdos se detienen, y las invitaciones ya enviadas a este número quedan como están.",
+    "removeEmailNote": "Las invitaciones ya enviadas a este correo quedan como están.",
+    "sendRemovalCode": "Enviar código a {staying}",
+    "removeConfirm": "Confirmar y quitar",
+    "added": "Se agregó {identifier}.",
+    "removed": "Se quitó."
+  },
+  "combine": {
+    "headingEmail": "Ese correo electrónico está en otra cuenta de Yuppers",
+    "headingPhone": "Ese número de teléfono está en otra cuenta de Yuppers",
+    "intro": "El código demuestra que es tuyo, así que puedes combinar esa cuenta con esta y tener todo en un solo lugar.",
+    "otherHeading": "La otra cuenta",
+    "otherName": "Nombre: {name}",
+    "otherEmail": "Correo electrónico: {identifier}",
+    "otherPhone": "Teléfono: {identifier}",
+    "yups": "{count, plural, one {# yup} other {# yups}}",
+    "yupsDetail": "{inForce} en vigor, {negotiating} esperando una firma, {drafts} borradores, {closed} cerrados",
+    "movesHeading": "Qué hace combinarlas",
+    "movesYups": "Sus yups pasan a esta cuenta. Lo que se firmó en ellos queda exactamente como se firmó.",
+    "emailAdded": "Su correo electrónico, {identifier}, se agrega a esta cuenta.",
+    "emailReplaced": "Su correo electrónico, {identifier}, reemplaza al tuyo.",
+    "emailDropped": "Su correo electrónico, {identifier}, se quita: conservas el tuyo.",
+    "phoneAdded": "Su número de teléfono, {identifier}, se agrega a esta cuenta.",
+    "phoneReplaced": "Su número de teléfono, {identifier}, reemplaza al tuyo.",
+    "phoneDropped": "Su número de teléfono, {identifier}, se quita: conservas el tuyo.",
+    "paymentMove": "Sus formas de pago pasan aquí, porque no tienes ninguna. A quien te deba dinero se le avisa que cambiaron.",
+    "paymentDropped": "Sus formas de pago se quitan: conservas las tuyas.",
+    "textUpdatesMove": "Sus actualizaciones por mensaje siguen, al mismo número.",
+    "textUpdatesEnd": "Sus actualizaciones por mensaje se detienen, porque se quita su número de teléfono.",
+    "devices": "Se cierra la sesión en sus dispositivos. Vuelve a iniciar sesión en ellos con esta cuenta.",
+    "ends": "La otra cuenta termina: nadie podrá volver a iniciar sesión en ella. Avisamos a cada correo electrónico y número de teléfono de ambas cuentas que se combinaron.",
+    "cannotUndo": "Esto no se puede deshacer.",
+    "expires": "Tienes 10 minutos para decidir. Después, vuelve a agregar la dirección para recibir un código nuevo.",
+    "confirm": "Combinar cuentas",
+    "done": "Cuentas combinadas. Ahora todo está en esta cuenta."
   },
   "appearance": {
     "heading": "Apariencia",
@@ -522,7 +585,15 @@
     "opening": "Abriendo el yup…",
     "missingTitle": "Este enlace está incompleto",
     "missing": "El enlace de invitación perdió su última parte. Ábrelo de nuevo desde el mensaje en el que llegó, o pide uno nuevo a quien te lo envió.",
-    "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo."
+    "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
+    "sentTo": "Esta invitación se envió a {identifier}. Agrégalo a tu cuenta para abrirla.",
+    "sentToReplacesEmail": "Tu cuenta ya tiene otro correo electrónico. Agregar este lo reemplaza, y desde ahora iniciarás sesión con él.",
+    "sentToReplacesPhone": "Tu cuenta ya tiene otro número de teléfono. Agregar este lo reemplaza, y desde ahora iniciarás sesión con él.",
+    "signInInstead": "O cierra sesión e inicia sesión con {identifier}.",
+    "sendAddressCode": "Enviar un código a {identifier}",
+    "addressCodeSent": "Enviamos un código a {identifier}.",
+    "addAndOpen": "Agregar y abrir",
+    "replaceAndOpen": "Usarlo y abrir"
   },
   "claimant": {
     "reject": "No es a quien invité",
@@ -606,8 +677,10 @@
     "standing": {
       "ACTIVE": "Activa",
       "SUSPENDED": "Suspendida",
-      "DELETED": "Eliminada"
+      "DELETED": "Eliminada",
+      "MERGED": "Combinada"
     },
+    "mergedInto": "Combinada con la cuenta {id} el {date}.",
     "filed": "Enviada el {date}",
     "back": "Volver a la cola",
     "detailTitle": "Denuncia sobre {code}",
@@ -1195,6 +1268,13 @@
     "UNAUTHENTICATED": "Inicia sesión para continuar.",
     "ACCOUNT_SUSPENDED": "Esta cuenta ha sido suspendida.",
     "IDENTIFIER_IN_USE": "Ese correo electrónico o número de teléfono pertenece a otra cuenta.",
+    "IDENTIFIER_ON_OTHER_ACCOUNT": "Ese correo electrónico o número de teléfono está en otra de tus cuentas. Puedes combinarlas.",
+    "IDENTIFIER_KIND_TAKEN": "Tu cuenta ya tiene uno de estos. Indica si quieres reemplazarlo.",
+    "LAST_IDENTIFIER": "No puedes quitar el único correo electrónico o número de teléfono de tu cuenta: es con lo que inicias sesión.",
+    "COMBINE_EXPIRED": "Esa oferta para combinar cuentas terminó. Vuelve a agregar el correo electrónico o número de teléfono para recibir un código nuevo.",
+    "COMBINE_SUSPENDED": "Estas cuentas no se pueden combinar, porque una de ellas está suspendida.",
+    "COMBINE_REVIEWER": "Esa cuenta revisa denuncias, así que no se puede combinar con otra. Pregunta a quien administra Yuppers.app.",
+    "COMBINE_SHARED_EXCHANGE": "Estas cuentas no se pueden combinar, porque están en los dos lados del mismo yup. Una persona no puede ser ambas partes de un acuerdo.",
     "VERSION_CONFLICT": "Esto cambió mientras lo revisabas. Revísalo e inténtalo de nuevo.",
     "PROFILE_INCOMPLETE": "Agrega tu nombre y confirma que tienes 18 años o más antes de firmar.",
     "CONSENT_OUTDATED": "Los términos de firma se actualizaron. Revísalos antes de firmar.",

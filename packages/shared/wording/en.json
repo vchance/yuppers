@@ -167,6 +167,10 @@
     "staffAlert": {
       "subject": "A report is waiting for review",
       "body": "A new report on {productName} is waiting for review. Every report is reviewed within 24 hours.\n\nOpen the review queue: {link}\n\nYou’re getting this email because you review reports on {productName}. It never says what a report is about; sign in to read it."
+    },
+    "accountsCombined": {
+      "subject": "Two of your Yuppers accounts were combined",
+      "body": "Two {productName} accounts, each signed in to with one of your email addresses or phone numbers, were just combined into one. Everything from both is in that account now, and you sign in to it with the email address or phone number it kept.\n\nSee your account: {link}\n\nIf you didn’t do this, write to support@yuppers.app straight away. This email says nothing about your yups; sign in to see them."
     }
   },
   "push": {
@@ -174,7 +178,8 @@
   },
   "sms": {
     "update": "Yuppers.app: an agreement you turned on updates for has changed. See it: {link}. Reply STOP to opt out.",
-    "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
+    "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.",
+    "accountsCombined": "Yuppers.app: two of your accounts were combined into one: {link} Not you? Write to support@yuppers.app. Reply STOP to opt out."
   },
   "common": {
     "loading": "Loading…",
@@ -248,6 +253,64 @@
     "versionOnly": "Version {version}",
     "versionBuild": "Version {version} (build {build})",
     "versionBuildCommit": "Version {version} (build {build}, {commit})"
+  },
+  "identifiers": {
+    "heading": "Email and phone",
+    "intro": "You sign in with a code sent to either of these. Your account keeps at least one.",
+    "none": "None",
+    "add": "Add",
+    "change": "Change",
+    "remove": "Remove",
+    "addEmailTitle": "Add an email address",
+    "addPhoneTitle": "Add a phone number",
+    "changeEmailTitle": "Change your email address",
+    "changePhoneTitle": "Change your phone number",
+    "removeEmailTitle": "Remove your email address",
+    "removePhoneTitle": "Remove your phone number",
+    "newEmailLabel": "Email address",
+    "newPhoneLabel": "Phone number",
+    "changeNote": "The new one replaces {identifier} once you enter the code we send to it.",
+    "sendCode": "Send code",
+    "codeSent": "We sent a code to {identifier}.",
+    "confirm": "Confirm",
+    "onlyEmail": "You can’t remove your email address: it’s the only way you sign in. Add a phone number first.",
+    "onlyPhone": "You can’t remove your phone number: it’s the only way you sign in. Add an email address first.",
+    "removeIntro": "You’ll sign in with {staying} from now on. To make sure it reaches you, we send a code there.",
+    "removePhoneNote": "Text updates for your agreements stop, and invitations already sent to this number stay as they are.",
+    "removeEmailNote": "Invitations already sent to this address stay as they are.",
+    "sendRemovalCode": "Send code to {staying}",
+    "removeConfirm": "Confirm and remove",
+    "added": "Added {identifier}.",
+    "removed": "Removed."
+  },
+  "combine": {
+    "headingEmail": "That email address is on another Yuppers account",
+    "headingPhone": "That phone number is on another Yuppers account",
+    "intro": "The code shows it’s yours, so you can combine that account into this one and have everything in one place.",
+    "otherHeading": "The other account",
+    "otherName": "Name: {name}",
+    "otherEmail": "Email: {identifier}",
+    "otherPhone": "Phone: {identifier}",
+    "yups": "{count, plural, one {# yup} other {# yups}}",
+    "yupsDetail": "{inForce} in force, {negotiating} waiting for a signature, {drafts} drafts, {closed} closed",
+    "movesHeading": "What combining does",
+    "movesYups": "Its yups move to this account. What was signed in them stays exactly as it was signed.",
+    "emailAdded": "Its email address, {identifier}, is added to this account.",
+    "emailReplaced": "Its email address, {identifier}, replaces yours.",
+    "emailDropped": "Its email address, {identifier}, is removed: you keep yours.",
+    "phoneAdded": "Its phone number, {identifier}, is added to this account.",
+    "phoneReplaced": "Its phone number, {identifier}, replaces yours.",
+    "phoneDropped": "Its phone number, {identifier}, is removed: you keep yours.",
+    "paymentMove": "Its payment options move here, because you have none. Anyone who owes you money is told they changed.",
+    "paymentDropped": "Its payment options are removed: you keep yours.",
+    "textUpdatesMove": "Its text updates keep going, to the same number.",
+    "textUpdatesEnd": "Its text updates stop, because its phone number is removed.",
+    "devices": "Its devices are signed out. Sign in on them again with this account.",
+    "ends": "The other account ends: nobody can sign in to it again. We tell every email address and phone number on both accounts that they were combined.",
+    "cannotUndo": "This can’t be undone.",
+    "expires": "You have 10 minutes to decide. After that, add the address again for a new code.",
+    "confirm": "Combine accounts",
+    "done": "Accounts combined. Everything is in this account now."
   },
   "appearance": {
     "heading": "Appearance",
@@ -522,7 +585,15 @@
     "opening": "Opening the yup…",
     "missingTitle": "This link is incomplete",
     "missing": "The invitation link has lost its last part. Open it again from the message it came in, or ask the sender for a new one.",
-    "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself."
+    "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
+    "sentTo": "This invitation was sent to {identifier}. Add it to your account to open it.",
+    "sentToReplacesEmail": "Your account already has a different email address. Adding this one replaces it, and you’ll sign in with it from now on.",
+    "sentToReplacesPhone": "Your account already has a different phone number. Adding this one replaces it, and you’ll sign in with it from now on.",
+    "signInInstead": "Or sign out and sign in with {identifier} instead.",
+    "sendAddressCode": "Send a code to {identifier}",
+    "addressCodeSent": "We sent a code to {identifier}.",
+    "addAndOpen": "Add and open",
+    "replaceAndOpen": "Use it and open"
   },
   "claimant": {
     "reject": "Not who I invited",
@@ -606,8 +677,10 @@
     "standing": {
       "ACTIVE": "Active",
       "SUSPENDED": "Suspended",
-      "DELETED": "Deleted"
+      "DELETED": "Deleted",
+      "MERGED": "Combined"
     },
+    "mergedInto": "Combined into account {id} on {date}.",
     "filed": "Filed {date}",
     "back": "Back to the queue",
     "detailTitle": "Report about {code}",
@@ -1195,6 +1268,13 @@
     "UNAUTHENTICATED": "Sign in to continue.",
     "ACCOUNT_SUSPENDED": "This account has been suspended.",
     "IDENTIFIER_IN_USE": "That email address or phone number belongs to another account.",
+    "IDENTIFIER_ON_OTHER_ACCOUNT": "That email address or phone number is on another of your accounts. You can combine the two.",
+    "IDENTIFIER_KIND_TAKEN": "Your account already has one of these. Say whether to replace it.",
+    "LAST_IDENTIFIER": "You can’t remove the only email address or phone number on your account: it’s how you sign in.",
+    "COMBINE_EXPIRED": "That offer to combine accounts has ended. Add the email address or phone number again for a new code.",
+    "COMBINE_SUSPENDED": "These accounts can’t be combined, because one of them is suspended.",
+    "COMBINE_REVIEWER": "That account reviews reports, so it can’t be combined into another. Ask the owner of Yuppers.app.",
+    "COMBINE_SHARED_EXCHANGE": "These accounts can’t be combined, because they’re on the two sides of the same yup. One person can’t be both parties to an agreement.",
     "VERSION_CONFLICT": "This changed while you were looking. Review it and try again.",
     "PROFILE_INCOMPLETE": "Add your name and confirm you are 18 or over before signing.",
     "CONSENT_OUTDATED": "The signing terms have been updated. Review them before signing.",

@@ -268,8 +268,15 @@ describe('the page on how people opt in to texts', () => {
       const page = parse(language)
       const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
       const product = read(`${language}.json`)
-      // No text of the service's own carries a code any more.
-      expect(Object.keys(product.sms).sort()).toEqual(['optInConfirmation', 'update'])
+      // No text of the service's own carries a code any more. Besides the
+      // updates, the one other is the notice that two accounts were
+      // combined, which carries none either.
+      expect(Object.keys(product.sms).sort()).toEqual([
+        'accountsCombined',
+        'optInConfirmation',
+        'update',
+      ])
+      expect(product.sms.accountsCombined).not.toMatch(/\{code\}|\d{6}/)
       for (const surface of SURFACES) {
         const after = (step: Screen) => quotedAt(page, step, surface)
         // Each "code sent" screen: what it says, then the message Twilio

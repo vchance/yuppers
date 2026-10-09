@@ -160,6 +160,12 @@ export interface Wording {
      * review screen; a paragraph ending in `{link}` becomes its button.
      */
     staffAlert: { subject: string; body: string }
+    /**
+     * The email telling every address on two accounts that they were
+     * combined (`backend/src/combine.rs`). Names no yup. Uses
+     * `{productName}` and `{link}`, the account page.
+     */
+    accountsCombined: { subject: string; body: string }
   }
   /**
    * The push notification the service sends, for every notice alike
@@ -183,6 +189,11 @@ export interface Wording {
     update: string
     /** The text confirming that updates were turned on, as the carriers ask. */
     optInConfirmation: string
+    /**
+     * The text telling a number that its account was combined with another:
+     * `{link}`, the account page, within the GSM alphabet and one segment.
+     */
+    accountsCombined: string
   }
   common: {
     loading: string
@@ -291,6 +302,77 @@ export interface Wording {
     versionOnly: string
     versionBuild: string
     versionBuildCommit: string
+  }
+  /**
+   * The account's email address and phone number, each with Add, Change and
+   * Remove (`identifiers.ts`). `{identifier}` and `{staying}` are shown as
+   * written, phone numbers formatted.
+   */
+  identifiers: {
+    heading: string
+    intro: string
+    none: string
+    add: string
+    change: string
+    remove: string
+    addEmailTitle: string
+    addPhoneTitle: string
+    changeEmailTitle: string
+    changePhoneTitle: string
+    removeEmailTitle: string
+    removePhoneTitle: string
+    newEmailLabel: string
+    newPhoneLabel: string
+    changeNote: string
+    sendCode: string
+    codeSent: string
+    confirm: string
+    /** Why Remove is not offered for the only one. */
+    onlyEmail: string
+    onlyPhone: string
+    removeIntro: string
+    removePhoneNote: string
+    removeEmailNote: string
+    sendRemovalCode: string
+    removeConfirm: string
+    added: string
+    removed: string
+  }
+  /**
+   * The offer to combine another account into this one, once a code proved
+   * its address (`IDENTIFIER_ON_OTHER_ACCOUNT`), and its confirmation.
+   * `{identifier}` is masked.
+   */
+  combine: {
+    headingEmail: string
+    headingPhone: string
+    intro: string
+    otherHeading: string
+    otherName: string
+    otherEmail: string
+    otherPhone: string
+    /** Uses `{count}`, a plural. */
+    yups: string
+    /** Uses `{inForce}`, `{negotiating}`, `{drafts}`, `{closed}`. */
+    yupsDetail: string
+    movesHeading: string
+    movesYups: string
+    emailAdded: string
+    emailReplaced: string
+    emailDropped: string
+    phoneAdded: string
+    phoneReplaced: string
+    phoneDropped: string
+    paymentMove: string
+    paymentDropped: string
+    textUpdatesMove: string
+    textUpdatesEnd: string
+    devices: string
+    ends: string
+    cannotUndo: string
+    expires: string
+    confirm: string
+    done: string
   }
   /**
    * The appearance switch: System, Light or Dark, kept on this device only.
@@ -580,6 +662,18 @@ export interface Wording {
     missingTitle: string
     missing: string
     ownInvitation: string
+    /**
+     * An invitation sent to an address the account does not have
+     * (`sent_to`): `{identifier}` is that address, masked, never in full.
+     */
+    sentTo: string
+    sentToReplacesEmail: string
+    sentToReplacesPhone: string
+    signInInstead: string
+    sendAddressCode: string
+    addressCodeSent: string
+    addAndOpen: string
+    replaceAndOpen: string
   }
   /**
    * Someone who opened an invitation that named nobody, until the initiator
@@ -695,6 +789,8 @@ export interface Wording {
     /** Uses `{name}`. */
     nameInYup: string
     standing: Record<Schemas['AccountStanding'], string>
+    /** An account combined into another: uses `{id}` and `{date}`. */
+    mergedInto: string
     /** Uses `{date}`. */
     filed: string
     back: string

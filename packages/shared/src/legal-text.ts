@@ -36,8 +36,8 @@ export type LegalDocument = (typeof LEGAL_DOCUMENTS)[number]
 
 /** The day each document as written took effect, as an ISO date. */
 export const LEGAL_EFFECTIVE_DATES: Record<LegalDocument, string> = {
-  privacy: '2026-10-08',
-  terms: '2026-10-08',
+  privacy: '2026-10-09',
+  terms: '2026-10-09',
 }
 
 /**
@@ -65,6 +65,8 @@ export const LEGAL_FIGURES = {
   idempotencyKeyDays: 30,
   /** How long a finished notification is kept (`sweep::FINISHED_NOTIFICATION_RETENTION`). */
   notificationDays: 90,
+  /** How long a notice that two accounts were combined, and its address, is kept (`combine::NOTICE_RETENTION`). */
+  combineNoticeDays: 7,
 } as const
 
 /**

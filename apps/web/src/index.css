@@ -503,6 +503,29 @@ textarea:disabled {
   margin-block: 1rem;
 }
 
+/* The account's email address and phone number, each with its buttons
+   beside it, wrapping under it on a narrow screen (`Identifiers`). */
+.identifier-row dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-block-end: 1rem;
+}
+
+.identifier-row dd > span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.identifier-row .actions {
+  margin-block: 0;
+}
+
+.identifier-row dd > .hint {
+  flex-basis: 100%;
+  margin-block: 0;
+}
+
 .field {
   margin-block-end: 1rem;
 }

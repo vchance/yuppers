@@ -163,9 +163,27 @@ export { clientHeader, compareVersions, isClientTooOld, parseVersion } from './c
 export { shortCommit, versionText } from './build'
 export type { BuildIdentity } from './build'
 export type { ClientIdentity, ClientName } from './client-version'
-export { ApiFailure, createExchangeApi, failureCode } from './api'
+export { ApiFailure, combineOffer, createExchangeApi, failureCode } from './api'
+export {
+  combineAccountLines,
+  combineEffects,
+  combineHeading,
+  shownIdentifier,
+  useIdentifiers,
+} from './identifiers'
+export type {
+  IdentifierEdit,
+  IdentifierSlot,
+  IdentifiersApi,
+  IdentifiersControl,
+} from './identifiers'
+export { useInvitationAddress } from './invitation-address'
+export type { InvitationAddressApi, InvitationAddressControl } from './invitation-address'
 export type {
   BlockedPerson,
+  BoundAddress,
+  CombineOffer,
+  IdentifierKind,
   BlockStatus,
   CodeChannel,
   DeletionPreview,

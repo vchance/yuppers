@@ -36,6 +36,9 @@ export type PaymentHandles = Schemas['PaymentHandles']
 export type PaymentHandleChanges = Schemas['PaymentHandleChanges']
 export type PaymentOptionsShown = Schemas['PaymentOptionsShown']
 export type PaymentOptionsView = Schemas['PaymentOptionsView']
+export type CombineOffer = Schemas['CombineOffer']
+export type BoundAddress = Schemas['BoundAddress']
+export type IdentifierKind = Schemas['IdentifierKind']
 
 /**
  * A refusal from the service, or no answer from it. Screens show
@@ -45,13 +48,24 @@ export class ApiFailure extends Error {
   readonly code: ErrorCode
   /** No reply from the service itself, so whether the request took effect is unknown. */
   readonly unanswered: boolean
+  /**
+   * With `IDENTIFIER_ON_OTHER_ACCOUNT`: the offer to combine the other
+   * account into this one (`identifiers.ts`).
+   */
+  readonly combine: CombineOffer | null
 
-  constructor(code: ErrorCode, unanswered = false) {
+  constructor(code: ErrorCode, unanswered = false, combine: CombineOffer | null = null) {
     super(code)
     this.name = 'ApiFailure'
     this.code = code
     this.unanswered = unanswered
+    this.combine = combine
   }
+}
+
+/** The offer to combine accounts a refusal carries, if it carries one. */
+export function combineOffer(error: unknown): CombineOffer | null {
+  return error instanceof ApiFailure ? error.combine : null
 }
 
 /** The error code to show for anything a request can throw. */
@@ -135,7 +149,11 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
     if (code === null) throw new ApiFailure('SERVICE_UNAVAILABLE', true)
     if (code === 'UNAUTHENTICATED') signedOut()
     if (code === 'CLIENT_TOO_OLD') tooOld()
-    throw new ApiFailure(code)
+    const combine =
+      code === 'IDENTIFIER_ON_OTHER_ACCOUNT'
+        ? ((body as { combine?: CombineOffer }).combine ?? null)
+        : null
+    throw new ApiFailure(code, false, combine)
   }
 
   /**
@@ -468,6 +486,60 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
     addIdentifier(identifier: string, code: string): Promise<Account> {
       return send(() =>
         client.POST('/v1/me/identifiers', { headers: headers(), body: { identifier, code } }),
+      )
+    },
+
+    /**
+     * Removes the account's email address or phone number, with a code sent
+     * to the other one, which stays (`requestCode`). Refused for the only one.
+     */
+    removeIdentifier(kind: 'email' | 'phone', code: string): Promise<Account> {
+      const body = { code }
+      return change(`identifiers/${kind}`, body, (key) =>
+        client.DELETE('/v1/me/identifiers/{kind}', {
+          headers: headers(),
+          params: { path: { kind }, header: { 'Idempotency-Key': key } },
+          body,
+        }),
+      )
+    },
+
+    /** Combines into this account the one an offer names. It cannot be undone. */
+    combineAccounts(token: string): Promise<Account> {
+      const body = { token }
+      return change('combine', body, (key) =>
+        client.POST('/v1/me/combine', {
+          headers: headers(),
+          params: { header: { 'Idempotency-Key': key } },
+          body,
+        }),
+      )
+    },
+
+    /**
+     * Sends a code to the address an invitation names (`sent_to`), which the
+     * client never sees in full. For a number, `smsConsent` says the box was ticked.
+     */
+    requestInvitationAddressCode(invitation: string, smsConsent?: SmsCodeConsent): Promise<void> {
+      const body = smsConsent
+        ? { token: invitation, sms_consent: smsConsent }
+        : { token: invitation }
+      return send(() =>
+        client.POST('/v1/invitations/address/codes', { headers: headers(), body }),
+      )
+    },
+
+    /**
+     * Adds the address an invitation names to the account, with the code sent
+     * there, and opens the invitation. `replace` for an account that has
+     * another of that kind.
+     */
+    addInvitationAddress(invitation: string, code: string, replace: boolean): Promise<ExchangeView> {
+      return send(() =>
+        client.POST('/v1/invitations/address', {
+          headers: headers(),
+          body: { token: invitation, code, replace },
+        }),
       )
     },
 

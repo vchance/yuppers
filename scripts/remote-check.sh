@@ -70,6 +70,7 @@ if [ "$what" = all ] || [ "$what" = backend ]; then
 fi
 if [ "$what" = all ] || [ "$what" = web ]; then
   step "typecheck" npm run -s typecheck
+  step "lint" bash -c 'npm run -s lint -w @yuppers/web && npm run -s lint -w @yuppers/mobile -- --max-warnings 0'
   step "npm test" npm test --silent
   step "build:web and budget" bash -c 'npm run -s build:web >/dev/null && npm run -s budget -w @yuppers/web'
 fi

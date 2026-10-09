@@ -105,6 +105,12 @@ envVarGroups:
       # permissions, Verify's included, are set to the US only to match.
       - key: SMS_ALLOWED_REGIONS
         value: US
+      # The iOS app, for universal links (docs/mobile-release.md): the
+      # Apple team ID and the bundle ID, served at
+      # /.well-known/apple-app-site-association. Android's fingerprints
+      # follow once the Play app exists.
+      - key: APPLE_APP_ID
+        value: 5VZ3GTX3T3.app.yuppers
       - key: PUSH_DELIVERY
         value: "off"
       # Wallet passes are off: none of their settings are given.

@@ -31,12 +31,18 @@ owner_url="$MIGRATION_DATABASE_URL"
 base="${owner_url%/*}"
 app_url="${DATABASE_URL%/*}"
 
+# The test binaries each make a database of their own and leave it; every
+# database that appears during the run is dropped with the run's own.
+list_dbs() { docker exec yuppers-pg psql -U exchange -d postgres -Atc "select datname from pg_database where datname like 'yuppers_%'" </dev/null; }
 cleanup() {
   cd "$repo"
   git worktree remove --force "$work" >/dev/null 2>&1 || true
-  psql_admin "DROP DATABASE IF EXISTS $db WITH (FORCE)" || true
+  for d in $db $(comm -13 <(printf '%s\n' "$dbs_before" | sort) <(list_dbs | sort)); do
+    psql_admin "DROP DATABASE IF EXISTS \"$d\" WITH (FORCE)" || true
+  done
 }
 psql_admin() { docker exec yuppers-pg psql -q -U exchange -d postgres -c "$1" >/dev/null </dev/null; }
+dbs_before="$(list_dbs)"
 trap cleanup EXIT
 
 cd "$repo"

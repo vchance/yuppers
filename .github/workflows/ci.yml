@@ -40,7 +40,7 @@ jobs:
         # Pinned by digest, the same in every job and in the backup job's
         # PostgreSQL tools, and updated by hand: Dependabot does not read the
         # workflows' images (README, "Dependencies").
-        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
+        image: mirror.gcr.io/library/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3 # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
@@ -241,6 +241,10 @@ jobs:
         run: pipx run check-jsonschema==0.38.2 --schemafile https://render.com/schema/render.yaml.json render.yaml
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Google's pull-through mirror of Docker Hub, like every image here:
+          # GitHub's runners pull anonymously and Docker Hub rate-limits them.
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
 
       # The build says which commit it is and when it was made
       # (docs/operations.md, "What is deployed"); the smoke check reads it back.
@@ -384,7 +388,7 @@ jobs:
         # Pinned by digest, the same in every job and in the backup job's
         # PostgreSQL tools, and updated by hand: Dependabot does not read the
         # workflows' images (README, "Dependencies").
-        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
+        image: mirror.gcr.io/library/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3 # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
@@ -504,7 +508,7 @@ jobs:
         # Pinned by digest, the same in every job and in the backup job's
         # PostgreSQL tools, and updated by hand: Dependabot does not read the
         # workflows' images (README, "Dependencies").
-        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
+        image: mirror.gcr.io/library/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3 # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
@@ -628,7 +632,7 @@ jobs:
         # Pinned by digest, the same in every job and in the backup job's
         # PostgreSQL tools, and updated by hand: Dependabot does not read the
         # workflows' images (README, "Dependencies").
-        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
+        image: mirror.gcr.io/library/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3 # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange

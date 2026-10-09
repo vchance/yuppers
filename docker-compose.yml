@@ -43,7 +43,7 @@ x-app-environment: &app-environment
 
 services:
   postgres:
-    image: postgres:17
+    image: mirror.gcr.io/library/postgres:17
     environment:
       POSTGRES_USER: exchange
       POSTGRES_PASSWORD: exchange

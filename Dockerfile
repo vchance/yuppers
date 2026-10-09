@@ -27,7 +27,7 @@
 # weekly (.github/dependabot.yml).
 
 # ---- The web app ------------------------------------------------------------
-FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS web
+FROM mirror.gcr.io/library/node:26-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS web
 WORKDIR /src
 # The workspace manifests first, so the dependency layer is reused until one
 # of them changes.
@@ -46,7 +46,7 @@ ARG RENDER_GIT_COMMIT=""
 RUN npm run build:web
 
 # ---- The service ------------------------------------------------------------
-FROM rust:1.98-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e AS backend
+FROM mirror.gcr.io/library/rust:1.98-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e AS backend
 WORKDIR /src
 COPY backend backend
 # The build embeds the wording and the list of languages (backend/build.rs).

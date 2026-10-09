@@ -1589,6 +1589,181 @@
         }
       }
     },
+    "/v1/invitations/address": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Adds to the signed-in account the email address or phone number an\ninvitation names, with the code sent there, and opens the invitation: the\naccount takes the invited party's place, as named, so nobody has to\nconfirm it. If the address belongs to another account the answer is\n`IDENTIFIER_ON_OTHER_ACCOUNT` with the offer to combine the two; once\ncombined, claiming the invitation (`POST /v1/invitations/claim`) opens it.",
+        "operationId": "add_invitation_address",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddInvitationAddress"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Added, and the invitation opened",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code is wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The invitation was made before its address was kept (`INVITATION_NOT_FOR_YOU`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The link is not valid, or no longer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`); or the two accounts cannot be combined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CombineOffered"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A code sent by text could not be checked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/address/codes": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Sends a one-time code to the email address or phone number an invitation\nnames, for someone signed in with another who wants to add it to their\naccount and open the invitation (`sent_to` in its preview). The address\nis never shown in full and never named in the request. The usual limits\non codes apply, as for any address.",
+        "operationId": "request_invitation_address_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationAddressCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "A code was sent"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The invitation was made before its address was kept: only that address can open it (`INVITATION_NOT_FOR_YOU`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The link is not valid, or no longer (`INVITATION_UNAVAILABLE`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The invitation names nobody, or this account already (`ACTION_NOT_ALLOWED`), or the number replied STOP (`PHONE_OPTED_OUT`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A phone number without `sms_consent` (`SMS_CONSENT_REQUIRED`), or of a country not served (`PHONE_COUNTRY_NOT_SERVED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many codes asked for",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/invitations/claim": {
       "post": {
         "tags": [
@@ -1856,6 +2031,81 @@
         }
       }
     },
+    "/v1/me/combine": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Combines into the signed-in account the account an offer names. It\ncannot be undone: that account's place in each of its yups, the address\nor number proved and what else the offer lists move here, and it can no\nlonger be signed in to. Every address and number either account had is\ntold. The offer is good once, for ten minutes, from this account only; a\nrepeat with the same `Idempotency-Key` succeeds and changes nothing.",
+        "operationId": "combine_accounts",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Unique per attempt to make this change",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CombineAccounts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Combined; the account as it now is",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The offer is used, expired or no longer true (`COMBINE_EXPIRED`), or the two cannot be combined (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The accounts were busy and nothing was done; try again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/deletion": {
       "get": {
         "tags": [
@@ -2105,7 +2355,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Verifies a second identifier and attaches it to the account, or replaces\nthe one of the same kind. An account with both a verified email and a\nverified phone can meet the higher risk tier.",
+        "summary": "Verifies an email address or phone number and attaches it to the\naccount, or replaces the one of the same kind: adding one, or changing\nit. An account with both a verified email and a verified phone can meet\nthe higher risk tier. If the code is right and the identifier belongs to\nanother account, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an\noffer to combine the two (`POST /v1/me/combine`); until the code is\nright, an identifier with an account is answered like any other.",
         "operationId": "add_identifier",
         "requestBody": {
           "content": {
@@ -2139,11 +2389,11 @@
             }
           },
           "409": {
-            "description": "The identifier belongs to another account",
+            "description": "The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`)",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/CombineOffered"
                 }
               }
             }
@@ -2170,6 +2420,100 @@
           },
           "503": {
             "description": "A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/identifiers/{kind}": {
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Removes the account's email address or phone number, keeping the other:\nan account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a\ncode sent to the one that stays, so that a session alone cannot take a\nway in away, and the person knows they can still sign in. Removing the\nphone number ends text updates for every agreement. Invitations named\nfor the address or number removed are left as they are. Removing one the\naccount does not have changes nothing and succeeds, as a repeat finds;\nso does a repeat with the same `Idempotency-Key`.",
+        "operationId": "remove_identifier",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`email` or `phone`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Unique per attempt to make this change",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveIdentifier"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The updated account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code is wrong, expired or used up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "It is the account's only identifier (`LAST_IDENTIFIER`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong codes for the identifier that stays today",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A code sent by text could not be checked; nothing was counted",
             "content": {
               "application/json": {
                 "schema": {
@@ -2874,7 +3218,8 @@
         "enum": [
           "ACTIVE",
           "SUSPENDED",
-          "DELETED"
+          "DELETED",
+          "MERGED"
         ]
       },
       "Action": {
@@ -2910,6 +3255,27 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number: in international form, or a US\nnumber without its country code as people there write it, ten digits\nor 1 and ten (`(856) 548-8780`), which is taken as `+1`."
+          }
+        }
+      },
+      "AddInvitationAddress": {
+        "type": "object",
+        "required": [
+          "token",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The code sent to the address the invitation names."
+          },
+          "replace": {
+            "type": "boolean",
+            "description": "The account has another address of this kind (`sent_to.replaces`):\n`true` replaces it. Without it such a request is refused, before the\ncode is looked at, with `IDENTIFIER_KIND_TAKEN`."
+          },
+          "token": {
+            "type": "string",
+            "description": "The invitation link's token."
           }
         }
       },
@@ -2964,6 +3330,28 @@
           }
         }
       },
+      "BoundAddress": {
+        "type": "object",
+        "description": "Whom an invitation names, as someone signed in with another address is\nshown it.",
+        "required": [
+          "kind",
+          "masked",
+          "replaces"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/IdentifierKind"
+          },
+          "masked": {
+            "type": "string",
+            "description": "`j•••@gmail.com`, or a phone number with all but its last digits hidden."
+          },
+          "replaces": {
+            "type": "boolean",
+            "description": "The account already has another address of this kind: adding this\none replaces it, so the request must say `replace: true`."
+          }
+        }
+      },
       "ClaimInvitation": {
         "type": "object",
         "required": [
@@ -3003,6 +3391,79 @@
           "EMAIL",
           "PHONE"
         ]
+      },
+      "CombineAccounts": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token of the offer: `combine.token` in an\n`IDENTIFIER_ON_OTHER_ACCOUNT` answer."
+          }
+        }
+      },
+      "CombineOffer": {
+        "type": "object",
+        "description": "What combining another account into this one would do, and the token\nthat does it (`POST /v1/me/combine`). It cannot be undone.",
+        "required": [
+          "token",
+          "expires_at",
+          "proved",
+          "other",
+          "email",
+          "phone",
+          "payment_options_move",
+          "text_updates_end"
+        ],
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/IdentifierOutcome"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "other": {
+            "$ref": "#/components/schemas/OtherAccount"
+          },
+          "payment_options_move": {
+            "type": "boolean",
+            "description": "The other account's payment options become this one's, because this\none has none. With options of its own, the other's are dropped."
+          },
+          "phone": {
+            "$ref": "#/components/schemas/IdentifierOutcome"
+          },
+          "proved": {
+            "$ref": "#/components/schemas/IdentifierKind",
+            "description": "The kind of identifier proved, which comes to this account."
+          },
+          "text_updates_end": {
+            "type": "boolean",
+            "description": "The other account's text updates end, because its number is dropped."
+          },
+          "token": {
+            "type": "string",
+            "description": "Good once, for [`OFFER_TTL`], from this account only."
+          }
+        }
+      },
+      "CombineOffered": {
+        "type": "object",
+        "description": "The answer when an address proved belongs to another account: the\nrefusal's code, `IDENTIFIER_ON_OTHER_ACCOUNT`, and the offer.",
+        "required": [
+          "code",
+          "combine"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "combine": {
+            "$ref": "#/components/schemas/CombineOffer"
+          }
+        }
       },
       "CommandDto": {
         "oneOf": [
@@ -3610,6 +4071,13 @@
           "UNAUTHENTICATED",
           "ACCOUNT_SUSPENDED",
           "IDENTIFIER_IN_USE",
+          "IDENTIFIER_ON_OTHER_ACCOUNT",
+          "IDENTIFIER_KIND_TAKEN",
+          "LAST_IDENTIFIER",
+          "COMBINE_EXPIRED",
+          "COMBINE_SUSPENDED",
+          "COMBINE_REVIEWER",
+          "COMBINE_SHARED_EXCHANGE",
           "VERSION_CONFLICT",
           "PROFILE_INCOMPLETE",
           "CONSENT_OUTDATED",
@@ -3929,6 +4397,48 @@
           }
         }
       },
+      "IdentifierKind": {
+        "type": "string",
+        "description": "A kind of identifier, as the API names it.",
+        "enum": [
+          "EMAIL",
+          "PHONE"
+        ]
+      },
+      "IdentifierOutcome": {
+        "type": "string",
+        "description": "What becomes of each kind of identifier when the two are combined, from\nthe point of view of the account that stays.",
+        "enum": [
+          "NONE",
+          "KEPT",
+          "ADDED",
+          "REPLACED",
+          "THEIRS_DROPPED"
+        ]
+      },
+      "InvitationAddressCode": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "sms_consent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SmsCodeConsent",
+                "description": "For a phone number, required: the box beside it was ticked\n(`smsCode.verifyNumber`), with the version and language of the\nwording shown. Ignored for an email address."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "The invitation link's token."
+          }
+        }
+      },
       "InvitationIssued": {
         "type": "object",
         "required": [
@@ -3985,6 +4495,17 @@
           },
           "revision": {
             "$ref": "#/components/schemas/RevisionView"
+          },
+          "sent_to": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BoundAddress",
+                "description": "Present when the invitation names an email address or phone number\nthe signed-in account does not have: which kind, and the address\nmasked, never in full. The account can add it, with a code sent there\n(`POST /v1/invitations/address/codes`), and then open the invitation.\nAbsent for an invitation made before addresses were kept for this:\nclaiming it is refused with `INVITATION_NOT_FOR_YOU`, as it always was."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "timezone": {
             "type": "string",
@@ -4235,6 +4756,52 @@
             ],
             "format": "uuid",
             "description": "The person reported."
+          }
+        }
+      },
+      "OtherAccount": {
+        "type": "object",
+        "description": "What the other account holds, as the person combining it is shown. Its\naddress and number are masked; the person proved one of them, and can\nsign in to the account and read both anyway.",
+        "required": [
+          "display_name",
+          "yups",
+          "payment_options",
+          "text_updates",
+          "devices"
+        ],
+        "properties": {
+          "devices": {
+            "type": "boolean",
+            "description": "A device of its gets push notifications."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Its name; empty if it has none."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Masked: `a•••@example.com`."
+          },
+          "payment_options": {
+            "type": "boolean",
+            "description": "It has saved payment options."
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Masked."
+          },
+          "text_updates": {
+            "type": "boolean",
+            "description": "It has text updates on for at least one agreement."
+          },
+          "yups": {
+            "$ref": "#/components/schemas/YupCounts"
           }
         }
       },
@@ -4980,6 +5547,18 @@
           }
         }
       },
+      "RemoveIdentifier": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A one-time code sent to the identifier that stays (the account's\nother one), asked for with `POST /v1/auth/codes`."
+          }
+        }
+      },
       "ReportDetail": {
         "type": "object",
         "description": "A report opened for review: what it says, who it is about, the\nexchange's record, and what review has done about it so far.",
@@ -5311,6 +5890,20 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "merged_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "merged_into": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The account this one was combined into, and when (RFC 3339), if it\nwas. Its side and name below are that account's, which holds its\nplace now; acting on this account acts on that one."
           },
           "name": {
             "type": "string",
@@ -6045,6 +6638,38 @@
           "APPLE",
           "GOOGLE"
         ]
+      },
+      "YupCounts": {
+        "type": "object",
+        "description": "How many yups the other account is in, by where they stand.",
+        "required": [
+          "drafts",
+          "negotiating",
+          "in_force",
+          "closed"
+        ],
+        "properties": {
+          "closed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Closed, whatever the outcome."
+          },
+          "drafts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Drafts never sent."
+          },
+          "in_force": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Agreements in force."
+          },
+          "negotiating": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sent, nothing agreed yet."
+          }
+        }
       }
     }
   }

@@ -71,6 +71,14 @@
 //! beside every backup, is what lets `replay` delete it again, through this
 //! same code (docs/operations.md, "Restoring").
 //!
+//! **Accounts combined into this one** (`crate::combine`) already hold no
+//! address, number or name, and their places are this account's, so leaving
+//! the exchanges above covers theirs. What still refers to them goes with
+//! this account: their revoked sessions, offers to combine either way, and
+//! the notices that they were combined. Their own lines stay in the deletion
+//! log, before this one, so a replay combines them into this account and
+//! then deletes it.
+//!
 //! **A suspended account** is never deleted at its own request: it has no
 //! session to ask with, and if one got this far the suspension would stand.
 //! The one exception is a replay. An account the log names was active when
@@ -469,7 +477,8 @@ async fn attempt(
     sqlx::query(
         "UPDATE invitation i
          SET revoked_at = coalesce(i.revoked_at, now()),
-             bound_email_index = NULL, bound_phone_index = NULL
+             bound_email_index = NULL, bound_phone_index = NULL,
+             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
          FROM participant p
          WHERE p.exchange_id = i.exchange_id AND p.slot = 'A' AND p.account_id = $1
            AND i.claimed_by IS NULL",
@@ -477,12 +486,16 @@ async fn attempt(
     .bind(account)
     .execute(&mut *tx)
     .await?;
-    // An invitation that named this account's own address, and that it took.
-    // That it was named is in the history already (the claim was recorded as
-    // confirmed); the address itself is not needed again.
+    // An invitation that named this account's own address, and that it took,
+    // or that an account combined into it took. That it was named is in the
+    // history already (the claim was recorded as confirmed); the address
+    // itself is not needed again.
     sqlx::query(
-        "UPDATE invitation SET bound_email_index = NULL, bound_phone_index = NULL
-         WHERE claimed_by = $1",
+        "UPDATE invitation
+         SET bound_email_index = NULL, bound_phone_index = NULL,
+             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
+         WHERE claimed_by = $1
+            OR claimed_by IN (SELECT id FROM account WHERE merged_into = $1)",
     )
     .bind(account)
     .execute(&mut *tx)
@@ -494,7 +507,8 @@ async fn attempt(
     sqlx::query(
         "UPDATE invitation
          SET revoked_at = coalesce(revoked_at, now()),
-             bound_email_index = NULL, bound_phone_index = NULL
+             bound_email_index = NULL, bound_phone_index = NULL,
+             bound_email_encrypted = NULL, bound_phone_encrypted = NULL
          WHERE claimed_by IS NULL
            AND ((bound_email_index IS NOT NULL AND bound_email_index = $1)
              OR (bound_phone_index IS NOT NULL AND bound_phone_index = $2))",
@@ -517,6 +531,31 @@ async fn attempt(
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM account_session WHERE account_id = $1")
+        .bind(account)
+        .execute(&mut *tx)
+        .await?;
+    // What still refers to accounts that were combined into this one: their
+    // sessions, revoked when they were combined, and offers to combine
+    // either way. The combined rows themselves hold no address, number or
+    // name already (`crate::combine`); they stay, as history refers to them.
+    sqlx::query(
+        "DELETE FROM account_session
+         WHERE account_id IN (SELECT id FROM account WHERE merged_into = $1)",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "DELETE FROM account_combine_offer
+         WHERE account_id = $1 OR other_account_id = $1
+            OR account_id IN (SELECT id FROM account WHERE merged_into = $1)
+            OR other_account_id IN (SELECT id FROM account WHERE merged_into = $1)",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
+    // Notices that accounts were combined, with the addresses they went to.
+    sqlx::query("DELETE FROM combine_notice WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)
         .await?;

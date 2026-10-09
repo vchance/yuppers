@@ -342,6 +342,43 @@ impl Texting {
         .await
         .ok();
 
+        // Dora, signed in by phone, proves Cleo's address and combines
+        // Cleo's account into hers, which tells both by email and text;
+        // then removes her number, with a code sent to that address.
+        let dora_phone = number();
+        let dora = self.sign_in(&dora_phone, "Dora").await;
+        self.ask(Some(&dora), &cleo_email).await;
+        let reply = app
+            .post(
+                &dora,
+                "/v1/me/identifiers",
+                json!({ "identifier": cleo_email, "code": self.code(&cleo_email) }),
+            )
+            .await;
+        reply.refused(StatusCode::CONFLICT, "IDENTIFIER_ON_OTHER_ACCOUNT");
+        app.post(
+            &dora,
+            "/v1/me/combine",
+            json!({ "token": reply.body["combine"]["token"] }),
+        )
+        .await
+        .ok();
+        self.ask(Some(&dora), &cleo_email).await;
+        let me = app
+            .call(
+                Some(&dora),
+                Method::DELETE,
+                "/v1/me/identifiers/phone",
+                Some(json!({ "code": self.code(&cleo_email) })),
+                &[],
+            )
+            .await
+            .ok();
+        assert_eq!(
+            (me["email"].as_str(), me["phone"].clone()),
+            (Some(cleo_email.as_str()), Value::Null)
+        );
+
         // Ben deletes his account with a code by text.
         let reply = app
             .post(
@@ -393,14 +430,21 @@ impl Texting {
                 .unwrap();
         assert_eq!(ben_handles, 0, "a deleted account keeps no payment options");
 
-        [&ana_email, &ben_email, &cleo_email, &ana_phone, &ben_phone]
-            .into_iter()
-            .cloned()
-            .chain([&ana_phone, &ben_phone, &ben_zelle].map(|phone| phone[1..].to_owned()))
-            .chain([
-                ana_venmo, ana_cash, ana_paypal, ana_zelle, ben_venmo, ben_zelle,
-            ])
-            .collect()
+        [
+            &ana_email,
+            &ben_email,
+            &cleo_email,
+            &ana_phone,
+            &ben_phone,
+            &dora_phone,
+        ]
+        .into_iter()
+        .cloned()
+        .chain([&ana_phone, &ben_phone, &ben_zelle, &dora_phone].map(|phone| phone[1..].to_owned()))
+        .chain([
+            ana_venmo, ana_cash, ana_paypal, ana_zelle, ben_venmo, ben_zelle,
+        ])
+        .collect()
     }
 }
 

@@ -455,14 +455,15 @@ async fn signatures(
     wording: &notices::Export,
 ) -> Result<HashMap<Uuid, Signed>, sqlx::Error> {
     // A signature stands or falls with the holding it was made under: the
-    // signer's time in that place. One whose holding ended is void from then.
+    // signer's time in that place. One whose holding ended is void from then,
+    // unless it ended only because the signer's account was combined into
+    // the one that holds the place now (`holding_void_since`, migration
+    // 0028): the same person, whose signature stands as written.
     let rows = sqlx::query(
         "SELECT a.revision_id, a.slot, a.content_hash, a.auth_method, a.authenticated_at,
                 a.consent_language, a.consent_version, a.accepted_at,
-                h.ended_at AS void_since
+                holding_void_since(a.exchange_id, a.slot, a.holding) AS void_since
          FROM acceptance a
-         JOIN slot_holding h
-           ON h.exchange_id = a.exchange_id AND h.slot = a.slot AND h.holding = a.holding
          WHERE a.exchange_id = $1 AND a.revision_id = ANY($2)
          ORDER BY a.accepted_at, a.slot",
     )

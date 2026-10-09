@@ -412,7 +412,7 @@ pub async fn block(
 /// declined. Where the blocker is in the exchange only as a claimant the
 /// other has not confirmed, they leave it instead. Runs in the transaction
 /// that stores the block.
-async fn end_open_proposals(
+pub(crate) async fn end_open_proposals(
     conn: &mut PgConnection,
     rules: &Rules,
     blocker: Uuid,

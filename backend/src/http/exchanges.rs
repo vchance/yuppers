@@ -26,7 +26,7 @@ fn exchange_id(raw: &str) -> Result<Uuid, ApiError> {
 /// made up, such as a UUID; anything much longer is not one.
 const IDEMPOTENCY_KEY_MAX_BYTES: usize = 200;
 
-fn idempotency_key(headers: &HeaderMap) -> Result<Option<&str>, ApiError> {
+pub(super) fn idempotency_key(headers: &HeaderMap) -> Result<Option<&str>, ApiError> {
     let Some(value) = headers.get("idempotency-key") else {
         return Ok(None);
     };

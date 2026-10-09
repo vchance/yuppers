@@ -230,6 +230,9 @@ pub enum AccountStanding {
     Active,
     Suspended,
     Deleted,
+    /// Combined into another account by its holder (`crate::combine`):
+    /// `merged_into` names it.
+    Merged,
 }
 
 impl AccountStanding {
@@ -237,6 +240,7 @@ impl AccountStanding {
         match text {
             "SUSPENDED" => AccountStanding::Suspended,
             "DELETED" => AccountStanding::Deleted,
+            "MERGED" => AccountStanding::Merged,
             _ => AccountStanding::Active,
         }
     }
@@ -316,6 +320,11 @@ pub struct ReviewQueue {
 pub struct ReviewedAccount {
     pub id: Uuid,
     pub status: AccountStanding,
+    /// The account this one was combined into, and when (RFC 3339), if it
+    /// was. Its side and name below are that account's, which holds its
+    /// place now; acting on this account acts on that one.
+    pub merged_into: Option<Uuid>,
+    pub merged_at: Option<String>,
     /// Their side of the exchange, if they hold one.
     pub party: Option<Slot>,
     /// Their name as the exchange writes it; empty if they hold no side.
@@ -462,8 +471,14 @@ fn involves(staff: &str) -> String {
     format!(
         "(r.reporter_account_id IS NOT DISTINCT FROM {staff}
           OR r.subject_account_id IS NOT DISTINCT FROM {staff}
+          OR EXISTS (SELECT 1 FROM account m
+                     WHERE m.merged_into = {staff}
+                       AND m.id IN (r.reporter_account_id, r.subject_account_id))
           OR EXISTS (SELECT 1 FROM slot_holding h
-                     WHERE h.exchange_id = r.subject_exchange_id AND h.account_id = {staff})
+                     WHERE h.exchange_id = r.subject_exchange_id
+                       AND (h.account_id = {staff}
+                            OR h.account_id IN (SELECT m.id FROM account m
+                                                WHERE m.merged_into = {staff})))
           OR EXISTS (SELECT 1 FROM participant p
                      WHERE p.exchange_id = r.subject_exchange_id AND p.account_id = {staff}))"
     )
@@ -611,10 +626,13 @@ async fn reviewed_account(
     account: Uuid,
     exchange: Option<Uuid>,
 ) -> Result<ReviewedAccount, sqlx::Error> {
-    let status: String = sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
-        .bind(account)
-        .fetch_one(&mut *conn)
-        .await?;
+    let (status, merged_into, merged_at): (String, Option<Uuid>, Option<OffsetDateTime>) =
+        sqlx::query_as("SELECT status, merged_into, merged_at FROM account WHERE id = $1")
+            .bind(account)
+            .fetch_one(&mut *conn)
+            .await?;
+    // A combined account's place is held by the account it went into.
+    let holder = merged_into.unwrap_or(account);
     let side: Option<(String, String)> = match exchange {
         Some(exchange) => {
             sqlx::query_as(
@@ -622,7 +640,7 @@ async fn reviewed_account(
                  WHERE exchange_id = $1 AND account_id = $2",
             )
             .bind(exchange)
-            .bind(account)
+            .bind(holder)
             .fetch_optional(&mut *conn)
             .await?
         }
@@ -635,6 +653,8 @@ async fn reviewed_account(
     Ok(ReviewedAccount {
         id: account,
         status: AccountStanding::parse(&status),
+        merged_into,
+        merged_at: merged_at.map(rfc3339),
         party,
         name,
     })
@@ -968,6 +988,19 @@ pub async fn resolve(
     if status != "OPEN" {
         return Err(ErrorCode::ReportResolved.into());
     }
+    // A person reported under an account since combined into another is
+    // that account now (`crate::combine`): what review does is done to it.
+    let subject = match subject {
+        Some(account) => Some(
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT coalesce(merged_into, id) FROM account WHERE id = $1",
+            )
+            .bind(account)
+            .fetch_one(&mut *tx)
+            .await?,
+        ),
+        None => None,
+    };
 
     if outcome.suspends() {
         let Some(subject) = subject else {
@@ -1026,7 +1059,9 @@ pub async fn resolve(
                 .fetch_one(&mut *tx)
                 .await?;
         match AccountStanding::parse(&standing) {
-            AccountStanding::Deleted => return Err(ErrorCode::ActionNotAllowed.into()),
+            AccountStanding::Deleted | AccountStanding::Merged => {
+                return Err(ErrorCode::ActionNotAllowed.into());
+            }
             AccountStanding::Active => suspend(&mut tx, rules, subject).await?,
             AccountStanding::Suspended => {}
         }

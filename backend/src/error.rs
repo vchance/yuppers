@@ -59,8 +59,34 @@ pub enum ErrorCode {
     /// No valid session.
     Unauthenticated,
     AccountSuspended,
-    /// The email address or phone number belongs to another account.
+    /// The email address or phone number belongs to another account. No
+    /// longer answered once its code is right: that is
+    /// `IDENTIFIER_ON_OTHER_ACCOUNT`, with an offer to combine the two.
     IdentifierInUse,
+    /// The code was right, and the email address or phone number belongs to
+    /// another account, which the person has now shown they control. The
+    /// body carries `combine`: what that account has, and a token for
+    /// combining the two (`POST /v1/me/combine`).
+    IdentifierOnOtherAccount,
+    /// The account already has an email address (or phone number) of its
+    /// own, and only one of each is kept: the request must say to replace it.
+    IdentifierKindTaken,
+    /// The account's only email address or phone number cannot be removed:
+    /// it is how the account is signed in to. Add the other kind first.
+    LastIdentifier,
+    /// The offer to combine accounts is used, expired, or no longer true:
+    /// the address or number proved has since left the other account, or
+    /// that account is gone. Prove the address again for a new offer.
+    CombineExpired,
+    /// One of the two accounts is suspended, so they cannot be combined.
+    CombineSuspended,
+    /// The other account reviews reports, so it cannot be combined into
+    /// another. The owner removes the role first.
+    CombineReviewer,
+    /// The two accounts are on the two sides of the same yup (or one opened
+    /// the other's invitation), so they cannot be combined: one person
+    /// cannot be both parties to an agreement.
+    CombineSharedExchange,
     /// The exchange changed since the client last read it.
     VersionConflict,
     /// A display name and confirmation of age are needed before signing.
@@ -133,6 +159,13 @@ impl From<ErrorCode> for ApiError {
             | CounterpartyNotConfirmed
             | AwaitingConfirmation
             | IdentifierInUse
+            | IdentifierOnOtherAccount
+            | IdentifierKindTaken
+            | LastIdentifier
+            | CombineExpired
+            | CombineSuspended
+            | CombineReviewer
+            | CombineSharedExchange
             | PhoneOptedOut
             | VersionConflict
             | ProfileIncomplete

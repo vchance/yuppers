@@ -48,6 +48,10 @@ struct SmsWording {
     /// The confirmation texted when someone turns updates on.
     #[serde(rename = "optInConfirmation")]
     opt_in_confirmation: String,
+    /// The text telling a number that its account was combined with another
+    /// (`crate::combine`), with `{link}` to the account page.
+    #[serde(rename = "accountsCombined")]
+    accounts_combined: String,
 }
 
 #[derive(Deserialize)]
@@ -61,6 +65,10 @@ struct Notifications {
     /// (`crate::review`). It says nothing about the report.
     #[serde(rename = "staffAlert")]
     staff_alert: Message,
+    /// The email telling an address that its account was combined with
+    /// another (`crate::combine`). It says nothing about any yup.
+    #[serde(rename = "accountsCombined")]
+    accounts_combined: Message,
 }
 
 #[derive(Deserialize)]
@@ -365,11 +373,32 @@ impl Wording {
     /// otherwise. It names no report, exchange or person, and links to the
     /// review screen, which asks the reader to sign in.
     pub fn staff_alert(&self, language: &str, link: &str) -> Rendered {
+        self.linked(language, link, |file| &file.notifications.staff_alert)
+    }
+
+    /// The email telling an address that the account it was on was combined
+    /// with another (`crate::combine`), in `language` where that language
+    /// has wording and in the default language otherwise. It names no yup,
+    /// person or address, and links to the account page, which asks the
+    /// reader to sign in.
+    pub fn accounts_combined(&self, language: &str, link: &str) -> Rendered {
+        self.linked(language, link, |file| &file.notifications.accounts_combined)
+    }
+
+    /// The text message saying the same, with `link` to the account page.
+    pub fn accounts_combined_sms(&self, language: &str, link: &str) -> String {
+        let file = self.file_for(language);
+        fill(&file.sms.accounts_combined, &[("link", link)])
+    }
+
+    /// An email with no exchange behind it, whose paragraph ending in
+    /// `{link}` becomes a button.
+    fn linked(&self, language: &str, link: &str, message: fn(&File) -> &Message) -> Rendered {
         let (language, file) = languages::resolve_among(self.supported, language)
             .and_then(|language| self.languages.get_key_value(language))
             .or_else(|| self.languages.get_key_value(self.default))
             .expect("the default language has wording; checked when loading");
-        let message = &file.notifications.staff_alert;
+        let message = message(file);
         let values = [("productName", file.product_name.as_str()), ("link", link)];
         let subject = fill(&message.subject, &values);
 
@@ -623,6 +652,7 @@ mod tests {
                 "email": { "layout": "{body} {link}", "messages": messages },
                 "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
                 "staffAlert": { "subject": format!("{product} review"), "body": "Waiting.\n\nOpen: {link}" },
+                "accountsCombined": { "subject": format!("{product} combined"), "body": "Combined.\n\nOpen: {link}" },
             },
             "push": { "body": format!("{product} news") },
             "sms": {
@@ -631,6 +661,7 @@ mod tests {
                 "verifyNumber": "{code} added",
                 "update": "changed: {link}",
                 "optInConfirmation": "on",
+                "accountsCombined": "combined: {link}",
             },
         })
         .to_string()
@@ -787,7 +818,8 @@ mod tests {
             let target = &html[at + 6..];
             assert!(
                 target.starts_with("https://app.test/exchanges/7")
-                    || target.starts_with("https://app.test/staff\""),
+                    || target.starts_with("https://app.test/staff\"")
+                    || target.starts_with("https://app.test/account\""),
                 "{language} {what}: a link to {}",
                 &target[..target.find('"').unwrap()]
             );
@@ -877,6 +909,44 @@ mod tests {
         assert_eq!(
             wording.staff_alert("en", link).subject,
             "A report is waiting for review"
+        );
+    }
+
+    #[test]
+    fn the_accounts_combined_notice_says_only_that_in_every_language() {
+        let wording = Wording::embedded().unwrap();
+        let link = "https://app.test/account";
+        for language in languages::supported() {
+            let email = wording.accounts_combined(language, link);
+            check_html(language, "accounts combined", &email);
+            assert!(email.body.contains(link), "{language}: the link");
+            assert!(
+                email.html.contains(&format!("<a href=\"{link}\"")),
+                "{language}: the button"
+            );
+            assert!(!email.body.contains('{'), "{language}: every variable");
+            let text = wording.accounts_combined_sms(language, link);
+            assert!(text.contains(link), "{language}: the text's link");
+            assert!(
+                !text.contains('{'),
+                "{language}: every variable in the text"
+            );
+            // One segment of the GSM alphabet with the live origin, which
+            // is a few characters longer than the test's.
+            let live = wording.accounts_combined_sms(language, "https://yuppers.app/account");
+            assert!(
+                matches!(
+                    crate::notifications::sms::encoding(&live),
+                    crate::notifications::sms::Encoding::Gsm7 { septets } if septets <= 160
+                ),
+                "{language}: {live:?}"
+            );
+            assert!(text.starts_with("Yuppers.app: "), "{text:?}");
+            assert!(text.contains("STOP"), "{text:?}");
+        }
+        assert_eq!(
+            wording.accounts_combined("en", link).subject,
+            "Two of your Yuppers accounts were combined"
         );
     }
 

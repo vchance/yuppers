@@ -166,6 +166,11 @@ pub enum Source {
     /// The person was removed from the agreement, or left it, before the
     /// other party confirmed them.
     NoLongerAParty,
+    /// The account's phone number was removed (`DELETE /v1/me/identifiers`).
+    PhoneRemoved,
+    /// The account was combined into another that kept a number of its own,
+    /// so this one's was dropped (`crate::combine`).
+    AccountsCombined,
 }
 
 impl Source {
@@ -179,6 +184,8 @@ impl Source {
             Source::AccountDeleted => "ACCOUNT_DELETED",
             Source::PhoneChanged => "PHONE_CHANGED",
             Source::NoLongerAParty => "NO_LONGER_A_PARTY",
+            Source::PhoneRemoved => "PHONE_REMOVED",
+            Source::AccountsCombined => "ACCOUNTS_COMBINED",
         }
     }
 
@@ -551,17 +558,25 @@ pub async fn purge_consent(
         .execute(db)
         .await?
         .rows_affected();
+    // A record made by an account since combined into another is that
+    // account's, through `merged_into` (`crate::combine`): the opt-in keeps
+    // the updates that moved with the number, and is ended by what the
+    // account it went into does. The records themselves are never rewritten.
     let records = sqlx::query(
         "DELETE FROM sms_consent c
          WHERE c.created_at < $1
            AND NOT (c.action = 'OPT_IN' AND EXISTS (
                    SELECT 1 FROM sms_update u
-                   WHERE u.account_id = c.account_id AND u.exchange_id = c.exchange_id
+                   WHERE u.account_id IN (c.account_id, (SELECT m.merged_into FROM account m
+                                                         WHERE m.id = c.account_id))
+                     AND u.exchange_id = c.exchange_id
                      AND u.turned_on_at <= c.created_at))
            AND NOT (c.action = 'OPT_IN' AND COALESCE((
                    SELECT min(e.created_at) FROM sms_consent e
                    WHERE e.id > c.id
-                     AND ((e.account_id = c.account_id AND e.exchange_id = c.exchange_id
+                     AND ((e.account_id IN (c.account_id, (SELECT m.merged_into FROM account m
+                                                           WHERE m.id = c.account_id))
+                           AND e.exchange_id = c.exchange_id
                            AND e.action IN ('OPT_OUT', 'OPT_IN'))
                           OR (e.action = 'STOP' AND e.phone_index = c.phone_index))),
                    '-infinity') >= $1)
@@ -759,6 +774,9 @@ async fn prepare(
     exchange: Option<Uuid>,
     payload: &Value,
 ) -> Result<Result<(String, String), Attempt>, sqlx::Error> {
+    if let Some(notice) = payload[crate::combine::NOTICE_PAYLOAD].as_i64() {
+        return accounts_combined(conn, delivery, notice).await;
+    }
     let kind = payload["sms"].as_str();
     let readable = match kind {
         Some(UPDATE) => payload["notice"]
@@ -821,6 +839,44 @@ async fn prepare(
         _ => delivery.wording.opt_in_sms(&language),
     };
     Ok(Ok((phone, text)))
+}
+
+/// The text telling a number that the account it was on was combined with
+/// another (`crate::combine`): to the number as it was then, whether or not
+/// an account has it now, unless it replied STOP or its country is not
+/// texted. It says that, and nothing about any yup.
+async fn accounts_combined(
+    conn: &mut PgConnection,
+    delivery: &SmsDelivery,
+    notice: i64,
+) -> Result<Result<(String, String), Attempt>, sqlx::Error> {
+    let found = match crate::combine::notice_destination(conn, notice).await {
+        Ok(found) => found,
+        Err(error) => return Ok(Err(Attempt::Failed(Redacted(&error).to_string()))),
+    };
+    let Some((identifier @ Identifier::Phone(_), language)) = found else {
+        return Ok(Err(Attempt::Dropped(
+            "not sent: the notice and its number are gone",
+        )));
+    };
+    if auth_opted_out(conn, &identifier).await? {
+        return Ok(Err(Attempt::Dropped("not sent: the number replied STOP")));
+    }
+    if !delivery.auth.takes(&identifier) {
+        return Ok(Err(Attempt::Dropped(
+            "not sent: the number's country is not texted",
+        )));
+    }
+    let link = format!("{}/account", delivery.web_origin);
+    let text = delivery.wording.accounts_combined_sms(&language, &link);
+    Ok(Ok((identifier.as_str().to_owned(), text)))
+}
+
+async fn auth_opted_out(
+    conn: &mut PgConnection,
+    identifier: &Identifier,
+) -> Result<bool, sqlx::Error> {
+    crate::auth::is_opted_out(conn, identifier).await
 }
 
 /// Takes a place under the hourly caps, sends, and gives the place back if

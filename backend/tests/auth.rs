@@ -256,6 +256,10 @@ impl App {
                     (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
                 "DELETE FROM sms_code_consent WHERE account_id IN
                     (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
+                "DELETE FROM account_combine_offer WHERE account_id IN
+                    (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)
+                    OR other_account_id IN
+                    (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
                 "DELETE FROM account WHERE email_index = $1 OR phone_index = $1",
                 "DELETE FROM one_time_code WHERE identifier_index = $1",
             ] {
@@ -1357,7 +1361,9 @@ async fn an_identifier_belongs_to_one_account() {
     app.sign_in(&ana).await;
     let (ben_token, _) = app.sign_in(&ben).await;
 
-    // Ben holds a valid code for Ana's address, but it is already hers.
+    // Ben holds a valid code for Ana's address, but it is already hers. It
+    // stays hers: the code only shows he controls both, so he is offered to
+    // combine the two, and nothing moves until he does.
     let code = app.request_code(&ana).await;
     let reply = app
         .send(
@@ -1369,8 +1375,9 @@ async fn an_identifier_belongs_to_one_account() {
         .await;
     assert_eq!(
         (reply.status, reply.code()),
-        (StatusCode::CONFLICT, "IDENTIFIER_IN_USE")
+        (StatusCode::CONFLICT, "IDENTIFIER_ON_OTHER_ACCOUNT")
     );
+    assert!(reply.body["combine"]["token"].is_string(), "{}", reply.body);
 
     app.finish(&[&ana, &ben]).await;
 }

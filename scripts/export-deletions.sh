@@ -69,12 +69,14 @@ partial=$(mktemp "$(dirname -- "$file")/.$(basename -- "$file").partial.XXXXXX")
 trap 'rm -f "$partial"' EXIT
 trap 'exit 130' INT TERM
 {
-    echo "# Yuppers deletion log: account ID and deletion time (UTC), one per line."
+    echo "# Yuppers deletion log: account ID and deletion time (UTC), one per line;"
+    echo "# for an account combined into another, that account's ID and EMAIL or PHONE."
     echo "# Apply to a restored database with scripts/replay-deletions.sh."
     "${bin}psql" --no-psqlrc --quiet --tuples-only --no-align --field-separator='	' \
         --set ON_ERROR_STOP=1 --dbname="$url" \
         --command="SELECT account_id,
-                          to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')
+                          to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),
+                          coalesce(merged_into::text, ''), coalesce(merged_by, '')
                    FROM deletion_log ORDER BY deleted_at, account_id"
 } >"$partial"
 count=$(grep -cv '^#' "$partial" || true)

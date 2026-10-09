@@ -42,7 +42,6 @@ use super::wording::{Links, Wording};
 use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
 use crate::combine;
 use crate::contact::{self, Field};
-use crate::domain::identity::Identifier;
 use crate::domain::notification::Notice;
 use crate::domain::reminder;
 use crate::domain::revision::ContributionId;
@@ -650,7 +649,7 @@ async fn accounts_combined(
         // no address.
         Err(error) => return Ok(Err(Attempt::Failed(Redacted(&error).to_string()))),
     };
-    let Some((Identifier::Email(to), language)) = found else {
+    let Some((to, language)) = found else {
         return Ok(Err(Attempt::Dropped(
             "not sent: the notice and its address are gone",
         )));

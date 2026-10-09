@@ -178,8 +178,7 @@
   },
   "sms": {
     "update": "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: {link}. Responde STOP para cancelar.",
-    "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar.",
-    "accountsCombined": "Yuppers.app: se combinaron dos cuentas tuyas: {link} Si no lo hiciste, escribe a support@yuppers.app. Responde STOP para cancelar."
+    "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar."
   },
   "common": {
     "loading": "Cargando…",
@@ -306,11 +305,13 @@
     "textUpdatesMove": "Sus actualizaciones por mensaje siguen, al mismo número.",
     "textUpdatesEnd": "Sus actualizaciones por mensaje se detienen, porque se quita su número de teléfono.",
     "devices": "Se cierra la sesión en sus dispositivos. Vuelve a iniciar sesión en ellos con esta cuenta.",
-    "ends": "La otra cuenta termina: nadie podrá volver a iniciar sesión en ella. Avisamos a cada correo electrónico y número de teléfono de ambas cuentas que se combinaron.",
+    "ends": "La otra cuenta termina: nadie podrá volver a iniciar sesión en ella. Avisamos a cada correo electrónico de ambas cuentas que se combinaron; si ninguna tiene uno, esta cuenta lo muestra la próxima vez que abras la app.",
     "cannotUndo": "Esto no se puede deshacer.",
     "expires": "Tienes 10 minutos para decidir. Después, vuelve a agregar la dirección para recibir un código nuevo.",
     "confirm": "Combinar cuentas",
-    "done": "Cuentas combinadas. Ahora todo está en esta cuenta."
+    "done": "Cuentas combinadas. Ahora todo está en esta cuenta.",
+    "noticeBanner": "Dos de tus cuentas de Yuppers se combinaron en esta el {date}, con un correo electrónico o número de teléfono que demostraste con un código. Ahora todo lo de ambas está aquí. Si no lo hiciste tú, escribe a support@yuppers.app.",
+    "noticeDismiss": "Entendido"
   },
   "appearance": {
     "heading": "Apariencia",

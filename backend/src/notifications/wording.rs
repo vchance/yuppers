@@ -48,10 +48,6 @@ struct SmsWording {
     /// The confirmation texted when someone turns updates on.
     #[serde(rename = "optInConfirmation")]
     opt_in_confirmation: String,
-    /// The text telling a number that its account was combined with another
-    /// (`crate::combine`), with `{link}` to the account page.
-    #[serde(rename = "accountsCombined")]
-    accounts_combined: String,
 }
 
 #[derive(Deserialize)]
@@ -385,12 +381,6 @@ impl Wording {
         self.linked(language, link, |file| &file.notifications.accounts_combined)
     }
 
-    /// The text message saying the same, with `link` to the account page.
-    pub fn accounts_combined_sms(&self, language: &str, link: &str) -> String {
-        let file = self.file_for(language);
-        fill(&file.sms.accounts_combined, &[("link", link)])
-    }
-
     /// An email with no exchange behind it, whose paragraph ending in
     /// `{link}` becomes a button.
     fn linked(&self, language: &str, link: &str, message: fn(&File) -> &Message) -> Rendered {
@@ -661,7 +651,6 @@ mod tests {
                 "verifyNumber": "{code} added",
                 "update": "changed: {link}",
                 "optInConfirmation": "on",
-                "accountsCombined": "combined: {link}",
             },
         })
         .to_string()
@@ -925,24 +914,6 @@ mod tests {
                 "{language}: the button"
             );
             assert!(!email.body.contains('{'), "{language}: every variable");
-            let text = wording.accounts_combined_sms(language, link);
-            assert!(text.contains(link), "{language}: the text's link");
-            assert!(
-                !text.contains('{'),
-                "{language}: every variable in the text"
-            );
-            // One segment of the GSM alphabet with the live origin, which
-            // is a few characters longer than the test's.
-            let live = wording.accounts_combined_sms(language, "https://yuppers.app/account");
-            assert!(
-                matches!(
-                    crate::notifications::sms::encoding(&live),
-                    crate::notifications::sms::Encoding::Gsm7 { septets } if septets <= 160
-                ),
-                "{language}: {live:?}"
-            );
-            assert!(text.starts_with("Yuppers.app: "), "{text:?}");
-            assert!(text.contains("STOP"), "{text:?}");
         }
         assert_eq!(
             wording.accounts_combined("en", link).subject,

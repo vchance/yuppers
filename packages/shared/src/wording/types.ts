@@ -189,11 +189,6 @@ export interface Wording {
     update: string
     /** The text confirming that updates were turned on, as the carriers ask. */
     optInConfirmation: string
-    /**
-     * The text telling a number that its account was combined with another:
-     * `{link}`, the account page, within the GSM alphabet and one segment.
-     */
-    accountsCombined: string
   }
   common: {
     loading: string
@@ -373,6 +368,12 @@ export interface Wording {
     expires: string
     confirm: string
     done: string
+    /**
+     * Shown once on the account another was combined into, where neither
+     * had an email address to tell (`combined_notice`). Uses `{date}`.
+     */
+    noticeBanner: string
+    noticeDismiss: string
   }
   /**
    * The appearance switch: System, Light or Dark, kept on this device only.

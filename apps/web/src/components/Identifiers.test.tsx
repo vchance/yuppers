@@ -166,3 +166,19 @@ test('an invitation sent to another account’s address offers to combine, then 
     expect.arrayContaining(['POST /v1/me/combine', 'POST /v1/invitations/claim']),
   )
 })
+
+test('accounts combined with no email to tell are told once on the list, until dismissed', async () => {
+  const { service, wording } = await start('/', {
+    ...ana,
+    email: null,
+    phone: '+18565488780',
+    combined_notice: '2026-10-22T09:00:00Z',
+  })
+  const w = wording.combine
+  await seen(w.noticeDismiss)
+  expect(text()).toContain('Two of your Yuppers accounts were combined into this one on')
+  expect(await violations()).toEqual([])
+  await press(button(w.noticeDismiss))
+  await until(() => !text().includes(w.noticeDismiss), 'the notice dismissed')
+  expect(sent(service, 'PATCH /v1/me')).toEqual([{ dismiss_combined_notice: true }])
+})

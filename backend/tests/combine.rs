@@ -476,8 +476,8 @@ async fn combining_moves_the_yups_number_updates_payment_options_and_ends_the_ot
         (Some(ana.id), Some("PHONE"))
     );
 
-    // Every address and number either had is told: Ana's email and Ben's
-    // email by email, Ben's phone by text. Nothing in the queue says who.
+    // Every email address either had is told, by email; no number is
+    // texted. Nothing in the queue says who.
     let queued: Vec<(String, Value)> = sqlx::query_as(
         "SELECT kind, payload FROM outbox WHERE recipient_account_id = $1
            AND payload ? 'combine_notice' ORDER BY id",
@@ -487,7 +487,7 @@ async fn combining_moves_the_yups_number_updates_payment_options_and_ends_the_ot
     .await
     .unwrap();
     let kinds: Vec<&str> = queued.iter().map(|(kind, _)| kind.as_str()).collect();
-    assert_eq!(kinds, ["EMAIL", "EMAIL", "SMS"]);
+    assert_eq!(kinds, ["EMAIL", "EMAIL"]);
 }
 
 #[tokio::test]
@@ -1160,7 +1160,7 @@ async fn staff_see_that_a_reported_account_was_combined_and_act_on_the_one_it_we
 }
 
 #[tokio::test]
-async fn the_combined_accounts_notices_go_to_every_address_and_number() {
+async fn the_combined_accounts_notices_go_to_every_email_address_and_never_by_text() {
     let (test, _turn) = start().await;
     let app = &test.app;
     let s = setup(&test).await;
@@ -1168,39 +1168,88 @@ async fn the_combined_accounts_notices_go_to_every_address_and_number() {
     combine_with(&test, &s.ana, &offered["token"], &key())
         .await
         .ok();
-    // Each notice holds its address encrypted, bound to its row.
-    let rows: Vec<NoticeRow> = sqlx::query_as(
-        "SELECT id, email_encrypted, phone_encrypted FROM combine_notice
-         WHERE account_id = $1 ORDER BY id",
+    // Each notice holds its email address encrypted, bound to its row.
+    let rows: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+        "SELECT id, email_encrypted FROM combine_notice WHERE account_id = $1 ORDER BY id",
     )
     .bind(s.ana.id)
     .fetch_all(&app.owner)
     .await
     .unwrap();
-    let mut told = Vec::new();
-    for (id, email, phone) in rows {
-        if let Some(email) = email {
-            told.push(common::open(
+    let mut told: Vec<String> = rows
+        .into_iter()
+        .map(|(id, email)| {
+            common::open(
                 yuppers_backend::contact::Field::COMBINE_NOTICE_EMAIL.row(id),
                 &email,
-            ));
-        }
-        if let Some(phone) = phone {
-            told.push(common::open(
-                yuppers_backend::contact::Field::COMBINE_NOTICE_PHONE.row(id),
-                &phone,
-            ));
-        }
-    }
+            )
+        })
+        .collect();
     told.sort();
-    let mut expected = vec![
-        s.ana.email.clone(),
-        s.ben_email.clone(),
-        s.ben_phone.clone(),
-    ];
+    let mut expected = vec![s.ana.email.clone(), s.ben_email.clone()];
     expected.sort();
     assert_eq!(told, expected);
+    // Nothing texted, and nothing shown in the app: the emails told them.
+    assert_eq!(
+        scalar_i64(
+            &test,
+            "SELECT count(*) FROM outbox WHERE recipient_account_id = $1 AND kind = 'SMS'
+               AND payload ? 'combine_notice'",
+            s.ana.id
+        )
+        .await,
+        0
+    );
+    assert!(app.get(&s.ana, "/v1/me").await.ok()["combined_notice"].is_null());
 }
 
-/// A notice as stored: its row, and its address or number, encrypted.
-type NoticeRow = (i64, Option<Vec<u8>>, Option<Vec<u8>>);
+#[tokio::test]
+async fn two_phone_only_accounts_combined_are_told_in_the_app_once() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    let (ana_phone, ben_phone) = (number(), number());
+    let ana = test.sign_in(&ana_phone, "Ana").await;
+    let ben = test.sign_in(&ben_phone, "Ben").await;
+    let offered = offer(&test, &ana, &ben_phone).await;
+    combine_with(&test, &ana, &offered["token"], &key())
+        .await
+        .ok();
+    assert_eq!(
+        status(&test, ben.id).await,
+        ("MERGED".to_owned(), Some(ana.id))
+    );
+    // No email to tell, and no text: nothing queued outside.
+    assert_eq!(
+        scalar_i64(
+            &test,
+            "SELECT count(*) FROM outbox WHERE recipient_account_id = $1
+               AND payload ? 'combine_notice'",
+            ana.id
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar_i64(
+            &test,
+            "SELECT count(*) FROM combine_notice WHERE account_id = $1",
+            ana.id
+        )
+        .await,
+        0
+    );
+    // Instead the app is told to show it, until it is dismissed.
+    let me = app.get(&ana, "/v1/me").await.ok();
+    assert!(me["combined_notice"].is_string(), "{me}");
+    let me = app
+        .call(
+            Some(&ana),
+            Method::PATCH,
+            "/v1/me",
+            Some(json!({ "dismiss_combined_notice": true })),
+            &[],
+        )
+        .await
+        .ok();
+    assert!(me["combined_notice"].is_null(), "{me}");
+}

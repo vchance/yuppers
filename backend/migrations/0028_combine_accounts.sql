@@ -22,8 +22,11 @@
 --   3. `account_merge`: the audit of every combination, append-only.
 --   4. `account_combine_offer`: the short-lived, single-use token that the
 --      proof of B's identifier gives A.
---   5. `combine_notice`: the addresses and numbers told that two accounts
---      were combined, encrypted, until the worker has told them.
+--   5. `combine_notice`: the email addresses told that two accounts were
+--      combined, encrypted, until the worker has told them; and
+--      `account.combined_notice_at`, the notice shown in the app instead
+--      where neither account had an email address. Nothing is texted: the
+--      SMS program is agreement updates only.
 --   6. `invitation`: the address or number an invitation names, encrypted
 --      as well as indexed, so that someone signed in with another can be
 --      sent a code to add it ("This invitation was sent to j•••@…").
@@ -43,6 +46,9 @@ ALTER TABLE account ADD CONSTRAINT account_status_check
 ALTER TABLE account
     ADD COLUMN merged_into uuid REFERENCES account,
     ADD COLUMN merged_at   timestamptz,
+    -- When accounts were combined into this one with no email address on
+    -- either to tell: the app shows it once, until dismissed.
+    ADD COLUMN combined_notice_at timestamptz,
     ADD CONSTRAINT account_merged_whole CHECK (
         (status = 'MERGED') = (merged_into IS NOT NULL)
         AND (merged_into IS NULL) = (merged_at IS NULL)
@@ -257,21 +263,20 @@ CREATE INDEX account_combine_offer_other_idx ON account_combine_offer (other_acc
 CREATE INDEX account_combine_offer_expires_idx ON account_combine_offer (expires_at);
 
 ------------------------------------------------------------------------------
--- 5. Telling every address and number that two accounts were combined
+-- 5. Telling every email address that two accounts were combined
 ------------------------------------------------------------------------------
 
--- One row per address or number told, encrypted with the row's ID as
+-- One row per email address told, encrypted with the row's ID as
 -- associated data, as the records of consent are (`crate::contact`). An
 -- outbox row names it (`{"combine_notice": id}`); the worker removes it
--- once it is a week old, sent or not.
+-- once it is a week old, sent or not. Phone numbers are not told: the SMS
+-- program covers agreement updates only.
 CREATE TABLE combine_notice (
     id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     account_id      uuid NOT NULL REFERENCES account,
-    email_encrypted bytea CHECK (octet_length(email_encrypted) BETWEEN 42 AND 295),
-    phone_encrypted bytea CHECK (octet_length(phone_encrypted) BETWEEN 42 AND 72),
+    email_encrypted bytea NOT NULL CHECK (octet_length(email_encrypted) BETWEEN 42 AND 295),
     language        text NOT NULL CHECK (language ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'),
-    created_at      timestamptz NOT NULL DEFAULT now(),
-    CHECK (num_nonnulls(email_encrypted, phone_encrypted) = 1)
+    created_at      timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX combine_notice_account_idx ON combine_notice (account_id);

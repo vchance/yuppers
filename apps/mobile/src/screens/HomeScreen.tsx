@@ -18,6 +18,7 @@ import {
   Tags,
   Written,
 } from '../components/ui';
+import { CombinedNotice } from '../components/CombinedNotice';
 import { NotificationsOffer } from '../components/Notifications';
 import { useI18n } from '../lib/context';
 import { forgetInvitation } from '../lib/invitation';
@@ -87,6 +88,7 @@ export function HomeScreen() {
         void load().finally(() => setRefreshing(false));
       }}>
       <Heading>{w.title}</Heading>
+      <CombinedNotice />
       <Actions>
         <Button variant="primary" label={w.start} disabled={starting} onPress={() => void start()} />
         <Button

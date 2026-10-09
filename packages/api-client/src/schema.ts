@@ -988,6 +988,13 @@ export interface components {
         Account: {
             /** @description The holder has confirmed they are 18 or over. Required before signing. */
             adult_confirmed: boolean;
+            /**
+             * @description When another account was combined into this one with no email address
+             *     on either to tell, as RFC 3339: the clients show it once, until it is
+             *     dismissed (`dismiss_combined_notice` in `PATCH /v1/me`). Absent
+             *     otherwise.
+             */
+            combined_notice?: string | null;
             /** @description Empty until the person has chosen one. */
             display_name: string;
             email?: string | null;
@@ -2341,6 +2348,11 @@ export interface components {
         UpdateAccount: {
             /** @description Only `true` is meaningful: a confirmation cannot be taken back. */
             adult_confirmed?: boolean | null;
+            /**
+             * @description `true` once the notice that accounts were combined into this one has
+             *     been shown (`combined_notice`).
+             */
+            dismiss_combined_notice?: boolean | null;
             /** @description 1 to 100 characters. */
             display_name?: string | null;
             /**

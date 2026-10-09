@@ -378,7 +378,6 @@ impl Field {
     /// Where the notice that two accounts were combined goes
     /// (`crate::combine`), bound to its row ([`Field::row`]).
     pub const COMBINE_NOTICE_EMAIL: Field = Field::new("combine_notice", "email");
-    pub const COMBINE_NOTICE_PHONE: Field = Field::new("combine_notice", "phone");
     /// The blind-index key itself, in `contact_key`.
     pub const INDEX_KEY: Field = Field::new("contact_key", "index_key");
 

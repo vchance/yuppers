@@ -49,9 +49,10 @@
 //! `merged_into`.
 //!
 //! **Afterwards** B is `MERGED`, with no address, no number, no name and
-//! `merged_into` A. Nobody can sign in to it. Both accounts' addresses and
-//! numbers, as they were before, are told ([`notify`]), with nothing about
-//! any yup. The combination is in `account_merge`, and in the deletion log
+//! `merged_into` A. Nobody can sign in to it. Every email address either
+//! account had, as they were before, is told by email ([`notify`]), with
+//! nothing about any yup; nothing is texted. Where neither had an email
+//! address, A shows the notice in the app instead, once. The combination is in `account_merge`, and in the deletion log
 //! with the account it went into, so that replaying the log after a restore
 //! combines the two again ([`replay`]).
 
@@ -1000,10 +1001,13 @@ async fn move_blocks(
     Ok(())
 }
 
-/// Queues the notice that two accounts were combined, to every address and
-/// number either had: by email to an address, by text to a number. It says
-/// that, and nothing about any yup. Each address is kept encrypted, bound
-/// to its row, until the worker has sent it ([`purge_notices`]).
+/// Queues the notice that two accounts were combined, by email, to every
+/// email address either had. It says that, and nothing about any yup. Each
+/// address is kept encrypted, bound to its row, until the worker has sent
+/// it ([`purge`]). Phone numbers are not texted: the SMS program covers
+/// agreement updates only. Where neither account had an email address,
+/// nothing goes outside, and the combined account shows the notice in the
+/// app instead, once (`combined_notice_at`, dismissed through `PATCH /v1/me`).
 async fn notify(
     conn: &mut PgConnection,
     account: Uuid,
@@ -1011,45 +1015,47 @@ async fn notify(
     told: &[Identifier],
 ) -> Result<(), sqlx::Error> {
     let keys = contact::keys();
-    for identifier in told {
+    let emails: Vec<&str> = told
+        .iter()
+        .filter_map(|identifier| match identifier {
+            Identifier::Email(email) => Some(email.as_str()),
+            Identifier::Phone(_) => None,
+        })
+        .collect();
+    if emails.is_empty() {
+        sqlx::query("UPDATE account SET combined_notice_at = now() WHERE id = $1")
+            .bind(account)
+            .execute(&mut *conn)
+            .await?;
+        return Ok(());
+    }
+    for email in emails {
         let id: i64 = sqlx::query_scalar("SELECT nextval('combine_notice_id_seq')")
             .fetch_one(&mut *conn)
             .await?;
-        let (email, phone, channel) = match identifier {
-            Identifier::Email(email) => (
-                Some(keys.seal(Field::COMBINE_NOTICE_EMAIL.row(id), email)),
-                None,
-                "EMAIL",
-            ),
-            Identifier::Phone(phone) => (
-                None,
-                Some(keys.seal(Field::COMBINE_NOTICE_PHONE.row(id), phone)),
-                "SMS",
-            ),
-        };
         sqlx::query(
-            "INSERT INTO combine_notice (id, account_id, email_encrypted, phone_encrypted, language)
-             OVERRIDING SYSTEM VALUE VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO combine_notice (id, account_id, email_encrypted, language)
+             OVERRIDING SYSTEM VALUE VALUES ($1, $2, $3, $4)",
         )
         .bind(id)
         .bind(account)
-        .bind(email)
-        .bind(phone)
+        .bind(keys.seal(Field::COMBINE_NOTICE_EMAIL.row(id), email))
         .bind(language)
         .execute(&mut *conn)
         .await?;
-        sqlx::query("INSERT INTO outbox (kind, recipient_account_id, payload) VALUES ($1, $2, $3)")
-            .bind(channel)
-            .bind(account)
-            .bind(json!({ NOTICE_PAYLOAD: id }))
-            .execute(&mut *conn)
-            .await?;
+        sqlx::query(
+            "INSERT INTO outbox (kind, recipient_account_id, payload) VALUES ('EMAIL', $1, $2)",
+        )
+        .bind(account)
+        .bind(json!({ NOTICE_PAYLOAD: id }))
+        .execute(&mut *conn)
+        .await?;
     }
     Ok(())
 }
 
-/// A notice as stored: its address or number, encrypted, and the language.
-type NoticeRow = (Option<Vec<u8>>, Option<Vec<u8>>, String);
+/// A notice as stored: its address, encrypted, and the language.
+type NoticeRow = (Vec<u8>, String);
 
 /// An offer as stored: for whom, which account, by which kind and index,
 /// until when, and when it was used.
@@ -1065,32 +1071,22 @@ type OfferRow = (
 /// The key of an outbox payload that names a notice: `{"combine_notice": 7}`.
 pub const NOTICE_PAYLOAD: &str = "combine_notice";
 
-/// Where a queued notice goes and in which language: an email address or a
-/// phone number, decrypted to send to it. `None` once it is gone.
+/// Where a queued notice goes and in which language: an email address,
+/// decrypted to send to it. `None` once it is gone.
 pub async fn notice_destination(
     conn: &mut PgConnection,
     id: i64,
-) -> Result<Option<(Identifier, String)>, sqlx::Error> {
-    let row: Option<NoticeRow> = sqlx::query_as(
-        "SELECT email_encrypted, phone_encrypted, language FROM combine_notice WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(conn)
-    .await?;
-    let Some((email, phone, language)) = row else {
+) -> Result<Option<(String, String)>, sqlx::Error> {
+    let row: Option<NoticeRow> =
+        sqlx::query_as("SELECT email_encrypted, language FROM combine_notice WHERE id = $1")
+            .bind(id)
+            .fetch_optional(conn)
+            .await?;
+    let Some((sealed, language)) = row else {
         return Ok(None);
     };
-    let keys = contact::keys();
-    let identifier = match (email, phone) {
-        (Some(sealed), _) => {
-            Identifier::Email(keys.open(Field::COMBINE_NOTICE_EMAIL.row(id), &sealed)?)
-        }
-        (None, Some(sealed)) => {
-            Identifier::Phone(keys.open(Field::COMBINE_NOTICE_PHONE.row(id), &sealed)?)
-        }
-        (None, None) => return Ok(None),
-    };
-    Ok(Some((identifier, language)))
+    let email = contact::keys().open(Field::COMBINE_NOTICE_EMAIL.row(id), &sealed)?;
+    Ok(Some((email, language)))
 }
 
 /// Removes notices older than [`NOTICE_RETENTION`], sent or not, with the

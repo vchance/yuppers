@@ -38,6 +38,12 @@ pub struct Account {
     pub language: String,
     /// The holder has confirmed they are 18 or over. Required before signing.
     pub adult_confirmed: bool,
+    /// When another account was combined into this one with no email address
+    /// on either to tell, as RFC 3339: the clients show it once, until it is
+    /// dismissed (`dismiss_combined_notice` in `PATCH /v1/me`). Absent
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub combined_notice: Option<String>,
 }
 
 type AccountRow = (
@@ -47,15 +53,16 @@ type AccountRow = (
     String,
     String,
     Option<OffsetDateTime>,
+    Option<OffsetDateTime>,
 );
 
-const ACCOUNT_COLUMNS: &str =
-    "id, email_encrypted, phone_encrypted, display_name, language, adult_confirmed_at";
+const ACCOUNT_COLUMNS: &str = "id, email_encrypted, phone_encrypted, display_name, language, \
+                               adult_confirmed_at, combined_notice_at";
 
 /// The account as its owner sees it: one of the few places its address and
 /// number are decrypted (`crate::contact`).
 fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
-    let (id, email_encrypted, phone_encrypted, display_name, language, adult) = row;
+    let (id, email_encrypted, phone_encrypted, display_name, language, adult, combined) = row;
     let keys = contact::keys();
     Ok(Account {
         id: id.to_string(),
@@ -64,6 +71,7 @@ fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
         display_name,
         language,
         adult_confirmed: adult.is_some(),
+        combined_notice: combined.map(crate::exchanges::dto::rfc3339),
     })
 }
 
@@ -102,6 +110,9 @@ pub struct UpdateAccount {
     pub language: Option<String>,
     /// Only `true` is meaningful: a confirmation cannot be taken back.
     pub adult_confirmed: Option<bool>,
+    /// `true` once the notice that accounts were combined into this one has
+    /// been shown (`combined_notice`).
+    pub dismiss_combined_notice: Option<bool>,
 }
 
 /// Changes the display name or language, or records that the holder is an adult.
@@ -137,13 +148,15 @@ pub async fn update_me(
          SET display_name = coalesce($2, display_name),
              language = coalesce($3, language),
              adult_confirmed_at = CASE WHEN $4 THEN coalesce(adult_confirmed_at, now())
-                                       ELSE adult_confirmed_at END
+                                       ELSE adult_confirmed_at END,
+             combined_notice_at = CASE WHEN $5 THEN NULL ELSE combined_notice_at END
          WHERE id = $1 AND status = 'ACTIVE'",
     )
     .bind(session.account_id)
     .bind(display_name)
     .bind(language)
     .bind(update.adult_confirmed == Some(true))
+    .bind(update.dismiss_combined_notice == Some(true))
     .execute(&state.db)
     .await?
     .rows_affected();

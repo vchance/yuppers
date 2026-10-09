@@ -178,8 +178,7 @@
   },
   "sms": {
     "update": "Yuppers.app: an agreement you turned on updates for has changed. See it: {link}. Reply STOP to opt out.",
-    "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.",
-    "accountsCombined": "Yuppers.app: two of your accounts were combined into one: {link} Not you? Write to support@yuppers.app. Reply STOP to opt out."
+    "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
   },
   "common": {
     "loading": "Loading…",
@@ -306,11 +305,13 @@
     "textUpdatesMove": "Its text updates keep going, to the same number.",
     "textUpdatesEnd": "Its text updates stop, because its phone number is removed.",
     "devices": "Its devices are signed out. Sign in on them again with this account.",
-    "ends": "The other account ends: nobody can sign in to it again. We tell every email address and phone number on both accounts that they were combined.",
+    "ends": "The other account ends: nobody can sign in to it again. We tell every email address on both accounts that they were combined; if neither has one, this account shows it the next time you open the app.",
     "cannotUndo": "This can’t be undone.",
     "expires": "You have 10 minutes to decide. After that, add the address again for a new code.",
     "confirm": "Combine accounts",
-    "done": "Accounts combined. Everything is in this account now."
+    "done": "Accounts combined. Everything is in this account now.",
+    "noticeBanner": "Two of your Yuppers accounts were combined into this one on {date}, by an email address or phone number you proved with a code. Everything from both is here now. If you didn’t do this, write to support@yuppers.app.",
+    "noticeDismiss": "Got it"
   },
   "appearance": {
     "heading": "Appearance",

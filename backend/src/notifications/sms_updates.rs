@@ -774,9 +774,6 @@ async fn prepare(
     exchange: Option<Uuid>,
     payload: &Value,
 ) -> Result<Result<(String, String), Attempt>, sqlx::Error> {
-    if let Some(notice) = payload[crate::combine::NOTICE_PAYLOAD].as_i64() {
-        return accounts_combined(conn, delivery, notice).await;
-    }
     let kind = payload["sms"].as_str();
     let readable = match kind {
         Some(UPDATE) => payload["notice"]
@@ -839,44 +836,6 @@ async fn prepare(
         _ => delivery.wording.opt_in_sms(&language),
     };
     Ok(Ok((phone, text)))
-}
-
-/// The text telling a number that the account it was on was combined with
-/// another (`crate::combine`): to the number as it was then, whether or not
-/// an account has it now, unless it replied STOP or its country is not
-/// texted. It says that, and nothing about any yup.
-async fn accounts_combined(
-    conn: &mut PgConnection,
-    delivery: &SmsDelivery,
-    notice: i64,
-) -> Result<Result<(String, String), Attempt>, sqlx::Error> {
-    let found = match crate::combine::notice_destination(conn, notice).await {
-        Ok(found) => found,
-        Err(error) => return Ok(Err(Attempt::Failed(Redacted(&error).to_string()))),
-    };
-    let Some((identifier @ Identifier::Phone(_), language)) = found else {
-        return Ok(Err(Attempt::Dropped(
-            "not sent: the notice and its number are gone",
-        )));
-    };
-    if auth_opted_out(conn, &identifier).await? {
-        return Ok(Err(Attempt::Dropped("not sent: the number replied STOP")));
-    }
-    if !delivery.auth.takes(&identifier) {
-        return Ok(Err(Attempt::Dropped(
-            "not sent: the number's country is not texted",
-        )));
-    }
-    let link = format!("{}/account", delivery.web_origin);
-    let text = delivery.wording.accounts_combined_sms(&language, &link);
-    Ok(Ok((identifier.as_str().to_owned(), text)))
-}
-
-async fn auth_opted_out(
-    conn: &mut PgConnection,
-    identifier: &Identifier,
-) -> Result<bool, sqlx::Error> {
-    crate::auth::is_opted_out(conn, identifier).await
 }
 
 /// Takes a place under the hourly caps, sends, and gives the place back if

@@ -131,7 +131,7 @@
       "title": "Mensajes de texto",
       "blocks": [
         {
-          "p": "Cuando los ofrecemos, Yuppers.app envía mensajes de texto en un solo programa, actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates). Estos términos se aplican a él. Los códigos de un solo uso por mensaje no forman parte de ese programa: los envía y comprueba el servicio de verificación de nuestro proveedor Twilio, Twilio Verify, como se explica abajo, en “Códigos de un solo uso por mensaje de texto”. Además de esto, solo enviamos otro mensaje: un aviso único, a un número que estaba en una de dos cuentas cuando se combinaron, de que se combinaron."
+          "p": "Cuando los ofrecemos, Yuppers.app envía mensajes de texto en un solo programa, actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates). Estos términos se aplican a él. Los códigos de un solo uso por mensaje no forman parte de ese programa: los envía y comprueba el servicio de verificación de nuestro proveedor Twilio, Twilio Verify, como se explica abajo, en “Códigos de un solo uso por mensaje de texto”."
         },
         {
           "h": "Actualizaciones de acuerdos de Yuppers.app (Yuppers.app agreement updates)"

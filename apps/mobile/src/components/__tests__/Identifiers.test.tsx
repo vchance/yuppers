@@ -12,6 +12,8 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { useMemo, useState } from 'react';
 
 import { I18nContext, SessionContext, type Session } from '../../lib/context';
+import { api } from '../../lib/session';
+import { CombinedNotice } from '../CombinedNotice';
 import { Identifiers } from '../Identifiers';
 import { InvitationAddress } from '../InvitationAddress';
 
@@ -180,6 +182,26 @@ test('a number on another account offers to combine, and combines on its button'
   await fireEvent.press(screen.getByRole('button', { name: w.confirm }));
   expect(await screen.findByText(w.done)).toBeTruthy();
   expect(service.calls).toContain(`combine ${OFFER.token}`);
+});
+
+test('accounts combined with no email to tell are told once, until dismissed', async () => {
+  const wording = wordingFor('en');
+  const updated = jest
+    .spyOn(api, 'updateMe')
+    .mockResolvedValue({ ...account, combined_notice: null });
+  const setAccount = jest.fn();
+  const session = {
+    account: { ...account, combined_notice: '2026-10-22T09:00:00Z' },
+    setAccount,
+  } as unknown as Session;
+  await render(wrap(<CombinedNotice />, session));
+  expect(
+    await screen.findByText(/^Two of your Yuppers accounts were combined into this one on/),
+  ).toBeTruthy();
+  await fireEvent.press(screen.getByRole('button', { name: wording.combine.noticeDismiss }));
+  expect(updated).toHaveBeenCalledWith({ dismiss_combined_notice: true });
+  expect(setAccount).toHaveBeenCalledWith({ ...account, combined_notice: null });
+  updated.mockRestore();
 });
 
 test('an invitation sent to another address is added with a code and opens', async () => {

@@ -891,7 +891,11 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return [200, service.account]
   }
   if (call === 'PATCH /v1/me') {
-    service.account = { ...service.account, ...(body as Partial<Account>) }
+    const { dismiss_combined_notice: dismiss, ...rest } = body as Partial<Account> & {
+      dismiss_combined_notice?: boolean
+    }
+    service.account = { ...service.account, ...rest }
+    if (dismiss) service.account = { ...service.account, combined_notice: null }
     return [200, service.account]
   }
   if (call === 'GET /v1/exchanges') return [200, exchanges().map(summary)]

@@ -24,8 +24,9 @@
 --      passes from one account to another only where it holds the row.
 --   4. `account_combine_offer`: the short-lived, single-use token that the
 --      proof of B's identifier gives A; and `account_proof`, the same for a
---      code to one of the account's own identifiers, which replacing one
---      needs.
+--      code to one of the account's own identifiers, which adding or
+--      replacing one needs; and when each identifier came to the account,
+--      so that a new one does not take an older one away at once.
 --   5. `account_notice`: the email addresses told that two accounts were
 --      combined, or that an email address was replaced or removed,
 --      encrypted, until the worker has told them; and `account.notice_kind`
@@ -98,6 +99,36 @@ $$;
 CREATE TRIGGER account_merged_for_good
     BEFORE UPDATE OF status, merged_into ON account
     FOR EACH ROW EXECUTE FUNCTION account_merged_for_good();
+
+-- When each identifier came to the account. A code to one that came in the
+-- last day does not take away one the account had before it (the service's
+-- `FRESH_IDENTIFIER`): a stolen session that somehow added its own cannot
+-- use it at once to remove or replace the owner's. Stamped by the database
+-- whenever the index changes, however it changes (signing up, adding,
+-- replacing, combining); accounts already here count from their creation.
+ALTER TABLE account
+    ADD COLUMN email_added_at timestamptz,
+    ADD COLUMN phone_added_at timestamptz;
+UPDATE account SET email_added_at = created_at WHERE email_index IS NOT NULL;
+UPDATE account SET phone_added_at = created_at WHERE phone_index IS NOT NULL;
+
+CREATE FUNCTION account_identifier_added() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = public, pg_temp AS
+$$
+BEGIN
+    IF TG_OP = 'INSERT' OR NEW.email_index IS DISTINCT FROM OLD.email_index THEN
+        NEW.email_added_at := CASE WHEN NEW.email_index IS NULL THEN NULL ELSE now() END;
+    END IF;
+    IF TG_OP = 'INSERT' OR NEW.phone_index IS DISTINCT FROM OLD.phone_index THEN
+        NEW.phone_added_at := CASE WHEN NEW.phone_index IS NULL THEN NULL ELSE now() END;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER account_identifier_added
+    BEFORE INSERT OR UPDATE OF email_index, phone_index ON account
+    FOR EACH ROW EXECUTE FUNCTION account_identifier_added();
 
 ------------------------------------------------------------------------------
 -- 2. A place passes to the account its holder was combined into

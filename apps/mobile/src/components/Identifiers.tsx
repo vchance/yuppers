@@ -198,11 +198,12 @@ function EditPanel({
   if (edit.step === 'prove' || edit.step === 'proveCode') {
     const to = shownIdentifier(edit.to);
     const alternative = control.proveAlternative;
+    const intro = edit.action === 'add' ? w.proveAddIntro : w.proveIntro;
     return (
       <Panel title={title}>
         {edit.step === 'prove' ? (
           <>
-            <P>{fmt(w.proveIntro, { identifier: to })}</P>
+            <P>{fmt(intro, { identifier: to })}</P>
             {consentBox}
             <Failure code={control.failure} />
             <Actions>

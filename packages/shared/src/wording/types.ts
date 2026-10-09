@@ -335,6 +335,8 @@ export interface Wording {
      * `{identifier}` is where it goes.
      */
     proveIntro: string
+    /** As `proveIntro`, for adding one where the account has none of that kind. */
+    proveAddIntro: string
     proveOther: string
     proveSend: string
     proveConfirm: string
@@ -1181,6 +1183,12 @@ export interface Wording {
     /** `{phone}`, masked. */
     codeSent: string
     codeLabel: string
+    /**
+     * Adding a number takes a code to the account's email address too:
+     * where it went (`{email}`), and its field.
+     */
+    proofCodeSent: string
+    proofCodeLabel: string
     addPhone: string
     changePhone: string
     /** `{phone}`, masked. */

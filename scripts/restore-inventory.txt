@@ -159,6 +159,7 @@
 0001 grant schema public USAGE
 0001 trigger acceptance acceptance_append_only O
 0006 trigger acceptance acceptance_holding O
+0028 trigger account account_identifier_added O
 0028 trigger account account_merged_for_good O
 0028 trigger account_merge account_merge_append_only O
 0001 trigger contribution_snapshot contribution_snapshot_append_only O

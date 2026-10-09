@@ -12,7 +12,9 @@ import { smsCodeConsent } from './sms-code-consent'
  *   - with no phone number on the account, a US number to add, checked with
  *     a one-time code by text (`requestCode`, then `addIdentifier`, the way
  *     any identifier is added), asked for only once the box beside the
- *     number is ticked (`smsCode.verifyNumber`, `sms-code-consent.ts`);
+ *     number is ticked (`smsCode.verifyNumber`, `sms-code-consent.ts`); and,
+ *     as adding any takes, a code to the account's email address with it,
+ *     which proves the person is its holder (`proveIdentifier`);
  *   - with one, a box beside the consent wording, word for word as the terms
  *     quote it, and Save: ticked, updates go on and the consent is recorded
  *     by the service; unticked, they go off;
@@ -29,7 +31,7 @@ export const SMS_CONSENT_VERSION = '2026-10-05'
 
 export type SmsUpdatesApi = Pick<
   ExchangeApi,
-  'meta' | 'smsUpdates' | 'setSmsUpdates' | 'requestCode' | 'addIdentifier'
+  'meta' | 'smsUpdates' | 'setSmsUpdates' | 'requestCode' | 'addIdentifier' | 'proveIdentifier'
 >
 
 /** A piece of the consent wording: text, or one of its two addresses, shown as a link. */
@@ -92,6 +94,12 @@ export interface SmsUpdatesControl {
   standing: SmsUpdates | null
   /** The number a code was texted to, while one is awaited. */
   pending: string | null
+  /**
+   * The account's email address, where a code went with the one to the
+   * number: adding a number takes a proof of it. Absent for an account
+   * with no email address.
+   */
+  proofTo: string | null
   /** Whether the box is ticked. */
   checked: boolean
   setChecked(checked: boolean): void
@@ -111,7 +119,8 @@ export interface SmsUpdatesControl {
   /** What was just saved, for the screen to say. */
   saved: 'on' | 'off' | null
   requestCode(input: string): Promise<void>
-  verify(code: string): Promise<void>
+  /** The code texted to the number, and the one sent to `proofTo`. */
+  verify(code: string, proofCode?: string): Promise<void>
   /** Back from the code to the number. */
   changePhone(): void
   save(): Promise<void>
@@ -120,13 +129,15 @@ export interface SmsUpdatesControl {
 /**
  * The "Text updates" control for one agreement. `language` is the one the
  * consent wording is shown in; `onAccount` is told when a number is added,
- * so the client's view of the account follows.
+ * so the client's view of the account follows; `email` is the account's
+ * own, which adding a number takes a code to.
  */
 export function useSmsUpdates(
   api: SmsUpdatesApi,
   exchange: Pick<ExchangeView, 'id' | 'state'>,
   language: string,
   onAccount?: (account: Account) => void,
+  email: string | null = null,
 ): SmsUpdatesControl {
   const [offered, setOffered] = useState<boolean | null>(null)
   const [standing, setStanding] = useState<SmsUpdates | null>(null)
@@ -138,6 +149,8 @@ export function useSmsUpdates(
   const [codeConsent, setCodeConsent] = useState(false)
   const [phoneAdded, setPhoneAdded] = useState<string | null>(null)
   const [saved, setSaved] = useState<'on' | 'off' | null>(null)
+  // The proof from the email's code, kept should the number's code be wrong.
+  const [proof, setProof] = useState<string | null>(null)
   const working = useRef(false)
   const { id, state } = exchange
   const sent = state === 'NEGOTIATING' || state === 'ACTIVE'
@@ -191,24 +204,31 @@ export function useSmsUpdates(
       if (phone === null) return
       await run(async () => {
         await api.requestCode(phone, smsCodeConsent(language))
+        if (email && !proof) await api.requestCode(email)
         setPending(phone)
       })
     },
-    [api, codeConsent, language, run],
+    [api, codeConsent, email, language, proof, run],
   )
 
   const verify = useCallback(
-    async (code: string) => {
+    async (code: string, proofCode?: string) => {
       if (pending === null) return
       await run(async () => {
-        const account = await api.addIdentifier(pending, code.trim())
+        let proved = proof
+        if (email && !proved) {
+          proved = (await api.proveIdentifier('EMAIL', (proofCode ?? '').trim())).proof
+          setProof(proved)
+        }
+        const account = await api.addIdentifier(pending, code.trim(), proved ?? undefined)
         onAccount?.(account)
         setPhoneAdded(pending)
         setPending(null)
+        setProof(null)
         setStanding(await api.smsUpdates(id))
       })
     },
-    [api, id, pending, onAccount, run],
+    [api, email, id, pending, onAccount, proof, run],
   )
 
   const changePhone = useCallback(() => {
@@ -244,6 +264,7 @@ export function useSmsUpdates(
     step,
     standing,
     pending,
+    proofTo: email && !proof ? email : null,
     checked,
     setChecked: (value: boolean) => {
       setChecked(value)

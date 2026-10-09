@@ -43,6 +43,9 @@ export function InvitationAddress({ token, sentTo, onOpened, onSignOut }: Props)
   }, [control.step])
   const consent = control.codeConsent
   const phone = sentTo.kind === 'PHONE'
+  const proveIntro = sentTo.replaces
+    ? wording.identifiers.proveIntro
+    : wording.identifiers.proveAddIntro
 
   if (control.offer) {
     return (
@@ -124,7 +127,7 @@ export function InvitationAddress({ token, sentTo, onOpened, onSignOut }: Props)
     const alternative = control.proveAlternative
     body = (
       <form noValidate onSubmit={send}>
-        <p>{fmt(wording.identifiers.proveIntro, { identifier: to })}</p>
+        <p>{fmt(proveIntro, { identifier: to })}</p>
         {consentBox}
         <Failure code={control.failure} />
         <div className="actions">

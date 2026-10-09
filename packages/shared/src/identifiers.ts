@@ -17,11 +17,11 @@ import type { Wording } from './wording/types'
  * The account's email address and phone number (README, "Combining
  * accounts"), as both apps show them: each with Add, Change and Remove.
  *
- *   - Adding takes the code sent to the new one (`addIdentifier`).
- *   - Changing takes more than a session: first a code to one of the
- *     account's own, the one being replaced or, if the person no longer has
- *     it, the other (`proveIdentifier`), which gives a proof; then the new
- *     one's code, with the proof. An email address replaced is told by email.
+ *   - Adding and changing take more than a session: first a code to one the
+ *     account already has (`proveIdentifier`), the one being replaced or,
+ *     if the person no longer has it, the other, which gives a proof; then
+ *     the new one's code, with the proof (`addIdentifier`). An email address
+ *     replaced is told by email.
  *   - Removing keeps the other, which must be there: Remove is not offered
  *     for the only one, and the screen says why. It is proved with a code
  *     sent to the one that stays, so the person knows they can still sign in.
@@ -44,9 +44,9 @@ export type IdentifiersApi = Pick<
 /** What is being done to one of the two, and how far it has got. */
 export type IdentifierEdit =
   /** Changing: where the code proving one of the account's own goes. */
-  | { slot: IdentifierSlot; action: 'change'; step: 'prove'; to: string }
+  | { slot: IdentifierSlot; action: 'add' | 'change'; step: 'prove'; to: string }
   /** That code was sent to `to`. */
-  | { slot: IdentifierSlot; action: 'change'; step: 'proveCode'; to: string }
+  | { slot: IdentifierSlot; action: 'add' | 'change'; step: 'proveCode'; to: string }
   /** The new address or number to type. */
   | { slot: IdentifierSlot; action: 'add' | 'change'; step: 'enter' }
   /** A code was sent to `identifier`, as the service takes it. */
@@ -204,8 +204,9 @@ export function useIdentifiers(
         const staying = other(slot)
         if (!staying) return
         setEdit({ slot, action, step: 'explain', staying })
-      } else if (action === 'change' && current) {
-        setEdit({ slot, action, step: 'prove', to: current })
+      } else if (current ?? other(slot)) {
+        // The one replaced, or, adding, the one the account has.
+        setEdit({ slot, action, step: 'prove', to: (current ?? other(slot)) as string })
       } else {
         setEdit({ slot, action, step: 'enter' })
       }
@@ -222,7 +223,7 @@ export function useIdentifiers(
         const to = edit.to
         await run(async () => {
           await api.requestCode(to, to.includes('@') ? undefined : smsCodeConsent(language))
-          setEdit({ slot: edit.slot, action: 'change', step: 'proveCode', to })
+          setEdit({ slot: edit.slot, action: edit.action, step: 'proveCode', to })
           setCode('')
         })
         return
@@ -268,7 +269,7 @@ export function useIdentifiers(
         await run(async () => {
           const proved = await api.proveIdentifier(channel, code.trim())
           setProof(proved.proof)
-          setEdit({ slot: edit.slot, action: 'change', step: 'enter' })
+          setEdit({ slot: edit.slot, action: edit.action, step: 'enter' })
           setCode('')
         })
         return

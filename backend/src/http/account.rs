@@ -251,17 +251,20 @@ pub(crate) enum Attached {
     OnOther(Uuid),
 }
 
-/// The account as [`attach_in`] reads it: its identifier of the kind, encrypted
-/// and indexed, and its language.
-type Before = (Option<Vec<u8>>, Option<Vec<u8>>, String);
+/// The account as [`attach_in`] reads it: its identifier of the kind,
+/// encrypted, both indexes, the kind's first, and its language.
+type Before = (Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>, String);
 
 /// Puts an identifier whose code was just entered on the account, in the
-/// caller's transaction, if no other account has it. Where the account has
-/// another of that kind, it is replaced only with `proof`, a proof of one
-/// of the account's own identifiers ([`combine::issue_proof`]), used up
-/// here; an email address replaced is told by email, a phone number by a
-/// notice in the app. Before the code was checked nothing here ran, so
-/// nothing said whether the identifier had an account.
+/// caller's transaction, if no other account has it. While the account has
+/// an identifier, of either kind, it is added or replaces the one of its
+/// kind only with `proof`, a proof of one the account already has
+/// ([`combine::issue_proof`]), used up here: a session alone adds no way in
+/// and takes none away. A proof from an identifier that came in the last
+/// day does not replace an older one ([`combine::FRESH_IDENTIFIER`]). An
+/// email address replaced is told by email, a phone number by a notice in
+/// the app. Before the code was checked nothing here ran, so nothing said
+/// whether the identifier had an account.
 pub(crate) async fn attach_in(
     conn: &mut PgConnection,
     account: Uuid,
@@ -276,28 +279,28 @@ pub(crate) async fn attach_in(
     // As it stands, held until the transaction ends. Only while the account
     // is active: an identifier written onto an account deleted at the same
     // moment could never be used again.
+    let (_, other_index) = other_kind(kind).account_columns();
     let before: Option<Before> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT {encrypted}, {index}, language FROM account
+        "SELECT {encrypted}, {index}, {other_index}, language FROM account
              WHERE id = $1 AND status = 'ACTIVE' FOR NO KEY UPDATE"
     )))
     .bind(account)
     .fetch_optional(&mut *conn)
     .await?;
-    let Some((old_sealed, old_index, language)) = before else {
+    let Some((old_sealed, old_index, other, language)) = before else {
         return Err(ErrorCode::Unauthenticated.into());
     };
-    let replacing = old_index
-        .as_deref()
-        .is_some_and(|old| old != sealed.index.as_slice());
-    // The account's own way in changes: a session alone is not enough for
-    // that, as for removing one. Used up while the identifier it proves is
-    // still the account's; should the identifier turn out to be another
+    let unchanged = old_index.as_deref() == Some(sealed.index.as_slice());
+    let replacing = old_index.is_some() && !unchanged;
+    // The account's ways in change: a session alone is not enough for that,
+    // as for removing one. Used up while the identifier it proves is still
+    // the account's; should the identifier turn out to be another
     // account's, the caller rolls back and it is unused again.
-    if replacing {
+    if !unchanged && (old_index.is_some() || other.is_some()) {
         let Some(proof) = proof else {
             return Err(ErrorCode::ProofRequired.into());
         };
-        combine::take_proof(conn, account, proof).await?;
+        combine::take_proof(conn, account, proof, replacing.then_some(kind)).await?;
     }
 
     // Twice at most: the other account may give it up in between.
@@ -352,24 +355,47 @@ pub(crate) async fn attach_in(
     Err(ErrorCode::ServiceUnavailable.into())
 }
 
-/// Whether putting `identifier` on the account would replace another of its
-/// kind there.
-async fn would_replace(
+/// An account's blind indexes: of one kind, then of the other.
+type Indexes = (Option<Vec<u8>>, Option<Vec<u8>>);
+
+/// Refuses, before any code is looked at, putting `identifier` on the
+/// account without the proof [`attach_in`] will want: none where it needs
+/// one, or one it would refuse. Checked again, and used, there.
+async fn check_attach_proof(
     db: &PgPool,
     account: Uuid,
     identifier: &Identifier,
-) -> Result<bool, ApiError> {
-    let (_, index) = Kind::of(identifier).account_columns();
-    let old: Option<Option<Vec<u8>>> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT {index} FROM account WHERE id = $1"
+    proof: Option<&[u8; 32]>,
+) -> Result<(), ApiError> {
+    let kind = Kind::of(identifier);
+    let (_, index) = kind.account_columns();
+    let (_, other_index) = other_kind(kind).account_columns();
+    let found: Option<Indexes> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {index}, {other_index} FROM account WHERE id = $1"
     )))
     .bind(account)
     .fetch_optional(db)
     .await?;
+    let Some((old, other)) = found else {
+        return Err(ErrorCode::Unauthenticated.into());
+    };
     let new = contact::keys().index_of(identifier);
-    Ok(old
-        .flatten()
-        .is_some_and(|old| old.as_slice() != new.as_slice()))
+    let unchanged = old.as_deref() == Some(new.as_slice());
+    if unchanged || (old.is_none() && other.is_none()) {
+        return Ok(());
+    }
+    let Some(proof) = proof else {
+        return Err(ErrorCode::ProofRequired.into());
+    };
+    combine::check_proof(db, account, proof, old.is_some().then_some(kind)).await
+}
+
+/// The kind of identifier that is not `kind`.
+fn other_kind(kind: Kind) -> Kind {
+    match kind {
+        Kind::Email => Kind::Phone,
+        Kind::Phone => Kind::Email,
+    }
 }
 
 /// A proof as a request carries it, hashed as stored.
@@ -388,17 +414,18 @@ pub struct AddIdentifier {
     pub identifier: String,
     /// The one-time code sent to it.
     pub code: String,
-    /// Where the account has another of this kind, which this replaces:
-    /// a proof of one of the account's own identifiers
-    /// (`POST /v1/me/identifiers/proof`). Without it such a request is
-    /// refused with `PROOF_REQUIRED`, before the code is looked at.
+    /// While the account has an identifier, of either kind: a proof of one
+    /// it has (`POST /v1/me/identifiers/proof`). Without a good one the
+    /// request is refused with `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`),
+    /// before the code is looked at.
     pub proof: Option<String>,
 }
 
 /// Verifies an email address or phone number and attaches it to the
-/// account: adding one, or, with a proof of one of the account's own
-/// (`proof`), replacing the one of the same kind. The address replaced is
-/// told by email; a number replaced, by a notice in the app. An account
+/// account, with a proof of one it already has (`proof`): adding one, or
+/// replacing the one of the same kind. A proof from an identifier that came
+/// in the last 24 hours does not replace an older one. The address replaced
+/// is told by email; a number replaced, by a notice in the app. An account
 /// with both a verified email and a verified phone can meet the higher risk
 /// tier. If the code is right and the identifier belongs to another
 /// account, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an offer to
@@ -411,7 +438,7 @@ pub struct AddIdentifier {
     responses(
         (status = 200, description = "The updated account", body = Account),
         (status = 401, description = "Not signed in, or the code is wrong", body = ErrorBody),
-        (status = 409, description = "The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or it would replace one of the account's own without a good `proof` (`PROOF_REQUIRED`)", body = CombineOffered),
+        (status = 409, description = "The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or the account has an identifier and no good `proof` was given (`PROOF_REQUIRED`), or one from an identifier too new to replace an older one (`IDENTIFIER_TOO_RECENT`)", body = CombineOffered),
         (status = 422, description = "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
         (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody),
         (status = 503, description = "A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted", body = ErrorBody)
@@ -431,10 +458,8 @@ pub async fn add_identifier(
     // number the service does not take is not attached to an account.
     settings.auth.check_taken(&identifier)?;
     // Asked before the code is looked at, so that it is not spent on a
-    // request that cannot go through.
-    if proof.is_none() && would_replace(&state.db, account, &identifier).await? {
-        return Err(ErrorCode::ProofRequired.into());
-    }
+    // request that cannot go through: a bogus proof included.
+    check_attach_proof(&state.db, account, &identifier, proof.as_ref()).await?;
     auth::verify_code(
         &state.db,
         &settings.app_secret,
@@ -466,7 +491,7 @@ pub struct ProveIdentifier {
 }
 
 /// Proves, with a code sent to one of the account's own identifiers, that
-/// the person signed in controls it: what replacing the account's email
+/// the person signed in controls it: what adding or replacing an email
 /// address or phone number needs, directly, from an invitation, or by
 /// combining another account into this one (`proof`). Good once, for ten
 /// minutes, for this account only, and only while the account still has
@@ -527,7 +552,9 @@ fn path_kind(text: &str) -> Result<Kind, ApiError> {
 /// Removes the account's email address or phone number, keeping the other:
 /// an account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a
 /// code sent to the one that stays, so that a session alone cannot take a
-/// way in away, and the person knows they can still sign in. An email
+/// way in away, and the person knows they can still sign in; a code to one
+/// that came in the last 24 hours does not remove one the account had
+/// before it (`IDENTIFIER_TOO_RECENT`). An email
 /// address removed is told by email; a phone number removed, by a notice in
 /// the app. Removing the phone number ends text updates for every
 /// agreement. Invitations named for the address or number removed are left
@@ -545,7 +572,7 @@ fn path_kind(text: &str) -> Result<Kind, ApiError> {
     responses(
         (status = 200, description = "The updated account", body = Account),
         (status = 401, description = "Not signed in, or the code is wrong, expired or used up", body = ErrorBody),
-        (status = 409, description = "It is the account's only identifier (`LAST_IDENTIFIER`)", body = ErrorBody),
+        (status = 409, description = "It is the account's only identifier (`LAST_IDENTIFIER`), or the one that stays came in the last 24 hours and the one removed is older (`IDENTIFIER_TOO_RECENT`)", body = ErrorBody),
         (status = 429, description = "Too many wrong codes for the identifier that stays today", body = ErrorBody),
         (status = 503, description = "A code sent by text could not be checked; nothing was counted", body = ErrorBody)
     )
@@ -590,6 +617,21 @@ pub async fn remove_identifier(
         requester: Requester::SignIn { address },
         verifier: state.code_sender.verifier(&staying),
     };
+    // A code to one that came in the last day does not take away one the
+    // account had before it: asked before the code is looked at.
+    let added: Option<(Option<OffsetDateTime>, Option<OffsetDateTime>)> =
+        sqlx::query_as("SELECT email_added_at, phone_added_at FROM account WHERE id = $1")
+            .bind(account)
+            .fetch_optional(&state.db)
+            .await?;
+    let (email_added, phone_added) = added.unwrap_or_default();
+    let (staying_added, removing_added) = match kind {
+        Kind::Email => (phone_added, email_added),
+        Kind::Phone => (email_added, phone_added),
+    };
+    if combine::too_recent(staying_added, removing_added) {
+        return Err(ErrorCode::IdentifierTooRecent.into());
+    }
     let _turn = code.consult_verifier(&state.db).await?;
 
     let mut tx = state.db.begin().await?;
@@ -818,9 +860,10 @@ pub struct AddInvitationAddress {
     /// code is looked at, with `IDENTIFIER_KIND_TAKEN`.
     #[serde(default)]
     pub replace: bool,
-    /// With `replace`: a proof of one of the account's own identifiers
-    /// (`POST /v1/me/identifiers/proof`). Without it such a request is
-    /// refused, before the code is looked at, with `PROOF_REQUIRED`.
+    /// A proof of one of the account's own identifiers
+    /// (`POST /v1/me/identifiers/proof`): adding one takes it. Without a
+    /// good one the request is refused, before the code is looked at, with
+    /// `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`).
     pub proof: Option<String>,
 }
 
@@ -840,7 +883,7 @@ pub struct AddInvitationAddress {
         (status = 401, description = "Not signed in, or the code is wrong", body = ErrorBody),
         (status = 403, description = "The invitation was made before its address was kept (`INVITATION_NOT_FOR_YOU`)", body = ErrorBody),
         (status = 404, description = "The link is not valid, or no longer", body = ErrorBody),
-        (status = 409, description = "The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`); or the two accounts cannot be combined", body = CombineOffered),
+        (status = 409, description = "The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`, `IDENTIFIER_TOO_RECENT`); or the two accounts cannot be combined", body = CombineOffered),
         (status = 422, description = "Not the address the invitation was sent to (`NOT_INVITED_ADDRESS`)", body = ErrorBody),
         (status = 429, description = "Too many wrong codes or attempts", body = ErrorBody),
         (status = 503, description = "A code sent by text could not be checked", body = ErrorBody)
@@ -860,15 +903,13 @@ pub async fn add_invitation_address(
     let proof = proof_hash(body.proof.as_deref());
     // Asked before the code is looked at, so that it is not spent on a
     // request that cannot go through. One address of each kind per account,
-    // and replacing one takes a proof of the account's own.
+    // and adding or replacing one takes a proof of the account's own.
     if replaces && !body.replace {
         return Err(ErrorCode::IdentifierKindTaken.into());
     }
-    if replaces && proof.is_none() {
-        return Err(ErrorCode::ProofRequired.into());
-    }
     let settings = &state.settings;
     settings.auth.check_taken(&identifier)?;
+    check_attach_proof(&state.db, account, &identifier, proof.as_ref()).await?;
     auth::verify_code(
         &state.db,
         &settings.app_secret,

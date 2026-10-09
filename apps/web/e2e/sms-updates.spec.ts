@@ -18,6 +18,7 @@ import {
   type StepName,
 } from '../build/sms-opt-in'
 import { apiEnvironment, apiLog, port, repoRoot, webRoot, workerBinary } from './support/env'
+import { codeFrom } from './support/codes'
 import { expect, test } from './support/fixtures'
 import { agree, move, type ItemSpec } from './support/flows'
 import { american, codesTo, number, textsTo, waitFor } from './support/texts'
@@ -64,13 +65,17 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   await expect(codeBox).not.toBeChecked()
   await codeBox.check()
   const before = codesTo(phone, apiLog).length
-  await sendCode.click()
+  // With it, a code by email to the account's own address: adding a number
+  // takes a proof of it.
+  const proofCode = await codeFrom(bruno.email, 'sign-in', () => sendCode.click())
   await expect(control.getByText(fill(w.codeSent, { phone: `(•••) •••-${phone.slice(-4)}` }))).toBeVisible()
+  await expect(control.getByText(fill(w.proofCodeSent, { email: bruno.email }))).toBeVisible()
   // Twilio Verify would text it; here the log has it. No text of the
   // service's own carries it.
   const code = await waitFor(() => codesTo(phone, apiLog)[before], 'the code for the number')
   expect(textsTo(phone, apiLog)).toEqual([])
   await control.getByLabel(w.codeLabel).fill(code)
+  await control.getByLabel(w.proofCodeLabel).fill(proofCode)
   await control.getByRole('button', { name: w.addPhone, exact: true }).click()
 
   // The box, beside the consent wording word for word, not yet ticked.

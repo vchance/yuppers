@@ -218,6 +218,22 @@ impl App {
         self.last_code(identifier)
     }
 
+    /// A proof of `own`, the account's identifier of `channel`, from a code
+    /// sent to it: what adding or replacing one takes.
+    async fn proof(&self, token: &str, channel: &str, own: &str) -> String {
+        let code = self.request_code(own).await;
+        let reply = self
+            .send(
+                Method::POST,
+                "/v1/me/identifiers/proof",
+                Some(json!({ "channel": channel, "code": code })),
+                &[(AUTHORIZATION, &format!("Bearer {token}"))],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+        reply.body["proof"].as_str().unwrap().to_owned()
+    }
+
     fn last_code(&self, identifier: &str) -> String {
         let sent = self.outbox.0.lock().unwrap();
         let (_, code) = sent
@@ -259,6 +275,8 @@ impl App {
                 "DELETE FROM account_combine_offer WHERE account_id IN
                     (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)
                     OR other_account_id IN
+                    (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
+                "DELETE FROM account_proof WHERE account_id IN
                     (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
                 "DELETE FROM account WHERE email_index = $1 OR phone_index = $1",
                 "DELETE FROM one_time_code WHERE identifier_index = $1",
@@ -1335,15 +1353,30 @@ async fn a_second_identifier_can_be_verified_and_then_signs_in() {
     let (email, phone) = (email(), phone());
     let (token, account_id) = app.sign_in(&email).await;
 
+    // A session alone adds no way in: first a proof of the email.
     let code = app.request_code(&phone).await;
-    let reply = app
-        .send(
-            Method::POST,
-            "/v1/me/identifiers",
-            Some(json!({ "identifier": phone, "code": code })),
-            &[(AUTHORIZATION, &format!("Bearer {token}"))],
-        )
-        .await;
+    let add = |proof: Option<String>| {
+        let (app, token, phone, code) = (&app, &token, &phone, &code);
+        async move {
+            app.send(
+                Method::POST,
+                "/v1/me/identifiers",
+                Some(json!({ "identifier": phone, "code": code, "proof": proof })),
+                &[(AUTHORIZATION, &format!("Bearer {token}"))],
+            )
+            .await
+        }
+    };
+    let reply = add(None).await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::CONFLICT, "PROOF_REQUIRED")
+    );
+    // A made-up proof is refused too, before the code is spent.
+    let reply = add(Some("f".repeat(64))).await;
+    assert_eq!(reply.code(), "PROOF_REQUIRED");
+    let proof = app.proof(&token, "EMAIL", &email).await;
+    let reply = add(Some(proof)).await;
     assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
     assert_eq!(reply.body["email"], email.as_str());
     assert_eq!(reply.body["phone"], phone.as_str());
@@ -1380,12 +1413,13 @@ async fn an_identifier_belongs_to_one_account() {
     // Ben, signed in by number, holds a valid code for Ana's address, but it
     // is already hers. It stays hers: the code only shows he controls both,
     // so he is offered to combine the two, and nothing moves until he does.
+    let proof = app.proof(&ben_token, "PHONE", &ben).await;
     let code = app.request_code(&ana).await;
     let reply = app
         .send(
             Method::POST,
             "/v1/me/identifiers",
-            Some(json!({ "identifier": ana, "code": code })),
+            Some(json!({ "identifier": ana, "code": code, "proof": proof })),
             &[(AUTHORIZATION, &format!("Bearer {ben_token}"))],
         )
         .await;
@@ -1750,11 +1784,13 @@ async fn checking_a_number_added_to_an_account_records_that_purpose() {
             .collect::<Vec<_>>(),
         [("VERIFY_NUMBER", Some(account), None)]
     );
+    let code = app.last_code(&phone);
+    let proof = app.proof(&token, "EMAIL", &email).await;
     let reply = app
         .send(
             Method::POST,
             "/v1/me/identifiers",
-            Some(json!({ "identifier": phone, "code": app.last_code(&phone) })),
+            Some(json!({ "identifier": phone, "code": code, "proof": proof })),
             &[(AUTHORIZATION, bearer.as_str())],
         )
         .await;

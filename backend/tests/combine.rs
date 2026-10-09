@@ -23,7 +23,15 @@ static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 async fn start() -> (Texting, tokio::sync::MutexGuard<'static, ()>) {
     let turn = TURN.lock().await;
-    (texting(DATABASE).await, turn)
+    let test = texting(DATABASE).await;
+    // Every test proves addresses with codes, many of them by text: the
+    // counts of one test (the service's texts an hour among them) are not
+    // the next one's.
+    sqlx::query("DELETE FROM sign_in_limit")
+        .execute(&test.app.owner)
+        .await
+        .unwrap();
+    (test, turn)
 }
 
 async fn scalar_i64(test: &Texting, query: &'static str, account: Uuid) -> i64 {
@@ -43,19 +51,9 @@ async fn status(test: &Texting, account: Uuid) -> (String, Option<Uuid>) {
 }
 
 /// Proves `identifier` for `user`: asks for its code and enters it, with a
-/// proof of the user's own where the user has one of that kind already.
+/// proof of the user's own, which adding one takes.
 async fn prove(test: &Texting, user: &User, identifier: &str) -> Reply {
-    let me = test.app.get(user, "/v1/me").await.ok();
-    let kind = if identifier.contains('@') {
-        "email"
-    } else {
-        "phone"
-    };
-    let proof = if me[kind].is_string() {
-        Some(own_proof(test, user).await)
-    } else {
-        None
-    };
+    let proof = own_proof(test, user).await;
     test.ask(Some(user), identifier).await;
     test.app
         .post(
@@ -73,8 +71,10 @@ async fn offer(test: &Texting, user: &User, identifier: &str) -> Value {
     reply.body["combine"].clone()
 }
 
+/// Takes up an offer, with a proof of the user's own, which combining takes.
 async fn combine_with(test: &Texting, user: &User, token: &Value, key: &str) -> Reply {
-    combine_proved(test, user, token, None, key).await
+    let proof = own_proof(test, user).await;
+    combine_proved(test, user, token, Some(&proof), key).await
 }
 
 async fn combine_proved(
@@ -226,7 +226,9 @@ async fn an_identifier_is_added_changed_and_removed_with_codes_and_one_always_st
     )
     .await
     .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
-    // A proof from a code to the phone; another account's is no good.
+    // Another account's proof is no good; nor, for a day, is one from the
+    // phone, which came after the email it would replace. Neither spends
+    // the code.
     let stranger = test.sign_in(&address(), "Sam").await;
     let theirs = own_proof(&test, &stranger).await;
     app.post(
@@ -236,14 +238,22 @@ async fn an_identifier_is_added_changed_and_removed_with_codes_and_one_always_st
     )
     .await
     .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    let by_phone = proof_by(&test, &ana, "PHONE", &phone).await;
+    app.post(
+        &ana,
+        "/v1/me/identifiers",
+        json!({ "identifier": changed, "code": code, "proof": by_phone }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "IDENTIFIER_TOO_RECENT");
     assert_eq!(app.get(&ana, "/v1/me").await.ok()["email"], email);
-    let proof = proof_by(&test, &ana, "PHONE", &phone).await;
-    test.ask(Some(&ana), &changed).await;
+    // A proof from the email itself replaces it, with the same code.
+    let proof = proof_by(&test, &ana, "EMAIL", &email).await;
     let me = app
         .post(
             &ana,
             "/v1/me/identifiers",
-            json!({ "identifier": changed, "code": test.code(&changed), "proof": proof }),
+            json!({ "identifier": changed, "code": code, "proof": proof }),
         )
         .await
         .ok();
@@ -266,8 +276,20 @@ async fn an_identifier_is_added_changed_and_removed_with_codes_and_one_always_st
     .await
     .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
 
-    // Removing the phone needs a code sent to the email that stays: a code
-    // sent to the phone itself, or a wrong one, is refused.
+    // The email came after the phone: for a day a code to it does not
+    // remove the phone.
+    test.ask(Some(&ana), &changed).await;
+    remove(&test, &ana, "phone", &test.code(&changed), &key())
+        .await
+        .refused(StatusCode::CONFLICT, "IDENTIFIER_TOO_RECENT");
+    sqlx::query("UPDATE account SET email_added_at = now() - interval '25 hours' WHERE id = $1")
+        .bind(ana.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+
+    // A day later: removing the phone needs a code sent to the email that
+    // stays; a code sent to the phone itself, or a wrong one, is refused.
     test.ask(Some(&ana), &phone).await;
     remove(&test, &ana, "phone", &test.code(&phone), &key())
         .await
@@ -397,7 +419,7 @@ async fn changing_the_phone_takes_a_proof_and_is_shown_in_the_app_not_texted() {
     let app = &test.app;
     let phone = number();
     let ana = test.sign_in(&phone, "Ana").await;
-    // Adding a kind the account has none of takes no proof.
+    // Adding a kind the account has none of takes a proof of the number.
     let email = address();
     assert_eq!(test.add(&ana, &email).await["email"], email);
     assert!(notices(&test, ana.id).await.is_empty());
@@ -413,7 +435,22 @@ async fn changing_the_phone_takes_a_proof_and_is_shown_in_the_app_not_texted() {
     )
     .await
     .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
-    assert_eq!(replace(&test, &ana, &changed).await.ok()["phone"], changed);
+    // The email came just now: a proof from it does not replace the older
+    // number. One from the number itself does.
+    replace(&test, &ana, &changed)
+        .await
+        .refused(StatusCode::CONFLICT, "IDENTIFIER_TOO_RECENT");
+    let proof = proof_by(&test, &ana, "PHONE", &phone).await;
+    test.ask(Some(&ana), &changed).await;
+    let me = app
+        .post(
+            &ana,
+            "/v1/me/identifiers",
+            json!({ "identifier": changed, "code": test.code(&changed), "proof": proof }),
+        )
+        .await
+        .ok();
+    assert_eq!(me["phone"], changed);
     // The number replaced is not texted; the app shows it, and no email
     // goes about a number.
     assert_eq!(in_app(&test, &ana).await, "PHONE_CHANGED");
@@ -436,6 +473,101 @@ async fn changing_the_phone_takes_a_proof_and_is_shown_in_the_app_not_texted() {
     )
     .await
     .ok();
+}
+
+/// The account's email and phone, as stored, and whether each is there.
+async fn ways_in(test: &Texting, account: Uuid) -> (bool, bool) {
+    sqlx::query_as(
+        "SELECT email_index IS NOT NULL, phone_index IS NOT NULL FROM account WHERE id = $1",
+    )
+    .bind(account)
+    .fetch_one(&test.app.owner)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_stolen_session_adds_no_way_in_and_takes_none_away() {
+    let (test, _turn) = start().await;
+    let app = &test.app;
+    // The owner signed up by email only; someone else holds the session.
+    let email = address();
+    let victim = test.sign_in(&email, "Ana").await;
+
+    // Scenario A, first step: the attacker's own number, with a code to it,
+    // is not added without a proof of the owner's email, nor with a made-up
+    // one, and its code is not spent.
+    let theirs = number();
+    test.ask(Some(&victim), &theirs).await;
+    let code = test.code(&theirs);
+    for proof in [Value::Null, json!("f".repeat(64))] {
+        app.post(
+            &victim,
+            "/v1/me/identifiers",
+            json!({ "identifier": theirs, "code": code, "proof": proof }),
+        )
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    }
+    assert_eq!(ways_in(&test, victim.id).await, (true, false));
+
+    // Had a number of theirs come to the account somehow: for a day a code
+    // to it removes nothing older (scenario A), and a proof from it replaces
+    // nothing older (scenario B).
+    common::set_phone(&app.db, victim.id, &theirs, false).await;
+    test.ask(Some(&victim), &theirs).await;
+    remove(&test, &victim, "email", &test.code(&theirs), &key())
+        .await
+        .refused(StatusCode::CONFLICT, "IDENTIFIER_TOO_RECENT");
+    let proof = proof_by(&test, &victim, "PHONE", &theirs).await;
+    let other = address();
+    test.ask(Some(&victim), &other).await;
+    app.post(
+        &victim,
+        "/v1/me/identifiers",
+        json!({ "identifier": other, "code": test.code(&other), "proof": proof }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "IDENTIFIER_TOO_RECENT");
+    let me = app.get(&victim, "/v1/me").await.ok();
+    assert_eq!(me["email"], email);
+    // Nothing changed, so the email is told of nothing.
+    assert!(notices(&test, victim.id).await.is_empty());
+
+    // The owner, with a code to the email, can take the number away at once.
+    test.ask(Some(&victim), &email).await;
+    let me = remove(&test, &victim, "phone", &test.code(&email), &key())
+        .await
+        .ok();
+    assert_eq!(me["phone"], Value::Null);
+}
+
+#[tokio::test]
+async fn combining_into_an_account_takes_a_proof_of_its_own_even_where_nothing_of_its_goes() {
+    let (test, _turn) = start().await;
+    // Ben's account has a number; Ana's has an email and no number, so the
+    // number would be added to hers, replacing nothing.
+    let ben_phone = number();
+    let ben = test.sign_in(&ben_phone, "Ben").await;
+    let ana = test.sign_in(&address(), "Ana").await;
+    let offered = offer(&test, &ana, &ben_phone).await;
+    assert_eq!(offered["phone"], "ADDED");
+    assert_eq!(offered["proof_required"], true);
+    combine_proved(&test, &ana, &offered["token"], None, &key())
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    assert_eq!(status(&test, ben.id).await.0, "ACTIVE");
+    assert_eq!(ways_in(&test, ana.id).await, (true, false));
+    // With a proof of her email, it goes through.
+    let proof = own_proof(&test, &ana).await;
+    let me = combine_proved(&test, &ana, &offered["token"], Some(&proof), &key())
+        .await
+        .ok();
+    assert_eq!(me["phone"], ben_phone);
+    assert_eq!(
+        status(&test, ben.id).await,
+        ("MERGED".to_owned(), Some(ana.id))
+    );
 }
 
 // ---- Combining --------------------------------------------------------------
@@ -544,8 +676,13 @@ async fn combining_moves_the_yups_number_updates_payment_options_and_ends_the_ot
     );
     assert_eq!(offered["payment_options_move"], true);
     assert_eq!(offered["text_updates_end"], false);
-    // Ana has no number of her own to lose, so no proof of hers is needed.
-    assert_eq!(offered["proof_required"], false);
+    // A way in comes to Ana's account: that takes a proof of hers, though
+    // she has no number of her own to lose.
+    assert_eq!(offered["proof_required"], true);
+    combine_proved(&test, ana, &offered["token"], None, &key())
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    assert_eq!(status(&test, ben.id).await.0, "ACTIVE");
     // Nothing has moved yet.
     assert_eq!(status(&test, ben.id).await.0, "ACTIVE");
     // Ben reads Spanish: he is told in it.
@@ -744,7 +881,7 @@ async fn an_offer_is_good_once_for_its_account_and_a_retry_with_its_key_is_harml
     // replacing it directly does. Without one, nothing happens.
     assert_eq!(offered["email"], "REPLACED");
     assert_eq!(offered["proof_required"], true);
-    combine_with(&test, &s.ana, &offered["token"], &key())
+    combine_proved(&test, &s.ana, &offered["token"], None, &key())
         .await
         .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
     let cleos = own_proof(&test, &s.cleo).await;
@@ -1424,7 +1561,8 @@ async fn ask_invitation_code(test: &Texting, user: &User, token: &str, typed: &s
         .await
 }
 
-/// Adds `typed` with its code, and opens the invitation.
+/// Adds `typed` with its code and a proof of the user's own, and opens the
+/// invitation. `extra` adds to the request, or replaces what it says.
 async fn add_invitation_address(
     test: &Texting,
     user: &User,
@@ -1432,7 +1570,13 @@ async fn add_invitation_address(
     typed: &str,
     extra: Value,
 ) -> Reply {
-    let mut body = json!({ "token": token, "identifier": typed, "code": test.code(typed) });
+    let proof = own_proof(test, user).await;
+    let mut body = json!({
+        "token": token,
+        "identifier": typed,
+        "code": test.code(typed),
+        "proof": proof,
+    });
     for (name, value) in extra.as_object().unwrap() {
         body[name] = value.clone();
     }
@@ -1487,13 +1631,13 @@ async fn an_invitation_sent_to_an_address_nobody_has_adds_it_and_opens() {
     let typed = format!("({}) {}-{}", &bound[2..5], &bound[5..8], &bound[8..]);
     let reply = ask_invitation_code(&test, &ben, &token, &typed).await;
     assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
-    app.post(
-        &ben,
-        "/v1/invitations/address",
-        json!({ "token": token, "identifier": bound, "code": "000000" }),
-    )
-    .await
-    .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+    // Adding it takes a proof of his own, asked before the code.
+    add_invitation_address(&test, &ben, &token, &bound, json!({ "proof": null }))
+        .await
+        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    add_invitation_address(&test, &ben, &token, &bound, json!({ "code": "000000" }))
+        .await
+        .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
     let view = add_invitation_address(&test, &ben, &token, &bound, json!({}))
         .await
         .ok();
@@ -1561,19 +1705,18 @@ async fn an_invitation_to_another_address_of_a_kind_the_account_has_replaces_it_
     add_invitation_address(&test, &ben, &token, &bound, json!({}))
         .await
         .refused(StatusCode::CONFLICT, "IDENTIFIER_KIND_TAKEN");
-    add_invitation_address(&test, &ben, &token, &bound, json!({ "replace": true }))
-        .await
-        .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
-    let proof = own_proof(&test, &ben).await;
-    let view = add_invitation_address(
+    add_invitation_address(
         &test,
         &ben,
         &token,
         &bound,
-        json!({ "replace": true, "proof": proof }),
+        json!({ "replace": true, "proof": null }),
     )
     .await
-    .ok();
+    .refused(StatusCode::CONFLICT, "PROOF_REQUIRED");
+    let view = add_invitation_address(&test, &ben, &token, &bound, json!({ "replace": true }))
+        .await
+        .ok();
     assert_eq!(view["id"], exchange);
     assert_eq!(app.get(&ben, "/v1/me").await.ok()["email"], bound);
     // The address replaced is told.

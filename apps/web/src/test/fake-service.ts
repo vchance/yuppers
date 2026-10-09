@@ -573,7 +573,7 @@ export const COMBINE_OFFER = {
   phone: 'KEPT' as const,
   payment_options_move: true,
   text_updates_end: false,
-  proof_required: false,
+  proof_required: true,
 }
 
 /** The proof a right code to one of the account's own gives. */
@@ -840,9 +840,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     }
     if (identifier !== service.sentToAddress) return [422, { code: 'NOT_INVITED_ADDRESS' }]
     if (service.sentTo?.replaces && !replace) return [409, { code: 'IDENTIFIER_KIND_TAKEN' }]
-    if (service.sentTo?.replaces && proof !== GOOD_PROOF) {
-      return [409, { code: 'PROOF_REQUIRED' }]
-    }
+    if (proof !== GOOD_PROOF) return [409, { code: 'PROOF_REQUIRED' }]
     if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]
     if (service.otherAccountAt) {
       return [409, { code: 'IDENTIFIER_ON_OTHER_ACCOUNT', combine: COMBINE_OFFER }]
@@ -856,7 +854,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (call === 'POST /v1/me/combine') {
     const { proof } = body as { proof?: string }
-    if (proof !== undefined && proof !== GOOD_PROOF) return [409, { code: 'PROOF_REQUIRED' }]
+    if (proof !== GOOD_PROOF) return [409, { code: 'PROOF_REQUIRED' }]
     service.account = { ...service.account, email: 'ana@old.example.test' }
     service.otherAccountAt = null
     return [200, service.account]
@@ -910,7 +908,8 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
       proof?: string
     }
     const current = identifier.includes('@') ? service.account.email : service.account.phone
-    if (current && current !== identifier && proof !== GOOD_PROOF) {
+    const any = service.account.email || service.account.phone
+    if (any && current !== identifier && proof !== GOOD_PROOF) {
       return [409, { code: 'PROOF_REQUIRED' }]
     }
     if (code !== GOOD_CODE) return [401, { code: 'INVALID_CODE' }]

@@ -464,7 +464,9 @@ pub async fn offer(
         phone: outcome_of(&outcomes, Kind::Phone),
         payment_options_move: their_options && !our_options,
         text_updates_end: text_updates && !phone_kept,
-        proof_required: stays.index(kind).is_some(),
+        // Always, for an account with an identifier of its own: what comes
+        // to it is a way in, which a session alone does not add.
+        proof_required: stays.index(Kind::Email).is_some() || stays.index(Kind::Phone).is_some(),
     })
 }
 
@@ -654,14 +656,19 @@ async fn merge(
     {
         return Err(Failure::Refused(ErrorCode::CombineExpired));
     }
-    // A's own identifier of that kind would be replaced: that takes a proof
-    // from A's side as well, a code to it or to A's other one, as replacing
-    // one directly does. A session alone does not take A's ways in away.
-    if source == Origin::Person && a.index(kind).is_some() {
+    // A gets a way in from B, and may lose its own of that kind: that takes
+    // a proof from A's side as well, a code to one A already has, as adding
+    // or replacing one directly does. A session alone neither adds a way in
+    // nor takes one away; nor does a proof from an identifier A got in the
+    // last day take away an older one.
+    if source == Origin::Person
+        && (a.index(Kind::Email).is_some() || a.index(Kind::Phone).is_some())
+    {
         let Some(proof) = proof else {
             return Err(Failure::Refused(ErrorCode::ProofRequired));
         };
-        take_proof(conn, stays, proof).await?;
+        let replaced = a.index(kind).is_some().then_some(kind);
+        take_proof(conn, stays, proof, replaced).await?;
     }
     let at = match source {
         Origin::Person => OffsetDateTime::now_utc(),
@@ -1288,31 +1295,103 @@ pub async fn issue_proof(
     })
 }
 
-/// Uses up the proof `hash` of `account`, in the caller's transaction:
-/// refused with `PROOF_REQUIRED` unless it is this account's, unused,
-/// unexpired, and of an identifier the account still has. Rolling back the
-/// transaction leaves it unused.
-pub(crate) async fn take_proof(
-    conn: &mut PgConnection,
+/// How long an identifier counts as new on its account: a proof from it, or
+/// a code to it, does not remove or replace one the account had before it
+/// came. A stolen session that somehow put its own address on the account
+/// cannot use it at once to take the owner's away; the owner, told in the
+/// meantime, has a day to act.
+pub const FRESH_IDENTIFIER: Duration = Duration::hours(24);
+
+/// Whether a code to an identifier that came to the account at `proving`
+/// may not take away one that came at `protected`: the first is new and the
+/// second older.
+pub fn too_recent(proving: Option<OffsetDateTime>, protected: Option<OffsetDateTime>) -> bool {
+    match (proving, protected) {
+        (Some(proving), Some(protected)) => {
+            proving > OffsetDateTime::now_utc() - FRESH_IDENTIFIER && protected < proving
+        }
+        _ => false,
+    }
+}
+
+/// A proof as found: when the identifier it proves came to the account, and
+/// when each of the account's did.
+type ProofRow = (
+    Option<OffsetDateTime>,
+    Option<OffsetDateTime>,
+    Option<OffsetDateTime>,
+);
+
+/// What a proof may be used for: `protect`, the kind the use would remove
+/// or replace on the account, if any.
+fn proof_allows(row: Option<ProofRow>, protect: Option<Kind>) -> Result<(), ApiError> {
+    let Some((proving, email, phone)) = row else {
+        return Err(ErrorCode::ProofRequired.into());
+    };
+    let protected = match protect {
+        Some(Kind::Email) => email,
+        Some(Kind::Phone) => phone,
+        None => None,
+    };
+    if too_recent(proving, protected) {
+        return Err(ErrorCode::IdentifierTooRecent.into());
+    }
+    Ok(())
+}
+
+/// Checks, without using it, the proof `hash` of `account`, as
+/// [`take_proof`] would: so that a request it would fail is refused before
+/// anything else is spent on it, a code included.
+pub(crate) async fn check_proof(
+    db: &PgPool,
     account: Uuid,
     hash: &[u8; 32],
+    protect: Option<Kind>,
 ) -> Result<(), ApiError> {
-    let used = sqlx::query(
-        "UPDATE account_proof p SET used_at = now()
-         FROM account a
+    let row: Option<ProofRow> = sqlx::query_as(
+        "SELECT CASE WHEN p.identifier_index = a.email_index THEN a.email_added_at
+                     ELSE a.phone_added_at END,
+                a.email_added_at, a.phone_added_at
+         FROM account_proof p JOIN account a ON a.id = p.account_id
          WHERE p.token_hash = $1 AND p.account_id = $2 AND p.used_at IS NULL
-           AND p.expires_at > now() AND a.id = p.account_id
+           AND p.expires_at > now() AND a.status = 'ACTIVE'
            AND p.identifier_index IN (a.email_index, a.phone_index)",
     )
     .bind(hash.as_slice())
     .bind(account)
-    .execute(conn)
-    .await?
-    .rows_affected();
-    if used == 0 {
-        return Err(ErrorCode::ProofRequired.into());
-    }
-    Ok(())
+    .fetch_optional(db)
+    .await?;
+    proof_allows(row, protect)
+}
+
+/// Uses up the proof `hash` of `account`, in the caller's transaction:
+/// refused with `PROOF_REQUIRED` unless it is this account's, unused,
+/// unexpired, and of an identifier the account still has; and with
+/// `IDENTIFIER_TOO_RECENT` where that identifier is new
+/// ([`FRESH_IDENTIFIER`]) and `protect`, the kind the use takes away, is
+/// older. Rolling back the transaction leaves it unused, and the caller
+/// does on any refusal.
+pub(crate) async fn take_proof(
+    conn: &mut PgConnection,
+    account: Uuid,
+    hash: &[u8; 32],
+    protect: Option<Kind>,
+) -> Result<(), ApiError> {
+    let row: Option<ProofRow> = sqlx::query_as(
+        "UPDATE account_proof p SET used_at = now()
+         FROM account a
+         WHERE p.token_hash = $1 AND p.account_id = $2 AND p.used_at IS NULL
+           AND p.expires_at > now() AND a.id = p.account_id
+           AND p.identifier_index IN (a.email_index, a.phone_index)
+         RETURNING CASE WHEN p.identifier_index = a.email_index THEN a.email_added_at
+                        ELSE a.phone_added_at END,
+                   a.email_added_at, a.phone_added_at",
+    )
+    .bind(hash.as_slice())
+    .bind(account)
+    .fetch_optional(conn)
+    .await?;
+    proof_allows(row, protect)
 }
 
 // ---- Replaying ----------------------------------------------------------------

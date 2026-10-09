@@ -1080,7 +1080,8 @@ async fn a_number_is_verified_by_a_code_and_replacing_it_ends_the_old_numbers_up
         }
     };
     let first = number();
-    assert_eq!(add(first.clone(), None).await["phone"], first);
+    let proof = common::own_proof(&app.db, deal.ben.id).await;
+    assert_eq!(add(first.clone(), Some(proof)).await["phone"], first);
     turn_on(&app, &deal.ben, &deal).await;
 
     // Replacing it takes a proof of one of the account's own: here, a code

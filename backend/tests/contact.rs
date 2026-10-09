@@ -118,12 +118,13 @@ async fn an_address_is_one_account_whatever_its_case() {
     // Nobody else may add it, in any case: whoever proves it is offered to
     // combine the two accounts instead.
     let ben = test.sign_in(&number(), "Ben").await;
+    let proof = test.own_proof(&ben).await;
     test.ask(Some(&ben), &email).await;
     let code = test.code(&email);
     app.post(
         &ben,
         "/v1/me/identifiers",
-        json!({ "identifier": email.to_uppercase(), "code": code }),
+        json!({ "identifier": email.to_uppercase(), "code": code, "proof": proof }),
     )
     .await
     .refused(StatusCode::CONFLICT, "IDENTIFIER_ON_OTHER_ACCOUNT");

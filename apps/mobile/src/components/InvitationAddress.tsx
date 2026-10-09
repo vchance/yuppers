@@ -40,6 +40,9 @@ export function InvitationAddress({ token, sentTo, onOpened, onSignOut, client =
   const control = useInvitationAddress(client, token, sentTo, own, language, onOpened, setAccount);
   const consent = control.codeConsent;
   const phone = sentTo.kind === 'PHONE';
+  const proveIntro = sentTo.replaces
+    ? wording.identifiers.proveIntro
+    : wording.identifiers.proveAddIntro;
 
   if (control.offer) {
     return (
@@ -104,7 +107,7 @@ export function InvitationAddress({ token, sentTo, onOpened, onSignOut, client =
     const alternative = control.proveAlternative;
     body = (
       <>
-        <P>{fmt(wording.identifiers.proveIntro, { identifier: to })}</P>
+        <P>{fmt(proveIntro, { identifier: to })}</P>
         {consentBox}
         <Failure code={control.failure} />
         <Actions>

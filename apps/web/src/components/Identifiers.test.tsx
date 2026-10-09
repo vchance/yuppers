@@ -45,11 +45,21 @@ test('both are shown with their buttons, and Remove waits while there is only on
   expect(await violations()).toEqual([])
 })
 
-test('a phone number is added with a code by text, once the box is ticked, then the email removed', async () => {
+test('a phone number is added after a code to the email, with a code by text once the box is ticked, then removed', async () => {
   const { service, wording } = await start('/account', ana)
   const w = wording.identifiers
   await seen(w.heading)
   await press(button(w.add))
+  // A session alone adds no way in: first a code to the email.
+  await seen(formatMessage(w.proveAddIntro, { identifier: 'ana@example.test' }, 'en'))
+  await press(button(formatMessage(w.proveSend, { identifier: 'ana@example.test' }, 'en')))
+  await until(() => text().includes(wording.signIn.codeLabel), 'the proving code step')
+  expect(sent(service, 'POST /v1/auth/codes').at(-1)).toMatchObject({
+    identifier: 'ana@example.test',
+  })
+  await type(field(wording.signIn.codeLabel), GOOD_CODE)
+  await press(button(w.proveConfirm))
+  await until(() => text().includes(w.newPhoneLabel), 'the number step')
   await type(field(w.newPhoneLabel), '(856) 548-8780')
   const send = button(w.sendCode)
   expect(send.disabled).toBe(true)
@@ -61,18 +71,21 @@ test('a phone number is added with a code by text, once the box is ticked, then 
   await press(button(w.confirm))
   await until(() => text().includes('(856) 548-8780') && !text().includes(w.none), 'the number added')
   expect(text()).toContain(formatMessage(w.added, { identifier: '(856) 548-8780' }, 'en'))
+  expect(sent(service, 'POST /v1/me/identifiers').at(-1)).toEqual({
+    identifier: '+18565488780',
+    code: GOOD_CODE,
+    proof: GOOD_PROOF,
+  })
 
-  // Now the email can go, proved by a code to the number that stays.
+  // Now either can go: the number, proved by a code to the email that stays.
   const removes = [...document.querySelectorAll('button')].filter(
     (candidate) => candidate.textContent === w.remove,
   )
   expect(removes.every((candidate) => !candidate.disabled)).toBe(true)
-  await press(removes[0])
-  await seen(w.removeEmailTitle)
-  expect(text()).toContain(formatMessage(w.removeIntro, { staying: '(856) 548-8780' }, 'en'))
-  const sendTo = formatMessage(w.sendRemovalCode, { staying: '(856) 548-8780' }, 'en')
-  expect(button(sendTo).disabled).toBe(true)
-  await press(field(wording.smsCode.verifyNumber))
+  await press(removes[1])
+  await seen(w.removePhoneTitle)
+  expect(text()).toContain(formatMessage(w.removeIntro, { staying: 'ana@example.test' }, 'en'))
+  const sendTo = formatMessage(w.sendRemovalCode, { staying: 'ana@example.test' }, 'en')
   await press(button(sendTo))
   await until(() => text().includes(wording.signIn.codeLabel), 'the code step')
   await type(field(wording.signIn.codeLabel), '000000')
@@ -80,8 +93,9 @@ test('a phone number is added with a code by text, once the box is ticked, then 
   await until(() => text().includes(wording.errors.INVALID_CODE), 'the wrong code refused')
   await type(field(wording.signIn.codeLabel), GOOD_CODE)
   await press(button(w.removeConfirm))
-  await until(() => !text().includes('ana@example.test'), 'the email removed')
-  expect(service.sent.some((each) => each.call === 'DELETE /v1/me/identifiers/email')).toBe(true)
+  await until(() => text().includes(w.removed), 'the number removed')
+  expect(text()).not.toContain('(856) 548-8780')
+  expect(service.sent.some((each) => each.call === 'DELETE /v1/me/identifiers/phone')).toBe(true)
 })
 
 test('changing the email takes a code to one of the account’s own first, there or to the other', async () => {
@@ -157,7 +171,10 @@ test('an address on another account offers to combine, says what moves, and comb
   expect(service.sent.some((each) => each.call === 'POST /v1/me/combine')).toBe(false)
   await press(button(w.confirm))
   await until(() => text().includes(w.done), 'combined')
-  expect(sent(service, 'POST /v1/me/combine')).toEqual([{ token: COMBINE_OFFER.token }])
+  // The proof given with the address serves for combining.
+  expect(sent(service, 'POST /v1/me/combine')).toEqual([
+    { token: COMBINE_OFFER.token, proof: GOOD_PROOF },
+  ])
   expect(text()).toContain('ana@old.example.test')
 })
 
@@ -172,6 +189,17 @@ test('an invitation sent to another address says only its kind, and opens once t
   expect(text()).not.toContain('8780')
   // No button that would claim it as it is.
   expect(text()).not.toContain(formatMessage(w.respondAs, { name: ana.display_name }, 'en'))
+  // Adding it takes a code to the account's own email first.
+  await seen(
+    formatMessage(wording.identifiers.proveAddIntro, { identifier: 'ana@example.test' }, 'en'),
+  )
+  await press(
+    button(formatMessage(wording.identifiers.proveSend, { identifier: 'ana@example.test' }, 'en')),
+  )
+  await until(() => text().includes(wording.signIn.codeLabel), 'the proving code step')
+  await type(field(wording.signIn.codeLabel), GOOD_CODE)
+  await press(button(wording.identifiers.proveConfirm))
+  await until(() => text().includes(wording.identifiers.newPhoneLabel), 'the number step')
   await type(field(wording.identifiers.newPhoneLabel), '(856) 548-1111')
   expect(button(wording.identifiers.sendCode).disabled).toBe(true)
   await press(field(wording.smsCode.verifyNumber))
@@ -195,6 +223,7 @@ test('an invitation sent to another address says only its kind, and opens once t
     identifier: '+18565488780',
     code: GOOD_CODE,
     replace: false,
+    proof: GOOD_PROOF,
   })
 })
 

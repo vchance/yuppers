@@ -62,7 +62,7 @@
             "Entras con un código de un solo uso que se envía a tu correo electrónico o a tu teléfono. Cualquiera que pueda leer esos códigos puede entrar como tú, así que no dejes que nadie más use tu correo ni tu teléfono, y no le des un código a nadie.",
             "Una cuenta es para una persona: tú. No crees una cuenta para otra persona y no compartas la tuya.",
             "Usa tu propio nombre, tal como quieres que aparezca en tus acuerdos. La otra persona lo ve, y queda escrito en lo que firman los dos.",
-            "Puedes agregar, cambiar o quitar tu correo electrónico o número de teléfono en la página de tu cuenta, con un código de un solo uso; cambiar uno también requiere un código enviado a uno que ya está en tu cuenta, y a un correo electrónico cambiado o quitado se le avisa por correo. Tu cuenta siempre conserva uno de los dos. Si crees que alguien más usó tu cuenta, escribe a {supportEmail}.",
+            "Puedes agregar, cambiar o quitar tu correo electrónico o número de teléfono en la página de tu cuenta, con un código de un solo uso; agregar o cambiar uno también requiere un código enviado a uno que ya está en tu cuenta, un código a uno agregado en las últimas 24 horas no puede quitar ni reemplazar uno anterior, y a un correo electrónico cambiado o quitado se le avisa por correo. Tu cuenta siempre conserva uno de los dos. Si crees que alguien más usó tu cuenta, escribe a {supportEmail}.",
             "Si tienes dos cuentas, puedes combinarlas en una, cuando un código demuestre que ambas son tuyas. Combinarlas no se puede deshacer, y dos cuentas que son los dos lados de un mismo yup no se pueden combinar; lo que pasa con la otra cuenta y su información está en nuestra {privacy}."
           ]
         }

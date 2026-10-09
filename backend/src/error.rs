@@ -71,11 +71,15 @@ pub enum ErrorCode {
     /// The account already has an email address (or phone number) of its
     /// own, and only one of each is kept: the request must say to replace it.
     IdentifierKindTaken,
-    /// Replacing the account's email address or phone number needs a proof
-    /// of one of its own, from a code sent to the one being replaced or to
-    /// the other (`POST /v1/me/identifiers/proof`), and none was given, or
+    /// Adding or replacing an email address or phone number, while the
+    /// account has one, needs a proof of one it already has, from a code
+    /// sent to it (`POST /v1/me/identifiers/proof`), and none was given, or
     /// it is used, expired or another account's.
     ProofRequired,
+    /// The code or proof is from an email address or phone number that came
+    /// to the account in the last 24 hours, and would remove or replace one
+    /// the account had before it. Use the older one, or wait.
+    IdentifierTooRecent,
     /// The address typed is not the one the invitation was sent to. Says
     /// nothing more about it.
     NotInvitedAddress,
@@ -173,6 +177,7 @@ impl From<ErrorCode> for ApiError {
             | IdentifierOnOtherAccount
             | IdentifierKindTaken
             | ProofRequired
+            | IdentifierTooRecent
             | CodeNotSent
             | LastIdentifier
             | CombineExpired

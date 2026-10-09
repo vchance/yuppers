@@ -62,7 +62,7 @@
             "You sign in with a one-time code sent to your email address or phone number. Anyone who can read those codes can sign in as you, so keep your email and your phone to yourself, and don’t share a code with anyone.",
             "An account is for one person: you. Don’t make an account for someone else, and don’t share yours.",
             "Use your own name, as you want it shown on your agreements. The other person sees it, and it is written into what you both sign.",
-            "You can add, change or remove your email address or phone number on your account page, with a one-time code; changing one also takes a code sent to one already on your account, and an email address changed or removed is told by email. Your account always keeps one of the two. If you think someone else has used your account, write to {supportEmail}.",
+            "You can add, change or remove your email address or phone number on your account page, with a one-time code; adding or changing one also takes a code sent to one already on your account, a code to one added in the last 24 hours can’t remove or replace an older one, and an email address changed or removed is told by email. Your account always keeps one of the two. If you think someone else has used your account, write to {supportEmail}.",
             "If you have two accounts, you can combine them into one, once a code shows that both are yours. Combining can’t be undone, and two accounts that are the two sides of one yup can’t be combined; what happens to the other account and its information is in our {privacy}."
           ]
         }

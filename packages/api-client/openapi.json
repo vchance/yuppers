@@ -1648,7 +1648,7 @@
             }
           },
           "409": {
-            "description": "The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`); or the two accounts cannot be combined",
+            "description": "The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`, `IDENTIFIER_TOO_RECENT`); or the two accounts cannot be combined",
             "content": {
               "application/json": {
                 "schema": {
@@ -2365,7 +2365,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Verifies an email address or phone number and attaches it to the\naccount: adding one, or, with a proof of one of the account's own\n(`proof`), replacing the one of the same kind. The address replaced is\ntold by email; a number replaced, by a notice in the app. An account\nwith both a verified email and a verified phone can meet the higher risk\ntier. If the code is right and the identifier belongs to another\naccount, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an offer to\ncombine the two (`POST /v1/me/combine`); until the code is right, an\nidentifier with an account is answered like any other.",
+        "summary": "Verifies an email address or phone number and attaches it to the\naccount, with a proof of one it already has (`proof`): adding one, or\nreplacing the one of the same kind. A proof from an identifier that came\nin the last 24 hours does not replace an older one. The address replaced\nis told by email; a number replaced, by a notice in the app. An account\nwith both a verified email and a verified phone can meet the higher risk\ntier. If the code is right and the identifier belongs to another\naccount, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an offer to\ncombine the two (`POST /v1/me/combine`); until the code is right, an\nidentifier with an account is answered like any other.",
         "operationId": "add_identifier",
         "requestBody": {
           "content": {
@@ -2399,7 +2399,7 @@
             }
           },
           "409": {
-            "description": "The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or it would replace one of the account's own without a good `proof` (`PROOF_REQUIRED`)",
+            "description": "The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or the account has an identifier and no good `proof` was given (`PROOF_REQUIRED`), or one from an identifier too new to replace an older one (`IDENTIFIER_TOO_RECENT`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2446,7 +2446,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Proves, with a code sent to one of the account's own identifiers, that\nthe person signed in controls it: what replacing the account's email\naddress or phone number needs, directly, from an invitation, or by\ncombining another account into this one (`proof`). Good once, for ten\nminutes, for this account only, and only while the account still has\nthe identifier proved.",
+        "summary": "Proves, with a code sent to one of the account's own identifiers, that\nthe person signed in controls it: what adding or replacing an email\naddress or phone number needs, directly, from an invitation, or by\ncombining another account into this one (`proof`). Good once, for ten\nminutes, for this account only, and only while the account still has\nthe identifier proved.",
         "operationId": "prove_identifier",
         "requestBody": {
           "content": {
@@ -2517,7 +2517,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Removes the account's email address or phone number, keeping the other:\nan account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a\ncode sent to the one that stays, so that a session alone cannot take a\nway in away, and the person knows they can still sign in. An email\naddress removed is told by email; a phone number removed, by a notice in\nthe app. Removing the phone number ends text updates for every\nagreement. Invitations named for the address or number removed are left\nas they are. Removing one the account does not have changes nothing and\nsucceeds, as a repeat finds; so does a repeat with the same\n`Idempotency-Key`.",
+        "summary": "Removes the account's email address or phone number, keeping the other:\nan account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a\ncode sent to the one that stays, so that a session alone cannot take a\nway in away, and the person knows they can still sign in; a code to one\nthat came in the last 24 hours does not remove one the account had\nbefore it (`IDENTIFIER_TOO_RECENT`). An email\naddress removed is told by email; a phone number removed, by a notice in\nthe app. Removing the phone number ends text updates for every\nagreement. Invitations named for the address or number removed are left\nas they are. Removing one the account does not have changes nothing and\nsucceeds, as a repeat finds; so does a repeat with the same\n`Idempotency-Key`.",
         "operationId": "remove_identifier",
         "parameters": [
           {
@@ -2574,7 +2574,7 @@
             }
           },
           "409": {
-            "description": "It is the account's only identifier (`LAST_IDENTIFIER`)",
+            "description": "It is the account's only identifier (`LAST_IDENTIFIER`), or the one that stays came in the last 24 hours and the one removed is older (`IDENTIFIER_TOO_RECENT`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3388,7 +3388,7 @@
               "string",
               "null"
             ],
-            "description": "Where the account has another of this kind, which this replaces:\na proof of one of the account's own identifiers\n(`POST /v1/me/identifiers/proof`). Without it such a request is\nrefused with `PROOF_REQUIRED`, before the code is looked at."
+            "description": "While the account has an identifier, of either kind: a proof of one\nit has (`POST /v1/me/identifiers/proof`). Without a good one the\nrequest is refused with `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`),\nbefore the code is looked at."
           }
         }
       },
@@ -3413,7 +3413,7 @@
               "string",
               "null"
             ],
-            "description": "With `replace`: a proof of one of the account's own identifiers\n(`POST /v1/me/identifiers/proof`). Without it such a request is\nrefused, before the code is looked at, with `PROOF_REQUIRED`."
+            "description": "A proof of one of the account's own identifiers\n(`POST /v1/me/identifiers/proof`): adding one takes it. Without a\ngood one the request is refused, before the code is looked at, with\n`PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`)."
           },
           "replace": {
             "type": "boolean",
@@ -4227,6 +4227,7 @@
           "IDENTIFIER_ON_OTHER_ACCOUNT",
           "IDENTIFIER_KIND_TAKEN",
           "PROOF_REQUIRED",
+          "IDENTIFIER_TOO_RECENT",
           "NOT_INVITED_ADDRESS",
           "CODE_NOT_SENT",
           "LAST_IDENTIFIER",

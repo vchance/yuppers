@@ -721,9 +721,10 @@ export interface paths {
         put?: never;
         /**
          * Verifies an email address or phone number and attaches it to the
-         *     account: adding one, or, with a proof of one of the account's own
-         *     (`proof`), replacing the one of the same kind. The address replaced is
-         *     told by email; a number replaced, by a notice in the app. An account
+         *     account, with a proof of one it already has (`proof`): adding one, or
+         *     replacing the one of the same kind. A proof from an identifier that came
+         *     in the last 24 hours does not replace an older one. The address replaced
+         *     is told by email; a number replaced, by a notice in the app. An account
          *     with both a verified email and a verified phone can meet the higher risk
          *     tier. If the code is right and the identifier belongs to another
          *     account, the answer is `IDENTIFIER_ON_OTHER_ACCOUNT` with an offer to
@@ -748,7 +749,7 @@ export interface paths {
         put?: never;
         /**
          * Proves, with a code sent to one of the account's own identifiers, that
-         *     the person signed in controls it: what replacing the account's email
+         *     the person signed in controls it: what adding or replacing an email
          *     address or phone number needs, directly, from an invitation, or by
          *     combining another account into this one (`proof`). Good once, for ten
          *     minutes, for this account only, and only while the account still has
@@ -775,7 +776,9 @@ export interface paths {
          * Removes the account's email address or phone number, keeping the other:
          *     an account keeps one to sign in with (`LAST_IDENTIFIER`). Proved with a
          *     code sent to the one that stays, so that a session alone cannot take a
-         *     way in away, and the person knows they can still sign in. An email
+         *     way in away, and the person knows they can still sign in; a code to one
+         *     that came in the last 24 hours does not remove one the account had
+         *     before it (`IDENTIFIER_TOO_RECENT`). An email
          *     address removed is told by email; a phone number removed, by a notice in
          *     the app. Removing the phone number ends text updates for every
          *     agreement. Invitations named for the address or number removed are left
@@ -1069,10 +1072,10 @@ export interface components {
              */
             identifier: string;
             /**
-             * @description Where the account has another of this kind, which this replaces:
-             *     a proof of one of the account's own identifiers
-             *     (`POST /v1/me/identifiers/proof`). Without it such a request is
-             *     refused with `PROOF_REQUIRED`, before the code is looked at.
+             * @description While the account has an identifier, of either kind: a proof of one
+             *     it has (`POST /v1/me/identifiers/proof`). Without a good one the
+             *     request is refused with `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`),
+             *     before the code is looked at.
              */
             proof?: string | null;
         };
@@ -1082,9 +1085,10 @@ export interface components {
             /** @description The address the code was sent to, as typed for it. */
             identifier: string;
             /**
-             * @description With `replace`: a proof of one of the account's own identifiers
-             *     (`POST /v1/me/identifiers/proof`). Without it such a request is
-             *     refused, before the code is looked at, with `PROOF_REQUIRED`.
+             * @description A proof of one of the account's own identifiers
+             *     (`POST /v1/me/identifiers/proof`): adding one takes it. Without a
+             *     good one the request is refused, before the code is looked at, with
+             *     `PROOF_REQUIRED` (or `IDENTIFIER_TOO_RECENT`).
              */
             proof?: string | null;
             /**
@@ -1408,7 +1412,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "IDENTIFIER_TOO_RECENT" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -3856,7 +3860,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`); or the two accounts cannot be combined */
+            /** @description The address is another account's (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`); the account has another of this kind and `replace` was not given (`IDENTIFIER_KIND_TAKEN`), or no good `proof` (`PROOF_REQUIRED`, `IDENTIFIER_TOO_RECENT`); or the two accounts cannot be combined */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4503,7 +4507,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or it would replace one of the account's own without a good `proof` (`PROOF_REQUIRED`) */
+            /** @description The identifier belongs to another account, which the code shows the person controls (`IDENTIFIER_ON_OTHER_ACCOUNT`, with `combine`), or that account cannot be combined into this one (`COMBINE_SUSPENDED`, `COMBINE_REVIEWER`, `COMBINE_SHARED_EXCHANGE`); or the account has an identifier and no good `proof` was given (`PROOF_REQUIRED`), or one from an identifier too new to replace an older one (`IDENTIFIER_TOO_RECENT`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4638,7 +4642,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description It is the account's only identifier (`LAST_IDENTIFIER`) */
+            /** @description It is the account's only identifier (`LAST_IDENTIFIER`), or the one that stays came in the last 24 hours and the one removed is older (`IDENTIFIER_TOO_RECENT`) */
             409: {
                 headers: {
                     [name: string]: unknown;

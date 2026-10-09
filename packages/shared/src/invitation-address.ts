@@ -24,9 +24,11 @@ import { smsCodeConsent, useSmsCodeConsentBox, type SmsCodeConsentBox } from './
  *   - an address on another of the person's accounts brings the offer to
  *     combine the two, and once combined, the invitation opens;
  *   - an account with another address of that kind is told first that
- *     adding this one replaces it (`replaces`), which takes a code to one of
- *     its own first, as changing one does; it can sign in with the invited
- *     address instead.
+ *     adding this one replaces it (`replaces`), and can sign in with the
+ *     invited address instead.
+ *
+ * Adding it takes a code first to one the account already has, as adding
+ * one on the account page does.
  */
 
 export type InvitationAddressApi = Pick<
@@ -42,7 +44,7 @@ export type InvitationAddressApi = Pick<
 export interface InvitationAddressControl {
   /**
    * `prove`: where the code proving one of the account's own goes, and
-   * `proveCode` once it was sent (only where adding replaces one); `offer`:
+   * `proveCode` once it was sent; `offer`:
    * the address to type; `code`: the code sent to it.
    */
   step: 'prove' | 'proveCode' | 'offer' | 'code'
@@ -87,12 +89,12 @@ export function useInvitationAddress(
   onAccount: (account: Account) => void,
 ): InvitationAddressControl {
   const phone = sentTo.kind === 'PHONE'
-  // Replacing one: the code goes first to the one replaced.
-  const replaced = (phone ? account.phone : account.email) ?? null
-  const [step, setStep] = useState<InvitationAddressControl['step']>(
-    sentTo.replaces && replaced ? 'prove' : 'offer',
-  )
-  const [proveTo, setProveTo] = useState<string | null>(sentTo.replaces ? replaced : null)
+  // Adding one takes a code first to one the account has: replacing, to
+  // the one replaced.
+  const own =
+    (phone ? account.phone : account.email) ?? account.email ?? account.phone ?? null
+  const [step, setStep] = useState<InvitationAddressControl['step']>(own ? 'prove' : 'offer')
+  const [proveTo, setProveTo] = useState<string | null>(own)
   const [proof, setProof] = useState<string | null>(null)
   const [input, setInputState] = useState('')
   const [invalidPhone, setInvalidPhone] = useState(false)

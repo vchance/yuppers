@@ -54,9 +54,19 @@ test('signed in by phone, an invitation sent to the email of another account com
   await expect(title(page, en.invitation.signedOutTitle)).toBeVisible()
   await signInByPhone(page, phone, american)
 
-  // Only the kind is said; he types the address.
+  // Only the kind is said. Adding it takes a code to his own number first.
   await expect(page.getByRole('heading', { name: en.invitation.sentToEmail })).toBeVisible()
   await expect(page.getByText(brunoEmail)).toHaveCount(0)
+  await expect(
+    page.getByText(fill(en.identifiers.proveAddIntro, { identifier: american })),
+  ).toBeVisible()
+  await shown(page.getByRole('checkbox', { name: en.smsCode.verifyNumber, exact: true })).click()
+  const proving = await codeFrom(inLog(phone), 'sign-in', () =>
+    button(page, fill(en.identifiers.proveSend, { identifier: american })).click(),
+  )
+  await shown(page.getByLabel(en.signIn.codeLabel)).fill(proving)
+  await button(page, en.identifiers.proveConfirm).click()
+  // He types the address.
   const typed = shown(page.getByRole('textbox', { name: en.identifiers.newEmailLabel, exact: true }))
   await typed.fill(`someone-else-${Date.now()}@example.test`)
   await button(page, en.identifiers.sendCode).click()
@@ -76,7 +86,7 @@ test('signed in by phone, an invitation sent to the email of another account com
   await page.waitForURL(`**/exchanges/${id}`)
 })
 
-test('the phone is removed from an account that has both, with a code to the email', async ({
+test('a phone is added after a code to the email, and removed with a code to the email', async ({
   person,
 }) => {
   const cleo = await person('Cleo')
@@ -92,6 +102,13 @@ test('the phone is removed from an account that has both, with a code to the ema
 
   const { phone, american } = usNumber()
   await button(page, `${w.add}: ${en.profile.phoneLabel}`).click()
+  // First a code to the email: a session alone adds no way in.
+  await expect(page.getByText(fill(w.proveAddIntro, { identifier: cleo.email }))).toBeVisible()
+  const proving = await codeFrom(cleo.email, 'sign-in', () =>
+    button(page, fill(w.proveSend, { identifier: cleo.email })).click(),
+  )
+  await page.getByLabel(en.signIn.codeLabel).fill(proving)
+  await button(page, w.proveConfirm).click()
   await page.getByRole('textbox', { name: w.newPhoneLabel, exact: true }).fill(american)
   await page.getByRole('checkbox', { name: en.smsCode.verifyNumber, exact: true }).click()
   const code = await codeFrom(inLog(phone), 'sign-in', () => button(page, w.sendCode).click())

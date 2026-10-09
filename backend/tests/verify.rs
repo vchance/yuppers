@@ -1232,10 +1232,11 @@ async fn agreement_updates_go_on_through_the_messages_api_beside_verify() {
         .await;
     assert_eq!(reply.status, StatusCode::NO_CONTENT, "{:?}", reply.body);
     let code = twilio.code(SIGN_IN, &phone);
+    let proof = common::own_proof(&app.db, deal.ben.id).await;
     app.post(
         &deal.ben,
         "/v1/me/identifiers",
-        json!({ "identifier": phone, "code": code }),
+        json!({ "identifier": phone, "code": code, "proof": proof }),
     )
     .await
     .ok();

@@ -233,11 +233,12 @@ function EditForm({
   if (edit.step === 'prove' || edit.step === 'proveCode') {
     const to = shownIdentifier(edit.to)
     const alternative = control.proveAlternative
+    const intro = edit.action === 'add' ? w.proveAddIntro : w.proveIntro
     return (
       <Panel title={title}>
         {edit.step === 'prove' ? (
           <form noValidate onSubmit={send}>
-            <p>{fmt(w.proveIntro, { identifier: to })}</p>
+            <p>{fmt(intro, { identifier: to })}</p>
             {consent.shown && (
               <ConsentCheckbox
                 wording={wording.smsCode.verifyNumber}

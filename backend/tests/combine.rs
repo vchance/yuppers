@@ -1453,7 +1453,8 @@ async fn an_invitation_sent_to_an_address_nobody_has_adds_it_and_opens() {
     let (test, _turn) = start().await;
     let app = &test.app;
     let ana = test.sign_in(&address(), "Ana").await;
-    let bound = number();
+    // Its exchange begins with 2 to 9, so it can be typed without +1.
+    let bound = format!("+1999555{:04}", Uuid::new_v4().as_u128() % 10_000);
     let (exchange, token) = invite(&test, &ana, &bound).await;
     // Ben signed in by email; the invitation was sent to a phone number.
     let ben = test.sign_in(&address(), "Ben").await;
@@ -1466,7 +1467,9 @@ async fn an_invitation_sent_to_an_address_nobody_has_adds_it_and_opens() {
         preview["sent_to"],
         json!({ "kind": "PHONE", "replaces": false })
     );
-    assert!(!preview.to_string().contains(&bound[bound.len() - 4..]));
+    // (Its last digits alone could turn up by chance in an ID or a time.)
+    let text = preview.to_string();
+    assert!(!text.contains(&bound[2..]) && !text.contains("•"), "{text}");
     // Claiming as it is still names someone else.
     app.post(&ben, "/v1/invitations/claim", json!({ "token": token }))
         .await

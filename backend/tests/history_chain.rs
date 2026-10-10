@@ -196,13 +196,12 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
 
     // Deletions: the last event of an exchange removed, and all the events
     // of another. The walk starts from the exchanges, so both show as a gap.
-    let (_, last): (Uuid, i64) = sqlx::query_as(
-        "SELECT id, last_event_seq FROM exchange WHERE id = $1",
-    )
-    .bind(other_exchange)
-    .fetch_one(&app.owner)
-    .await
-    .unwrap();
+    let (_, last): (Uuid, i64) =
+        sqlx::query_as("SELECT id, last_event_seq FROM exchange WHERE id = $1")
+            .bind(other_exchange)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
     with_guards_lifted(
         &app,
         "DELETE FROM exchange_event WHERE exchange_id = $1 AND sequence = $2",

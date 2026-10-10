@@ -154,7 +154,7 @@ impl Texting {
         self.ask(None, typed).await;
         let normalized = Identifier::parse(typed).unwrap().as_str().to_owned();
         let body =
-            json!({ "identifier": typed, "code": self.code(&normalized), "delivery": "TOKEN" });
+            json!({ "identifier": typed, "code": self.code(&normalized), "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION });
         let reply = self
             .app
             .call(None, Method::POST, "/v1/auth/sessions", Some(body), &[])

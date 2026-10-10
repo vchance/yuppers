@@ -557,6 +557,11 @@ async fn attempt(
         .bind(account)
         .execute(&mut *tx)
         .await?;
+    // Its acceptances of the terms: personal rows like the others here.
+    sqlx::query("DELETE FROM terms_acceptance WHERE account_id = $1")
+        .bind(account)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM account_proof WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)
@@ -615,7 +620,8 @@ async fn attempt(
          SET status = 'DELETED',
              email_encrypted = NULL, email_index = NULL,
              phone_encrypted = NULL, phone_index = NULL,
-             display_name = '', language = $2
+             display_name = '', language = $2,
+             terms_version = NULL, terms_accepted_at = NULL
          WHERE id = $1",
     )
     .bind(account)

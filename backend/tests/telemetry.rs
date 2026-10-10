@@ -139,7 +139,7 @@ async fn sign_in(app: &App, codes: &Codes) -> Secrets {
             None,
             Method::POST,
             "/v1/auth/sessions",
-            Some(json!({ "identifier": email, "code": code, "delivery": "TOKEN" })),
+            Some(json!({ "identifier": email, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
             &[],
         )
         .await
@@ -161,7 +161,7 @@ async fn sign_in(app: &App, codes: &Codes) -> Secrets {
             None,
             Method::POST,
             "/v1/auth/sessions",
-            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE" })),
+            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
             &[("origin", "https://app.test")],
         )
         .await;

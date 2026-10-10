@@ -277,6 +277,8 @@
     "adultLabel": "Tengo 18 años o más",
     "adultConfirmed": "Confirmaste que tienes 18 años o más.",
     "adultRequired": "Tienes que tener 18 años o más para usar nuestro servicio.",
+    "detailLabel": "Decir con quién es y qué pasó en los mensajes de texto y las notificaciones del teléfono",
+    "detailHint": "Se ven en la pantalla de bloqueo, donde cualquiera que tenga tu teléfono puede leerlas.",
     "continue": "Continuar",
     "save": "Guardar",
     "saved": "Guardado.",

@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         for notice in Notice::ALL {
             write(
                 notice.as_str(),
-                wording.email(language, notice, DISPLAY_CODE, links),
+                wording.email(language, notice, DISPLAY_CODE, "Sam", links),
             )?;
         }
         index.push_str("</ul>\n");

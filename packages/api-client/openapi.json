@@ -3468,7 +3468,8 @@
           "id",
           "display_name",
           "language",
-          "adult_confirmed"
+          "adult_confirmed",
+          "notification_detail"
         ],
         "properties": {
           "adult_confirmed": {
@@ -3502,6 +3503,10 @@
                 "type": "null"
               }
             ]
+          },
+          "notification_detail": {
+            "type": "boolean",
+            "description": "The holder wants texts and phone notifications to say who a yup is\nwith and what step happened, with its code. Off until they turn it\non; never carries terms, amounts, dates or free text."
           },
           "phone": {
             "type": [
@@ -6977,6 +6982,13 @@
               "null"
             ],
             "description": "A language tag. A regional tag falls back to its base language; an\nunsupported language is refused."
+          },
+          "notification_detail": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Turns the detail of texts and phone notifications on or off."
           }
         }
       },

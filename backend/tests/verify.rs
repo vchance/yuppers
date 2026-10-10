@@ -1299,10 +1299,9 @@ async fn agreement_updates_go_on_through_the_messages_api_beside_verify() {
             wording.opt_in_sms("en"),
             wording.update_sms(
                 "en",
-                &app.view(&deal.ben, &deal.exchange).await["display_code"]
+                app.view(&deal.ben, &deal.exchange).await["display_code"]
                     .as_str()
-                    .unwrap()
-                    .to_owned(),
+                    .unwrap(),
                 &format!("https://app.test/exchanges/{}", deal.exchange)
             ),
         ]

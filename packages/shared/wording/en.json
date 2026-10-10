@@ -277,6 +277,8 @@
     "adultLabel": "I am 18 or over",
     "adultConfirmed": "You have confirmed that you are 18 or over.",
     "adultRequired": "You have to be 18 or over to use our service.",
+    "detailLabel": "Say who it’s with and what happened in texts and phone notifications",
+    "detailHint": "These show on your lock screen, where anyone holding your phone can read them.",
     "continue": "Continue",
     "save": "Save",
     "saved": "Saved.",

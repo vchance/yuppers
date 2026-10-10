@@ -24,6 +24,7 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
     first ? shown : pickLanguage([account.language]),
   )
   const [adult, setAdult] = useState(account.adult_confirmed)
+  const [detail, setDetail] = useState(account.notification_detail)
   const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
@@ -50,6 +51,7 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
         display_name: name.trim(),
         language,
         adult_confirmed: adult ? true : null,
+        notification_detail: detail,
       })
       rememberLanguage(language)
       setAccount(updated)
@@ -119,6 +121,25 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
               {w.adultRequired}
             </p>
           )}
+        </div>
+      )}
+
+      {!first && (
+        <div className="field">
+          <label className="check">
+            <input
+              type="checkbox"
+              role="switch"
+              id="profile-detail"
+              aria-describedby="profile-detail-hint"
+              checked={detail}
+              onChange={(event) => setDetail(event.target.checked)}
+            />
+            <span>{w.detailLabel}</span>
+          </label>
+          <p className="hint" id="profile-detail-hint">
+            {w.detailHint}
+          </p>
         </div>
       )}
 

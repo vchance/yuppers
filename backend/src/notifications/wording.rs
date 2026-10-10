@@ -1193,7 +1193,7 @@ mod tests {
         };
         for language in languages::supported() {
             for notice in Notice::ALL {
-                let html = wording.email(language, notice, hostile, links).html;
+                let html = wording.email(language, notice, hostile, hostile, links).html;
                 assert!(!html.contains("<script"), "{html}");
                 assert!(html.contains(escaped), "{html}");
                 assert!(

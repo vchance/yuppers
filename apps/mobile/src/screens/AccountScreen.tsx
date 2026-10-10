@@ -50,6 +50,11 @@ export function AccountScreen() {
       <BlockedPeople />
       <Actions>
         <Button
+          variant="link"
+          label={wording.sample.help}
+          onPress={() => router.push('/example')}
+        />
+        <Button
           testID="help"
           variant="link"
           label={wording.help.link}

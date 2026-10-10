@@ -24,6 +24,8 @@ import {
   revisionToSend,
   startingDraft,
   statusesOf,
+  swapSides,
+  templateStartedFrom,
   toMinorUnits,
   type Draft,
   type DraftContribution,
@@ -48,6 +50,7 @@ import { HelpLink } from '../components/HelpLink'
 import { InvitationFor } from '../components/InvitationLink'
 import { Panel } from '../components/Panel'
 import { ShowWhenSigning } from '../components/ShowWhenSigning'
+import { StartingPoint, SwapSides } from '../components/StartingPoint'
 import { TermsView } from '../components/TermsView'
 import {
   ErrorNote,
@@ -57,7 +60,7 @@ import {
   Written,
   type ControlProps,
 } from '../components/ui'
-import { useAnnouncement } from '../lib/announce'
+import { announce, useAnnouncement } from '../lib/announce'
 import { showAfterSigning } from '../lib/payments'
 import { api, failureCode, type RevisionSent, type Slot } from '../lib/api'
 
@@ -127,6 +130,10 @@ function Editor({ exchange, reload, onSent }: Props) {
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [added, setAdded] = useState<string | null>(null)
+  // The common agreement this draft was started from, if this session started it
+  // from one, and whether its hint is open: until the first edit.
+  const template = kind === 'first' ? templateStartedFrom(exchange.id) : undefined
+  const [bandOpen, setBandOpen] = useState(true)
   const [discarding, setDiscarding] = useState(false)
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null)
   // Showing payment options on this yup too, once the terms are sent.
@@ -169,6 +176,8 @@ function Editor({ exchange, reload, onSent }: Props) {
     latest.current = next
     setDraft(next)
     saver.changed(next)
+    // The hint above the items folds away at the first edit.
+    setBandOpen(false)
   }
 
   // Leaving the page keeps what was typed in the last moment.
@@ -361,6 +370,13 @@ function Editor({ exchange, reload, onSent }: Props) {
         {title}
       </PageHeading>
       <p>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</p>
+      {template && (
+        <StartingPoint
+          template={template}
+          open={bandOpen}
+          onToggle={() => setBandOpen((open) => !open)}
+        />
+      )}
       {kind === 'amend' && (
         <>
           <p>{w.effectsSteer}</p>
@@ -516,6 +532,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                   <textarea
                     {...control}
                     rows={2}
+                    placeholder={item.example?.description}
                     value={item.description}
                     onChange={(event) => changeItem(item.id, { description: event.target.value })}
                   />
@@ -568,6 +585,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                     {(control) => (
                       <DecimalInput
                         {...control}
+                        placeholder={item.example?.quantity}
                         value={item.quantity}
                         onChange={(quantity) => changeItem(item.id, { quantity })}
                       />
@@ -579,6 +597,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                         {...control}
                         type="text"
                         maxLength={40}
+                        placeholder={item.example?.unit}
                         value={item.unit}
                         onChange={(event) => changeItem(item.id, { unit: event.target.value })}
                       />
@@ -662,6 +681,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                   <textarea
                     {...control}
                     rows={2}
+                    placeholder={item.example?.criteria}
                     value={item.criteria}
                     onChange={(event) => changeItem(item.id, { criteria: event.target.value })}
                   />
@@ -729,6 +749,14 @@ function Editor({ exchange, reload, onSent }: Props) {
             {w.addTheirs}
           </button>
         </div>
+        {kind === 'first' && draft.contributions.length > 0 && (
+          <SwapSides
+            onSwap={() => {
+              edit(swapSides(latest.current))
+              announce(wording.templates.swapped)
+            }}
+          />
+        )}
 
         <Field label={w.noteLabel} hint={w.noteHint} id="note" error={errorFor('note')}>
           {(control) => (
@@ -854,6 +882,8 @@ interface DecimalInputProps extends ControlProps {
   /** A plain decimal, empty for none, `null` when what is typed is not a number. */
   value: string | null
   onChange(value: string | null): void
+  /** Grey text for an empty field: an example, never a value. */
+  placeholder?: string
 }
 
 /**

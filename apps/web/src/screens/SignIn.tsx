@@ -17,6 +17,8 @@ import {
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
+import { Link } from '../app/Link'
+import { paths } from '../app/routes'
 import { ConsentCheckbox } from '../components/ConsentCheckbox'
 import { InAppBrowserNote } from '../components/InAppBrowserNote'
 import { LegalLink } from '../components/LegalLink'
@@ -45,11 +47,14 @@ import { api, failureCode } from '../lib/api'
  * too, for an email from the address the service names, and offers another
  * code only half a minute after the last (`useResendReady`).
  *
+ * Below the form, one line opens the sample yup without signing in, except
+ * on the invitation page, where the person has a real yup to read (`example`).
+ *
  * In another app's built-in browser, which may not keep anyone signed in,
  * both steps start with a note saying so, and how to open the page in the
  * person's own browser instead (`InAppBrowserNote`).
  */
-export function SignIn() {
+export function SignIn({ example = true }: { example?: boolean } = {}) {
   const { wording, fmt, language } = useI18n()
   const { setAccount } = useSession()
   const w = wording.signIn
@@ -217,6 +222,12 @@ export function SignIn() {
           <LegalLink document="privacy" />
           <LegalLink document="terms" />
         </p>
+        {/* A newcomer can see what a yup is before signing in (DESIGN.md §4.3). */}
+        {example && (
+          <p className="learn-more">
+            <Link to={paths.example(language)}>{wording.sample.signInLine}</Link>
+          </p>
+        )}
       </form>
     )
   }

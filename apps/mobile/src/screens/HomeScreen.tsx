@@ -8,7 +8,6 @@ import {
   Actions,
   Button,
   Card,
-  ErrorNote,
   Failure,
   Heading,
   Hint,
@@ -19,12 +18,12 @@ import {
   Written,
 } from '../components/ui';
 import { CombinedNotice } from '../components/CombinedNotice';
+import { ExampleCard } from '../components/ExampleCard';
 import { Mark } from '../components/Mark';
 import { NotificationsOffer } from '../components/Notifications';
 import { StatusChip } from '../components/StatusChip';
 import { useI18n } from '../lib/context';
 import { forgetInvitation } from '../lib/invitation';
-import { deviceTimezone } from '../lib/time-zone';
 import { api } from '../lib/session';
 import { space, TOUCH_TARGET } from '../lib/theme';
 
@@ -45,8 +44,6 @@ export function HomeScreen() {
 
   const [exchanges, setExchanges] = useState<ExchangeSummary[] | null>(null);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [tooMany, setTooMany] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
 
@@ -66,28 +63,14 @@ export function HomeScreen() {
     }, [load]),
   );
 
-  async function start() {
-    setStarting(true);
-    setFailure(null);
-    setTooMany(false);
-    try {
-      const exchange = await api.createExchange(deviceTimezone());
-      router.push(`/exchanges/${exchange.id}`);
-    } catch (error) {
-      const code = failureCode(error);
-      // Here the limit is on exchanges started today, not on codes.
-      if (code === 'TOO_MANY_REQUESTS') setTooMany(true);
-      else setFailure(code);
-    } finally {
-      setStarting(false);
-    }
-  }
+  // Starting is a choice of how to begin (`StartScreen`), then the composer.
+  const start = () => router.push('/new');
 
   const groups = exchanges ? groupExchanges(exchanges) : null;
   const empty = exchanges?.length === 0;
   const actions = (
     <Actions>
-      <Button variant="primary" label={w.start} disabled={starting} onPress={() => void start()} />
+      <Button variant="primary" label={w.start} onPress={start} />
       <Button
         label={wording.mobile.openInvitation.title}
         onPress={() => {
@@ -110,7 +93,6 @@ export function HomeScreen() {
       <CombinedNotice />
       {empty ? null : actions}
       <Failure code={failure} />
-      {tooMany && <ErrorNote>{w.tooManyToday}</ErrorNote>}
       <NotificationsOffer exchanges={exchanges} />
 
       {!exchanges && !failure && <P>{wording.common.loading}</P>}
@@ -118,6 +100,7 @@ export function HomeScreen() {
         <Card style={styles.empty}>
           <Mark width={96} />
           <P style={styles.emptyText}>{w.empty}</P>
+          <ExampleCard />
           <View style={styles.emptyActions}>{actions}</View>
         </Card>
       ) : null}
@@ -168,6 +151,12 @@ export function InvitedEntry() {
             forgetInvitation();
             router.push('/invitation');
           }}
+        />
+        {/* A newcomer can see what a yup is before signing in (DESIGN.md §4.3). */}
+        <Button
+          variant="link"
+          label={wording.sample.signInLine}
+          onPress={() => router.push('/example')}
         />
       </Actions>
     </Card>

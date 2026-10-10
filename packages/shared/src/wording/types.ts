@@ -1091,7 +1091,6 @@ export interface Wording {
     startOwn: string
     signInToStart: string
     help: string
-    inShort: string
     termsHeading: string
     historyHeading: string
     /** Uses `{name}`. */

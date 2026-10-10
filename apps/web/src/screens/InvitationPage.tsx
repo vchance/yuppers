@@ -81,7 +81,7 @@ function Invitation({ token }: { token: string | null }) {
         <p>{w.signInToRead}</p>
         <section aria-labelledby="invitation-sign-in">
           <h2 id="invitation-sign-in">{wording.signIn.title}</h2>
-          <SignIn />
+          <SignIn example={false} />
         </section>
       </>
     )

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { useI18n, useSession } from '../app/context'
+import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { Appearance } from '../components/Appearance'
@@ -19,7 +20,7 @@ import { ProfileForm } from './ProfileForm'
  * payment options, this device's appearance, and signing out.
  */
 export default function AccountPage() {
-  const { wording } = useI18n()
+  const { wording, language } = useI18n()
   const { account, setAccount } = useSession()
   const w = wording.profile
   const [leaving, setLeaving] = useState(false)
@@ -45,6 +46,9 @@ export default function AccountPage() {
       <ProfileForm account={account} first={false} />
       <PaymentOptionsRow />
       <Appearance />
+      <p>
+        <Link to={paths.example(language)}>{wording.sample.help}</Link>
+      </p>
       <BlockedPeople />
       <hr />
       <div className="actions">

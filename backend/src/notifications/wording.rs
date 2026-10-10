@@ -1176,7 +1176,8 @@ mod tests {
                 .email("en", Notice::DeliveryClaimed, CODE, "Sam", LINKS)
                 .body,
             format!(
-                "The other party has marked one of their contributions as delivered. \
+                "About your yup with Sam ({CODE}).\n\n\
+                 The other party has marked one of their contributions as delivered. \
                  Review it, then confirm it or dispute it.\n\n\
                  Open the yup: {LINK}\n\n\
                  You’re getting this email because you’re part of yup {CODE} on Yuppers. \
@@ -1238,7 +1239,10 @@ mod tests {
         )
         .unwrap();
         let email = wording.email("en", Notice::EndProposed, CODE, "Sam", LINKS);
-        assert_eq!(email.body, format!("Text.\n\nGo to {LINK} now."));
+        assert_eq!(
+            email.body,
+            format!("About Sam ({CODE}).\n\nText.\n\nGo to {LINK} now.")
+        );
         assert!(
             email.html.contains("Go to <a class=\"y-link\""),
             "{}",
@@ -1250,6 +1254,7 @@ mod tests {
                 .contains("display:inline-block;padding:12px 24px")
         );
     }
+
     /// The longest link an update has: the live origin and a random ID.
     const LONGEST_LINK: &str = "https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e";
 

@@ -398,11 +398,12 @@ async fn signing_in_without_a_terms_version_completes_and_records_nothing() {
         .unwrap()
         .parse::<uuid::Uuid>()
         .unwrap();
-    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM terms_acceptance WHERE account_id = $1")
-        .bind(id)
-        .fetch_one(&app.owner)
-        .await
-        .unwrap();
+    let rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM terms_acceptance WHERE account_id = $1")
+            .bind(id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
     assert_eq!(rows, 0);
 
     app.finish(&[&email]).await;

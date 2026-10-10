@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@yuppers/shared';
 import * as SecureStore from 'expo-secure-store';
 
 import { tokenStore } from '../token-store';
@@ -90,6 +91,7 @@ test('signing in asks for a token, and the token kept goes out as a bearer token
     code: '123456',
     delivery: 'TOKEN',
     language: 'es',
+    terms_version: TERMS_VERSION,
   });
 
   await keepSession(created.token ?? '');

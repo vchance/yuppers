@@ -226,7 +226,9 @@
     "identifierHintUs": "US phone numbers only, such as (555) 123-4567.",
     "emailOnly": "Sign in with your email address. We can’t send codes to phone numbers at the moment.",
     "invalidEmail": "Enter a valid email address.",
-    "changeEmail": "Use a different email address"
+    "changeEmail": "Use a different email address",
+    "agreement": "By continuing you agree to the {terms} and the {privacy}.",
+    "agreementPendingReview": "The wording of the agreement sentence is pending legal review."
   },
   "inAppBrowser": {
     "noteIos": "You’re in {app}’s browser, which may not keep you signed in. Open this page in Safari to stay signed in.",
@@ -1352,6 +1354,7 @@
     "REPORT_RESOLVED": "This report has already been resolved.",
     "SUBJECT_IS_REVIEWER": "The person reported is a reviewer. Only the owner can suspend a reviewer, or lift a reviewer’s suspension, after taking their reviewer role away.",
     "PHONE_OPTED_OUT": "This number replied STOP to our texts, so we can’t text it a code. Sign in with your email address instead, or reply START to one of our texts to get them again.",
+    "TERMS_VERSION_UNKNOWN": "The Terms or the Privacy policy changed while this page was open. Reload the page to read them, then sign in again.",
     "SMS_CONSENT_REQUIRED": "To get a code by text, tick the box beside the number. If there is no box, reload the page or update the app."
   },
   "a11y": {

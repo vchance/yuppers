@@ -339,11 +339,18 @@ async fn signing_in_records_the_terms_accepted_and_says_so_on_the_account() {
     let token = reply.body["token"].as_str().unwrap();
     let me = app.get_as(token, "/v1/me").await;
     assert_eq!(me.body["terms_version"], version);
-    assert_eq!(me.body["terms_accepted_at"], reply.body["account"]["terms_accepted_at"]);
+    assert_eq!(
+        me.body["terms_accepted_at"],
+        reply.body["account"]["terms_accepted_at"]
+    );
 
     let rows = |app: &App| {
         let owner = app.owner.clone();
-        let id = reply.body["account"]["id"].as_str().unwrap().parse::<uuid::Uuid>().unwrap();
+        let id = reply.body["account"]["id"]
+            .as_str()
+            .unwrap()
+            .parse::<uuid::Uuid>()
+            .unwrap();
         async move {
             sqlx::query_as::<_, (String, String, Option<uuid::Uuid>)>(
                 "SELECT terms_version, language, session_id FROM terms_acceptance

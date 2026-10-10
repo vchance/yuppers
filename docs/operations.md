@@ -80,6 +80,10 @@ With `SMS_CODE_DELIVERY` off (and `CODE_DELIVERY=resend` or `smtp`), a code for 
 
 `PUSH_DELIVERY=log` on both is for development: the worker writes each notification to its log. Turning push off again closes whatever is queued for push unsent, and the apps stop offering it; the devices stay registered, harmlessly, until their sessions end.
 
+## The terms version
+
+Signing in is the assent to the Terms and the Privacy policy: the sentence above the sign-in button names them, and the request that completes the sign-in carries the version shown (`terms_version`). The service refuses a version it does not know (`TERMS_VERSION_UNKNOWN`) and stores the one accepted, with the time, in `terms_acceptance` and on the account (`GET /v1/me`). The version is the documents' effective date. To publish new terms or a new policy, change `TERMS_VERSION` in `backend/src/terms.rs` and in `packages/shared/src/terms.ts` together with `LEGAL_EFFECTIVE_DATES` in `packages/shared/src/legal-text.ts`; a test fails if they differ. Pages loaded before the deploy are asked to reload on their next sign-in. Nothing is backfilled: an account gets its first row at its next sign-in, and nothing yet asks an account that stays signed in to accept a newer version.
+
 ## Health checks
 
 | Path | Answers | Use it for |

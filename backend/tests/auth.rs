@@ -247,7 +247,7 @@ impl App {
     async fn create_session(&self, identifier: &str, code: &str) -> Reply {
         self.post(
             "/v1/auth/sessions",
-            json!({ "identifier": identifier, "code": code, "delivery": "TOKEN" }),
+            json!({ "identifier": identifier, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION }),
         )
         .await
     }
@@ -269,6 +269,8 @@ impl App {
         for identifier in identifiers {
             for statement in [
                 "DELETE FROM account_session WHERE account_id IN
+                    (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
+                "DELETE FROM terms_acceptance WHERE account_id IN
                     (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
                 "DELETE FROM sms_code_consent WHERE account_id IN
                     (SELECT id FROM account WHERE email_index = $1 OR phone_index = $1)",
@@ -311,6 +313,128 @@ async fn signing_in_creates_an_account_and_a_working_session() {
     let me = app.get_as(token, "/v1/me").await;
     assert_eq!(me.status, StatusCode::OK);
     assert_eq!(me.body["id"], account["id"]);
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn signing_in_records_the_terms_accepted_and_says_so_on_the_account() {
+    let app = App::start().await;
+    let email = email();
+
+    let code = app.request_code(&email).await;
+    let reply = app
+        .post(
+            "/v1/auth/sessions",
+            json!({
+                "identifier": email, "code": code, "delivery": "TOKEN",
+                "terms_version": yuppers_backend::terms::TERMS_VERSION, "language": "es-MX",
+            }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+    let version = yuppers_backend::terms::TERMS_VERSION;
+    assert_eq!(reply.body["account"]["terms_version"], version);
+    assert!(reply.body["account"]["terms_accepted_at"].is_string());
+    let token = reply.body["token"].as_str().unwrap();
+    let me = app.get_as(token, "/v1/me").await;
+    assert_eq!(me.body["terms_version"], version);
+    assert_eq!(
+        me.body["terms_accepted_at"],
+        reply.body["account"]["terms_accepted_at"]
+    );
+
+    let rows = |app: &App| {
+        let owner = app.owner.clone();
+        let id = reply.body["account"]["id"]
+            .as_str()
+            .unwrap()
+            .parse::<uuid::Uuid>()
+            .unwrap();
+        async move {
+            sqlx::query_as::<_, (String, String, Option<uuid::Uuid>)>(
+                "SELECT terms_version, language, session_id FROM terms_acceptance
+                 WHERE account_id = $1 ORDER BY id",
+            )
+            .bind(id)
+            .fetch_all(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let first = rows(&app).await;
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].0, version);
+    assert_eq!(first[0].1, "es");
+    assert!(first[0].2.is_some());
+
+    // Each sign-in adds a row; none is changed.
+    let (_, _) = app.sign_in(&email).await;
+    let second = rows(&app).await;
+    assert_eq!(second.len(), 2);
+    assert_eq!(second[0], first[0]);
+    assert_eq!(second[1].1, "es");
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn signing_in_without_a_terms_version_completes_and_records_nothing() {
+    let app = App::start().await;
+    let email = email();
+
+    // As a build from before the field existed sends it.
+    let code = app.request_code(&email).await;
+    let reply = app
+        .post(
+            "/v1/auth/sessions",
+            json!({ "identifier": email, "code": code, "delivery": "TOKEN" }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+    assert_eq!(reply.body["account"]["terms_version"], Value::Null);
+    let id = reply.body["account"]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<uuid::Uuid>()
+        .unwrap();
+    let rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM terms_acceptance WHERE account_id = $1")
+            .bind(id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(rows, 0);
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn a_terms_version_the_service_does_not_know_signs_nobody_in() {
+    let app = App::start().await;
+    let email = email();
+    let code = app.request_code(&email).await;
+
+    for version in [json!("2020-01-01"), json!("")] {
+        let reply = app
+            .post(
+                "/v1/auth/sessions",
+                json!({ "identifier": email, "code": code, "delivery": "TOKEN", "terms_version": version }),
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(reply.body["code"], "TERMS_VERSION_UNKNOWN");
+    }
+
+    // Nothing was made, and the code was not used up.
+    let accounts: i64 = sqlx::query_scalar("SELECT count(*) FROM account WHERE email_index = $1")
+        .bind(common::index(&email))
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(accounts, 0);
+    let reply = app.create_session(&email, &code).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
 
     app.finish(&[&email]).await;
 }
@@ -1133,7 +1257,7 @@ async fn a_renewed_web_session_sends_its_cookie_again_to_match() {
         .send(
             Method::POST,
             "/v1/auth/sessions",
-            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE" })),
+            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
             &[(ORIGIN, WEB_ORIGIN)],
         )
         .await;
@@ -1195,7 +1319,7 @@ async fn a_web_session_is_a_cookie_scripts_cannot_read() {
     let app = App::start().await;
     let email = email();
     let code = app.request_code(&email).await;
-    let body = json!({ "identifier": email, "code": code, "delivery": "COOKIE" });
+    let body = json!({ "identifier": email, "code": code, "delivery": "COOKIE", "terms_version": yuppers_backend::terms::TERMS_VERSION });
 
     // Not from our web app: refused before the code is even looked at.
     let foreign = app

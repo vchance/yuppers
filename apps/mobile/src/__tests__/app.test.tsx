@@ -1,7 +1,7 @@
-import { SMS_CODE_CONSENT_VERSION, wordingFor } from '@yuppers/shared';
+import { SMS_CODE_CONSENT_VERSION, TERMS_VERSION, wordingFor } from '@yuppers/shared';
 import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 import { redirectSystemPath } from '../app/+native-intent';
 import { forgetInvitation, heldInvitation } from '../lib/invitation';
@@ -124,6 +124,18 @@ test('signing in keeps the token in secure storage and nowhere else, then asks f
     body: { identifier: 'ana@example.test' },
   });
 
+  // Above the button that signs in, one sentence: continuing is the assent
+  // to the Terms and the Privacy policy, each a link to its page. No box.
+  expect(screen.getByTestId('terms-assent')).toBeTruthy();
+  expect(screen.getByText(w.termsOfUse.link)).toBeTruthy();
+  expect(screen.getByText(w.privacy.policy)).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  const opened = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+  await fireEvent.press(screen.getByTestId('terms-assent-terms'));
+  expect(opened).toHaveBeenLastCalledWith(expect.stringMatching(/\/terms$/));
+  await fireEvent.press(screen.getByTestId('terms-assent-privacy'));
+  expect(opened).toHaveBeenLastCalledWith(expect.stringMatching(/\/privacy$/));
+
   await fireEvent.changeText(screen.getByLabelText(w.signIn.codeLabel), '123456');
   await fireEvent.press(screen.getByRole('button', { name: w.signIn.submit }));
 
@@ -134,6 +146,7 @@ test('signing in keeps the token in secure storage and nowhere else, then asks f
     code: '123456',
     delivery: 'TOKEN',
     language: 'en',
+    terms_version: TERMS_VERSION,
   });
   expect(mockKeychain.get('yuppers.session')).toBe(TOKEN);
 

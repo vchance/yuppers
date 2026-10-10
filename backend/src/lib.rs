@@ -31,4 +31,5 @@ pub mod safety;
 pub mod shutdown;
 pub mod sweep;
 pub mod telemetry;
+pub mod terms;
 pub mod wallet;

@@ -350,7 +350,8 @@ describe('agreeing to the Terms and the Privacy policy', () => {
       await until(() => hasLabel(w.codeLabel), 'the code field')
 
       const sentence = document.querySelector('.terms-assent')!
-      expect(sentence.textContent).toContain(
+      // Each link also says, to screen readers only, that it opens a new tab.
+      expect(sentence.textContent!.replaceAll(` ${wording.help.newTab}`, '')).toBe(
         w.agreement
           .replace('{terms}', wording.termsOfUse.link)
           .replace('{privacy}', wording.privacy.policy),

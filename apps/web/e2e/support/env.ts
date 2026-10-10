@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -12,6 +12,12 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 export const repoRoot = resolve(here, '../../../..')
 export const webRoot = resolve(repoRoot, 'apps/web')
+
+/** The version of the Terms and the Privacy policy the service knows, which a sign-in names (`backend/src/terms.rs`). */
+export function termsVersion(): string {
+  const source = readFileSync(resolve(repoRoot, 'backend/src/terms.rs'), 'utf8')
+  return /TERMS_VERSION: &str = "([^"]+)"/.exec(source)![1]
+}
 
 /** The API the tests drive. It serves the built web app too, so the browser talks to one origin. */
 export const port = Number(process.env.E2E_PORT ?? 8090)

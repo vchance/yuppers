@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test'
-import { TERMS_VERSION, type Wording } from '@yuppers/shared'
+import type { Wording } from '@yuppers/shared'
 
 import {
   SAMPLE_PHONE,
@@ -13,7 +13,7 @@ import {
   type Screen,
 } from '../../build/sms-opt-in'
 import { codeFrom } from '../support/codes'
-import { webRoot } from '../support/env'
+import { termsVersion, webRoot } from '../support/env'
 import { en, es, fill } from '../support/wording'
 import { apiPort, screenshotsLog, webOrigin } from './playwright.config'
 
@@ -113,7 +113,7 @@ async function proposal(
     screenshotsLog,
   )
   const session = await request.post(`${API}/v1/auth/sessions`, {
-    data: { identifier: email, code, delivery: 'TOKEN', language: 'en', terms_version: TERMS_VERSION },
+    data: { identifier: email, code, delivery: 'TOKEN', language: 'en', terms_version: termsVersion() },
   })
   const { token } = (await session.json()) as { token: string }
   const headers = { Authorization: `Bearer ${token}` }

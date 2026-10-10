@@ -1691,8 +1691,32 @@ async fn deleting_removes_the_terms_acceptances_and_what_the_account_kept_of_the
         .await
         .unwrap();
     }
+    // An account combined into Ana's: its rows go with hers.
+    let cy = app.user("Cy").await;
+    for _ in 0..2 {
+        sqlx::query(
+            "INSERT INTO terms_acceptance (account_id, terms_version, language)
+             VALUES ($1, '2026-10-09', 'en')",
+        )
+        .bind(cy.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "UPDATE account SET terms_version = '2026-10-09', terms_accepted_at = now(),
+                status = 'MERGED', merged_into = $2, merged_at = now(), email_encrypted = NULL,
+                email_index = NULL, phone_encrypted = NULL, phone_index = NULL
+         WHERE id = $1",
+    )
+    .bind(cy.id)
+    .bind(ana.id)
+    .execute(&app.owner)
+    .await
+    .unwrap();
     let rows = "SELECT count(*) FROM terms_acceptance WHERE account_id = $1";
     assert_eq!(count(app, rows, ana.id).await, 2);
+    assert_eq!(count(app, rows, cy.id).await, 2);
 
     let code = test.deletion_code(&ana, "EMAIL", &ana.email).await;
     done(&test.delete_with(&ana, "EMAIL", &code).await);
@@ -1700,6 +1724,8 @@ async fn deleting_removes_the_terms_acceptances_and_what_the_account_kept_of_the
     assert_eq!(count(app, rows, ana.id).await, 0);
     let kept = "SELECT count(*) FROM account WHERE id = $1 AND terms_version IS NOT NULL";
     assert_eq!(count(app, kept, ana.id).await, 0);
+    assert_eq!(count(app, rows, cy.id).await, 0);
+    assert_eq!(count(app, kept, cy.id).await, 0);
     // Only hers.
     assert_eq!(count(app, rows, ben.id).await, 2);
     assert_eq!(count(app, kept, ben.id).await, 1);

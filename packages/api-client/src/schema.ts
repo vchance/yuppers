@@ -1408,9 +1408,10 @@ export interface components {
             /**
              * @description The version of the Terms and the Privacy policy the client showed
              *     above the button (`TERMS_VERSION`); signing in is the assent to both.
-             *     A version the service does not know is refused.
+             *     A version the service does not know is refused. Absent from builds
+             *     that predate it: the sign-in completes and nothing is recorded.
              */
-            terms_version: string;
+            terms_version?: string | null;
         };
         DeleteAccount: {
             /** @description Where the code was sent. */

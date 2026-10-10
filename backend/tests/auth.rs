@@ -379,6 +379,36 @@ async fn signing_in_records_the_terms_accepted_and_says_so_on_the_account() {
 }
 
 #[tokio::test]
+async fn signing_in_without_a_terms_version_completes_and_records_nothing() {
+    let app = App::start().await;
+    let email = email();
+
+    // As a build from before the field existed sends it.
+    let code = app.request_code(&email).await;
+    let reply = app
+        .post(
+            "/v1/auth/sessions",
+            json!({ "identifier": email, "code": code, "delivery": "TOKEN" }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.body);
+    assert_eq!(reply.body["account"]["terms_version"], Value::Null);
+    let id = reply.body["account"]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<uuid::Uuid>()
+        .unwrap();
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM terms_acceptance WHERE account_id = $1")
+        .bind(id)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0);
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
 async fn a_terms_version_the_service_does_not_know_signs_nobody_in() {
     let app = App::start().await;
     let email = email();
@@ -394,15 +424,6 @@ async fn a_terms_version_the_service_does_not_know_signs_nobody_in() {
         assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(reply.body["code"], "TERMS_VERSION_UNKNOWN");
     }
-    // Without one the request is malformed.
-    let reply = app
-        .post(
-            "/v1/auth/sessions",
-            json!({ "identifier": email, "code": code, "delivery": "TOKEN" }),
-        )
-        .await;
-    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(reply.body["code"], "INVALID_REQUEST");
 
     // Nothing was made, and the code was not used up.
     let accounts: i64 = sqlx::query_scalar("SELECT count(*) FROM account WHERE email_index = $1")

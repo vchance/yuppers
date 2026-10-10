@@ -129,8 +129,9 @@ pub struct CreateSession {
     pub language: Option<String>,
     /// The version of the Terms and the Privacy policy the client showed
     /// above the button (`TERMS_VERSION`); signing in is the assent to both.
-    /// A version the service does not know is refused.
-    pub terms_version: String,
+    /// A version the service does not know is refused. Absent from builds
+    /// that predate it: the sign-in completes and nothing is recorded.
+    pub terms_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -170,7 +171,9 @@ pub async fn create_session(
     let identifier = Identifier::parse(&body.identifier)?;
     // Before the code is looked at: a page that shows old wording gets no
     // sign-in, and its code is still good once it is reloaded.
-    terms::check(&body.terms_version)?;
+    if let Some(version) = body.terms_version.as_deref() {
+        terms::check(version)?;
+    }
     auth::verify_code(
         &state.db,
         &settings.app_secret,
@@ -247,7 +250,9 @@ pub async fn create_session(
             languages::resolve(&own).unwrap_or(languages::default())
         }
     };
-    terms::record(&mut tx, account_id, shown, Some(session_id)).await?;
+    if body.terms_version.is_some() {
+        terms::record(&mut tx, account_id, shown, Some(session_id)).await?;
+    }
 
     let account = account::load(&mut *tx, account_id).await?;
     tx.commit().await?;

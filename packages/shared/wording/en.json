@@ -1097,7 +1097,7 @@
   },
   "smsUpdates": {
     "heading": "Text updates",
-    "intro": "Get a text message each time this agreement’s status changes. The texts say only that something changed, with a link to see it.",
+    "intro": "Get a text message each time this agreement’s status changes. Unless you turn on detail on your account page, the texts say only that something changed, with a link to see it.",
     "addPhoneIntro": "First add your US mobile number to your account. We’ll text it a one-time code to check it’s yours.",
     "phoneLabel": "Mobile number",
     "phoneHint": "A US number, such as (555) 123-4567.",

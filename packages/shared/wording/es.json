@@ -1097,7 +1097,7 @@
   },
   "smsUpdates": {
     "heading": "Actualizaciones por mensaje",
-    "intro": "Recibe un mensaje de texto cada vez que cambie el estado de este acuerdo. Los mensajes solo dicen que algo cambió, con un enlace para verlo.",
+    "intro": "Recibe un mensaje de texto cada vez que cambie el estado de este acuerdo. A menos que actives el detalle en la página de tu cuenta, los mensajes solo dicen que algo cambió, con un enlace para verlo.",
     "addPhoneIntro": "Primero agrega a tu cuenta tu número de celular de EE. UU. Le enviaremos un código de un solo uso para comprobar que es tuyo.",
     "phoneLabel": "Número de celular",
     "phoneHint": "Un número de EE. UU., como (555) 123-4567.",

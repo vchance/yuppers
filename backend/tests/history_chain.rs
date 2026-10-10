@@ -113,7 +113,8 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
     app.command(
         &deal.ana,
         &deal.exchange,
-        json!({ "type": "ADD_STATEMENT", "note": "A word for the record." }),
+        json!({ "type": "CONTRIBUTION", "contribution": deal.repair, "action": "CLAIM",
+                "note": "Rehung the gate." }),
     )
     .await
     .ok();

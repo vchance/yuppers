@@ -9,6 +9,7 @@ use time::{Date, OffsetDateTime};
 use tracing::Instrument;
 use uuid::Uuid;
 
+use crate::chain;
 use crate::domain::amendment::Statuses;
 use crate::domain::contribution::{Action, Status};
 use crate::domain::exchange::{
@@ -711,30 +712,51 @@ async fn persist_in(
     let in_force = before.in_force.as_ref().map(|record| record.id);
 
     let mut sequence = before.last_event_seq;
+    // What the next event chains from (`crate::chain`): the last row's hash,
+    // read in this transaction. None while the history still has rows from
+    // before the chain, which then go on without one until the owner's
+    // backfill.
+    let mut previous = chain::head(&mut *conn, before.id, sequence).await?;
     // Which event gave each contribution its status.
     let mut caused_by: BTreeMap<ContributionId, i64> = BTreeMap::new();
 
     for (index, event) in decision.events.iter().enumerate() {
         sequence += 1;
         let (kind, revision, contribution, data) = event_row(event, before.accounts[1]);
+        let fields = chain::EventFields {
+            exchange_id: before.id,
+            sequence,
+            kind: kind.to_owned(),
+            actor_kind: actor_kind.to_owned(),
+            actor_slot: actor_slot.map(str::to_owned),
+            contribution_id: contribution,
+            revision_id: revision.or(contribution.and(in_force)),
+            note: note.filter(|_| index == 0).map(str::to_owned),
+            evidence_attachment_id: None,
+            data,
+            occurred_at: chain::to_micros(now),
+        };
+        let hash = previous.map(|previous| chain::link(&previous, &fields));
         sqlx::query(
             "INSERT INTO exchange_event
                 (exchange_id, sequence, type, actor_kind, actor_slot, contribution_id, revision_id,
-                 note, data, occurred_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                 note, data, occurred_at, chain_hash)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
-        .bind(before.id)
-        .bind(sequence)
-        .bind(kind)
-        .bind(actor_kind)
-        .bind(actor_slot)
-        .bind(contribution)
-        .bind(revision.or(contribution.and(in_force)))
-        .bind(note.filter(|_| index == 0))
-        .bind(data)
-        .bind(now)
+        .bind(fields.exchange_id)
+        .bind(fields.sequence)
+        .bind(&fields.kind)
+        .bind(&fields.actor_kind)
+        .bind(&fields.actor_slot)
+        .bind(fields.contribution_id)
+        .bind(fields.revision_id)
+        .bind(&fields.note)
+        .bind(&fields.data)
+        .bind(fields.occurred_at)
+        .bind(hash.as_ref().map(|hash| hash.as_slice()))
         .execute(&mut *conn)
         .await?;
+        previous = hash;
 
         match event {
             Event::ContributionChanged { contribution, .. } => {

@@ -237,6 +237,15 @@ Combining two accounts and removing an email address or phone number (`backend/s
 
 `invitation.shared_at`: when the initiator last opened a way to pass the link on (the share sheet, a text message, an email, WhatsApp, a copy, its QR code), as the apps report it through `POST /v1/exchanges/{id}/invitation/shared`. Yuppers never sends an invitation itself (`DESIGN.md` §8), so this is the one thing the service can know about whether the link went anywhere: that the sender opened a way to send it, not that it arrived. The apps make sending the link a step of its own after signing, and remind the initiator on the exchange's page and in the list while nobody has joined and this is null or old. The application role's grants on `invitation` already cover the column. `backend/tests/exchanges.rs` records a share and reads it back on the view and in the list.
 
+## 0033_acceptance_attribution
+
+Who a signature is attributed to, and a hash chain over each exchange's history (`backend/src/chain.rs`; `docs/operations.md`, "Signature attribution and the history chain"). Additive: nothing existing changes, including the content hash and what is signed.
+
+- **`account_session.identifier_hash`, `identifier_kind`**: the blind index and kind (`email`, `phone`) of the identifier the session's code proved, set when the session is made. Null on sessions from before; both or neither.
+- **`acceptance.signer_identifier_hash`, `signer_identifier_kind`, `session_verified_at`, `session_id`**: copied from the session when the signature is made. Null on signatures from before. `session_id` is not a foreign key: sessions are swept, signatures are permanent.
+- **`exchange_event.chain_hash`**: SHA-256 over the previous row's hash and the row's fields. Nullable, with a partial index on the rows still without one; filled for history from before by `staff backfill-chain`, never by the migration.
+- **The append-only trigger on `exchange_event`** now has one exception: an `UPDATE` that sets `chain_hash` from null and changes nothing else, in a transaction that says `yuppers.chain_backfill = on` (the backfill). `exchange_event_append_only` keeps its name and still refuses every other update, every delete and truncate; `exchange_event_chain_only` is the row-level check on the exception. The application role has no `UPDATE` on the table.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

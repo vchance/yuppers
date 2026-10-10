@@ -1986,6 +1986,13 @@ export interface components {
             /** @description RFC 3339, UTC. */
             generated_at: string;
             /**
+             * @description That the history is chained, and the fingerprint of its last entry,
+             *     in the document's language: a printed copy anchors the history with
+             *     it (`crate::chain`). Left out while the history has entries from
+             *     before the chain that have not been chained yet.
+             */
+            history_chain?: string | null;
+            /**
              * @description The language `notices` and the descriptions are written in. What the
              *     parties wrote is never translated.
              */
@@ -2531,6 +2538,12 @@ export interface components {
          *     they are. It is all the evidence there is.
          */
         Verification: {
+            /**
+             * @description The kind of identifier the signer had signed in with, and how long
+             *     before signing, in the document's language. Never the address or
+             *     number. Left out for a signature made before this was kept.
+             */
+            attribution?: string | null;
             /** @description The same, in words, in the document's language. */
             description: string;
             method: components["schemas"]["VerificationMethod"];

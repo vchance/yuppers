@@ -1237,7 +1237,20 @@
         "EMAIL_OTP": "A single one-time code sent to an email address. Nothing else about the signer was checked.",
         "PHONE_OTP": "A single one-time code sent by text message to a phone number. Nothing else about the signer was checked."
       },
-      "hidden": "Hidden by review"
+      "hidden": "Hidden by review",
+      "attribution": {
+        "email": "The signer had signed in with an email address no more than {span} before signing.",
+        "phone": "The signer had signed in with a phone number no more than {span} before signing."
+      },
+      "span": {
+        "minuteOne": "1 minute",
+        "minuteOther": "{count} minutes",
+        "hourOne": "1 hour",
+        "hourOther": "{count} hours",
+        "dayOne": "1 day",
+        "dayOther": "{count} days"
+      },
+      "chain": "The history of this record is chained: the fingerprint of each entry is computed from the entry before it, so changing an earlier entry would change every later one. The fingerprint of entry {sequence}, the last when this copy was made, is {hash}."
     },
     "summary": {
       "heading": "In short",

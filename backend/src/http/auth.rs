@@ -217,13 +217,19 @@ pub async fn create_session(
     let token = auth::generate_token();
     sqlx::query(
         "INSERT INTO account_session
-            (account_id, token_hash, auth_method, authenticated_at, expires_at)
-         VALUES ($1, $2, $3, now(), now() + $4 * interval '1 second')",
+            (account_id, token_hash, auth_method, authenticated_at, expires_at,
+             identifier_hash, identifier_kind)
+         VALUES ($1, $2, $3, now(), now() + $4 * interval '1 second', $5, $6)",
     )
     .bind(account_id)
     .bind(auth::token_hash(&token).as_slice())
     .bind(method)
     .bind(settings.auth.session_initial().whole_seconds() as f64)
+    // Which identifier the code proved, as its blind index and kind, so a
+    // signature can say how its signer signed in (migration 0033). Never
+    // the address or number.
+    .bind(sealed.index.as_slice())
+    .bind(Kind::of(&identifier).as_str())
     .execute(&mut *tx)
     .await?;
 

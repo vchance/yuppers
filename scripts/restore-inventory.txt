@@ -166,6 +166,7 @@
 0019 trigger deletion_log deletion_log_account_deleted O
 0006 trigger exchange exchange_in_force_signed O
 0001 trigger exchange_event exchange_event_append_only O
+0033 trigger exchange_event exchange_event_chain_only O
 0006 trigger participant participant_holding O
 0014 trigger report report_never_removed O
 0014 trigger report report_resolved_once O

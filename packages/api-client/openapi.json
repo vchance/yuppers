@@ -5548,6 +5548,13 @@
             "type": "string",
             "description": "RFC 3339, UTC."
           },
+          "history_chain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That the history is chained, and the fingerprint of its last entry,\nin the document's language: a printed copy anchors the history with\nit (`crate::chain`). Left out while the history has entries from\nbefore the chain that have not been chained yet."
+          },
           "language": {
             "type": "string",
             "description": "The language `notices` and the descriptions are written in. What the\nparties wrote is never translated."
@@ -6989,6 +6996,13 @@
           "description"
         ],
         "properties": {
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The kind of identifier the signer had signed in with, and how long\nbefore signing, in the document's language. Never the address or\nnumber. Left out for a signature made before this was kept."
+          },
           "description": {
             "type": "string",
             "description": "The same, in words, in the document's language."

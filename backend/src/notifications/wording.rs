@@ -769,7 +769,13 @@ mod tests {
     #[test]
     fn a_language_without_wording_falls_back_to_the_default() {
         let wording = Wording::embedded().unwrap();
-        let default = wording.email(languages::default(), Notice::DisputeOpened, CODE, "Sam", LINKS);
+        let default = wording.email(
+            languages::default(),
+            Notice::DisputeOpened,
+            CODE,
+            "Sam",
+            LINKS,
+        );
         assert_eq!(
             wording.email("tlh", Notice::DisputeOpened, CODE, "Sam", LINKS),
             default
@@ -825,7 +831,12 @@ mod tests {
         let notices: serde_json::Map<String, serde_json::Value> = Notice::ALL
             .iter()
             .filter(|notice| notice.texted_as_update())
-            .map(|notice| (notice.as_str().to_owned(), format!("{{name}} {}", notice.as_str()).into()))
+            .map(|notice| {
+                (
+                    notice.as_str().to_owned(),
+                    format!("{{name}} {}", notice.as_str()).into(),
+                )
+            })
             .collect();
         let code = |what: &str| serde_json::json!({ "subject": format!("{product} {what} {{code}}"), "body": "{code}" });
         serde_json::json!({
@@ -1193,7 +1204,9 @@ mod tests {
         };
         for language in languages::supported() {
             for notice in Notice::ALL {
-                let html = wording.email(language, notice, hostile, hostile, links).html;
+                let html = wording
+                    .email(language, notice, hostile, hostile, links)
+                    .html;
                 assert!(!html.contains("<script"), "{html}");
                 assert!(html.contains(escaped), "{html}");
                 assert!(
@@ -1261,7 +1274,11 @@ mod tests {
             spanish.subject,
             format!("Hay nuevos términos para revisar: tu yup con Sam ({CODE})")
         );
-        assert!(spanish.body.starts_with(&format!("Sobre tu yup con Sam ({CODE}).")));
+        assert!(
+            spanish
+                .body
+                .starts_with(&format!("Sobre tu yup con Sam ({CODE})."))
+        );
 
         // With no name, the code alone, as before.
         let unnamed = wording.email("en", Notice::RevisionSent, CODE, "  ", LINKS);
@@ -1269,7 +1286,11 @@ mod tests {
             unnamed.subject,
             format!("New terms to review: your yup ({CODE})")
         );
-        assert!(unnamed.body.starts_with(&format!("About your yup ({CODE}).")));
+        assert!(
+            unnamed
+                .body
+                .starts_with(&format!("About your yup ({CODE})."))
+        );
         // The footer stays.
         assert!(named.body.contains("These emails never include the terms"));
     }
@@ -1301,7 +1322,11 @@ mod tests {
         assert_eq!(sms_name("Sam \u{1f600}[x]"), "Sam x");
         assert_eq!(sms_name("\u{1f600}"), "");
         assert_eq!(sms_name(""), "");
-        for name in ["Wolfgang Amadeus", "\u{d1}and\u{fa} \u{c1}lvarez", "\u{4f50}\u{85}"] {
+        for name in [
+            "Wolfgang Amadeus",
+            "\u{d1}and\u{fa} \u{c1}lvarez",
+            "\u{4f50}\u{85}",
+        ] {
             assert!(matches!(encoding(&sms_name(name)), Encoding::Gsm7 { .. }));
             assert!(sms_name(name).chars().count() <= SMS_NAME_LIMIT);
         }
@@ -1328,7 +1353,11 @@ mod tests {
                     let Encoding::Gsm7 { septets } = encoding(&text) else {
                         panic!("{language} {}: {text:?} is not GSM-7", notice.as_str());
                     };
-                    assert!(septets <= 160, "{language} {}: {septets}: {text:?}", notice.as_str());
+                    assert!(
+                        septets <= 160,
+                        "{language} {}: {septets}: {text:?}",
+                        notice.as_str()
+                    );
                     longest = longest.max(septets);
                     assert!(text.starts_with("Yuppers.app: "), "{text:?}");
                     assert!(text.contains("ABCD-1234") && text.contains(LONGEST_LINK));
@@ -1374,7 +1403,9 @@ mod tests {
         );
         assert_eq!(
             wording.update_sms("en", "ABCD-1234", LINK),
-            format!("Yuppers.app: your yup ABCD-1234 has an update. See it: {LINK}. Reply STOP to opt out.")
+            format!(
+                "Yuppers.app: your yup ABCD-1234 has an update. See it: {LINK}. Reply STOP to opt out."
+            )
         );
     }
 
@@ -1390,8 +1421,14 @@ mod tests {
         let long = wording
             .push_title("es", Notice::DeliveryClaimed, &"Z".repeat(60), "ABCD-1234")
             .unwrap();
-        assert!(long.contains('\u{2026}') && long.contains("ABCD-1234"), "{long}");
-        assert_eq!(wording.push_title("en", Notice::DueSoon, "Sam", "ABCD-1234"), None);
+        assert!(
+            long.contains('\u{2026}') && long.contains("ABCD-1234"),
+            "{long}"
+        );
+        assert_eq!(
+            wording.push_title("en", Notice::DueSoon, "Sam", "ABCD-1234"),
+            None
+        );
     }
 
     #[test]

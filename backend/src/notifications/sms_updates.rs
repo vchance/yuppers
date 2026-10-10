@@ -838,18 +838,11 @@ async fn prepare(
             };
             // The notice was checked above to be one that is texted.
             let notice = payload["notice"].as_str().and_then(Notice::parse);
-            let detailed = detailed
-                .then_some(notice)
-                .flatten()
-                .and_then(|notice| {
-                    delivery.wording.detailed_update_sms(
-                        &language,
-                        notice,
-                        &other_party,
-                        &code,
-                        &link,
-                    )
-                });
+            let detailed = detailed.then_some(notice).flatten().and_then(|notice| {
+                delivery
+                    .wording
+                    .detailed_update_sms(&language, notice, &other_party, &code, &link)
+            });
             detailed.unwrap_or_else(|| delivery.wording.update_sms(&language, &code, &link))
         }
         _ => delivery.wording.opt_in_sms(&language),
@@ -1021,7 +1014,10 @@ mod tests {
             }
             assert!(update.contains(LINK) && update.contains(CODE), "{update:?}");
             // One segment, with the longest link.
-            assert!(encoding(&update).fits_one_segment(), "{language}: {update:?}");
+            assert!(
+                encoding(&update).fits_one_segment(),
+                "{language}: {update:?}"
+            );
             assert!(confirmation.contains("HELP"), "{confirmation:?}");
         }
     }

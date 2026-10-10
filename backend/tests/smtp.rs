@@ -339,7 +339,13 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
     let want: BTreeSet<(String, String)> = [
         (
             deal.ana.email.clone(),
-            subject("es", Notice::InvitationClaimedUnconfirmed, &deal, &code, "Ben"),
+            subject(
+                "es",
+                Notice::InvitationClaimedUnconfirmed,
+                &deal,
+                &code,
+                "Ben",
+            ),
         ),
         (
             deal.ana.email.clone(),

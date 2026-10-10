@@ -344,20 +344,26 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
                 Notice::InvitationClaimedUnconfirmed,
                 &deal,
                 &code,
-                "Ben",
+                "Ben Ortiz",
             ),
         ),
         (
             deal.ana.email.clone(),
-            subject("es", Notice::AgreementInForce, &deal, &code, "Ben"),
+            subject("es", Notice::AgreementInForce, &deal, &code, "Ben Ortiz"),
         ),
         (
             deal.ben.email.clone(),
-            subject("en", Notice::CounterpartyConfirmed, &deal, &code, "Ana"),
+            subject(
+                "en",
+                Notice::CounterpartyConfirmed,
+                &deal,
+                &code,
+                "Ana Ruiz",
+            ),
         ),
         (
             deal.ben.email.clone(),
-            subject("en", Notice::AgreementInForce, &deal, &code, "Ana"),
+            subject("en", Notice::AgreementInForce, &deal, &code, "Ana Ruiz"),
         ),
     ]
     .into_iter()
@@ -411,10 +417,10 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
     // Each message carries the text exactly as the wording has it, and the
     // same message as HTML beside it.
     let sent = [
-        ("es", Notice::InvitationClaimedUnconfirmed, "Ben"),
-        ("es", Notice::AgreementInForce, "Ben"),
-        ("en", Notice::CounterpartyConfirmed, "Ana"),
-        ("en", Notice::AgreementInForce, "Ana"),
+        ("es", Notice::InvitationClaimedUnconfirmed, "Ben Ortiz"),
+        ("es", Notice::AgreementInForce, "Ben Ortiz"),
+        ("en", Notice::CounterpartyConfirmed, "Ana Ruiz"),
+        ("en", Notice::AgreementInForce, "Ana Ruiz"),
     ];
     for message in &received {
         let (text, html) = alternatives(message);

@@ -482,7 +482,7 @@ async fn a_reminder_is_in_its_readers_language_and_says_nothing_of_the_terms() {
     assert_eq!(sent[0].to, pair.ana.email);
     assert_eq!(
         sent[0].subject,
-        format!("Something you owe is due soon ({code})")
+        format!("Something you owe is due soon: your yup with Ben Ortiz ({code})")
     );
     emails.extend(sent);
 
@@ -496,13 +496,13 @@ async fn a_reminder_is_in_its_readers_language_and_says_nothing_of_the_terms() {
     assert_eq!(to_ana.to, pair.ana.email);
     assert_eq!(
         to_ana.subject,
-        format!("Something you owe is overdue ({code})")
+        format!("Something you owe is overdue: your yup with Ben Ortiz ({code})")
     );
     assert!(to_ana.body.contains(&format!("Open the yup: {link}")));
     assert_eq!(to_ben.to, pair.ben.email);
     assert_eq!(
         to_ben.subject,
-        format!("Algo que te deben está atrasado ({code})")
+        format!("Algo que te deben está atrasado: tu yup con Ana Ruiz ({code})")
     );
     assert!(to_ben.body.contains(&format!("Abre el yup: {link}")));
     emails.extend(sent);
@@ -520,7 +520,10 @@ async fn a_reminder_is_in_its_readers_language_and_says_nothing_of_the_terms() {
         assert!(!email.body.contains("/record"), "{}", email.body);
         let text = format!("{}\n{}", email.subject, email.body)
             .replace(&link, "")
-            .to_lowercase();
+            .to_lowercase()
+            // The other party's name is what the subject and first line say.
+            .replace("ana ruiz", "")
+            .replace("ben ortiz", "");
         for private in ["fence", "repair", "ruiz", "ortiz", &due] {
             assert!(!text.contains(private), "{private:?} leaked into {text}");
         }

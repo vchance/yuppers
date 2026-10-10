@@ -611,7 +611,7 @@ async fn someone_who_opted_in_to_detail_is_told_who_and_what_step_and_no_more() 
     assert_eq!(
         sent[1].1,
         format!(
-            "Yuppers.app: Ana marked a delivery ({display_code}). See it: {link}. \
+            "Yuppers.app: Ana Ruiz marked a delivery ({display_code}). See it: {link}. \
              Reply STOP to opt out."
         )
     );

@@ -6,6 +6,7 @@ import type { ProblemCode } from '../draft'
 import type { Move } from '../fulfillment'
 import type { SummaryOutcome } from '../summary'
 import type { HelpLinkPlace, HelpTopic } from '../help'
+import type { TemplateId } from '../templates'
 import type { TroubleSituation, TroubleWay } from '../trouble'
 
 type Schemas = components['schemas']
@@ -1018,6 +1019,99 @@ export interface Wording {
     notSet: string
     /** Where an amended item would stand. Uses `{status}`. */
     statusAfter: string
+  }
+  /**
+   * Starting a yup (DESIGN.md §4.4): the chooser, the common agreements in
+   * it, and copying an earlier yup. A template's words are structure and
+   * examples only: no clause, no advice, nothing in the imperative about
+   * what to agree (`templates.test.ts` keeps it so). `entries` has one
+   * entry for each template in `TEMPLATES`, and `items` one for each of its
+   * items, whose texts are shown in grey and count as empty. `warning` is
+   * there for the templates that declare one.
+   */
+  templates: {
+    chooserTitle: string
+    chooserHeading: string
+    chooserIntro: string
+    orHeading: string
+    use: string
+    /** Uses `{name}`. */
+    useNamed: string
+    back: string
+    starting: string
+    blank: { name: string; summary: string }
+    copy: { name: string; summary: string }
+    notForHeading: string
+    /** The list of what yups are not for (LEGAL_MEMO.md), shown with the choices. */
+    notFor: string
+    notForAdvice: string
+    bandHeading: string
+    bandShow: string
+    bandHide: string
+    bandExamples: string
+    swapSides: string
+    swapSidesHint: string
+    swapped: string
+    copyHeading: string
+    copyIntro: string
+    copyNone: string
+    copyNoTerms: string
+    copyLoading: string
+    copyForLegend: string
+    copyForSomeoneElse: string
+    /** Uses `{name}`, the other party as the yup wrote them. */
+    copyForSame: string
+    copyForSameNoName: string
+    copyStart: string
+    /** Uses `{name}`. */
+    copyStartNamed: string
+    entries: Record<
+      TemplateId,
+      {
+        name: string
+        summary: string
+        hint: string
+        warning?: string
+        items: { description: string; criteria?: string; quantity?: string; unit?: string }[]
+      }
+    >
+  }
+  /**
+   * The sample yup (DESIGN.md §4.3): a worked example shown to newcomers.
+   * Product content, so it is worded in every language, the two made-up
+   * people and their deal included.
+   */
+  sample: {
+    banner: string
+    title: string
+    homeHeading: string
+    homeBody: string
+    see: string
+    signInLine: string
+    startOwn: string
+    signInToStart: string
+    help: string
+    inShort: string
+    termsHeading: string
+    historyHeading: string
+    /** Uses `{name}`. */
+    cardWith: string
+    cardState: string
+    cardDetail: string
+    actionsOff: string
+    /** Uses `{name}`. */
+    wouldTap: string
+    waitsOn: string
+    fingerprint: string
+    partyA: string
+    partyB: string
+    firstNameA: string
+    firstNameB: string
+    terms: string
+    deposit: string
+    repair: string
+    repairDone: string
+    balance: string
   }
   exchange: {
     title: string

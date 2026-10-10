@@ -1384,6 +1384,12 @@ export interface components {
         /** @enum {string} */
         CounterpartyDto: "UNCLAIMED" | "CLAIMED" | "CONFIRMED";
         CreateExchange: {
+            /**
+             * @description How the author began: a template and its version (`job-deposit-balance@1`),
+             *     `blank` or `copy`. Kept once for aggregate counts; never returned.
+             *     Clients that send nothing leave it unset.
+             */
+            started_from?: string | null;
             /** @description IANA timezone name, such as `America/Chicago`. Due dates are read in it. */
             timezone: string;
         };

@@ -290,8 +290,18 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
       return send(() => client.GET('/v1/exchanges', { headers: headers() }))
     },
 
-    createExchange(timezone: string): Promise<ExchangeView> {
-      return send(() => client.POST('/v1/exchanges', { headers: headers(), body: { timezone } }))
+    /**
+     * Starts a draft. `startedFrom` is how the author began (a template and
+     * its version, `blank` or `copy`), kept once for aggregate counts and
+     * never returned (DESIGN.md §4.4).
+     */
+    createExchange(timezone: string, startedFrom?: string): Promise<ExchangeView> {
+      return send(() =>
+        client.POST('/v1/exchanges', {
+          headers: headers(),
+          body: startedFrom === undefined ? { timezone } : { timezone, started_from: startedFrom },
+        }),
+      )
     },
 
     getExchange(id: string): Promise<ExchangeView> {

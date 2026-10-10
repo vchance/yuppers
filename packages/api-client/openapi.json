@@ -4234,6 +4234,13 @@
           "timezone"
         ],
         "properties": {
+          "started_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How the author began: a template and its version (`job-deposit-balance@1`),\n`blank` or `copy`. Kept once for aggregate counts; never returned.\nClients that send nothing leave it unset."
+          },
           "timezone": {
             "type": "string",
             "description": "IANA timezone name, such as `America/Chicago`. Due dates are read in it."

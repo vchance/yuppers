@@ -1700,11 +1700,7 @@ async fn what_a_yup_was_started_from_is_kept_once_and_never_shown() {
     // or the record, to either party.
     let exchange = id(&templated);
     let sent = app
-        .send(
-            &ana,
-            &exchange,
-            fence_job(Uuid::new_v4(), Uuid::new_v4()),
-        )
+        .send(&ana, &exchange, fence_job(Uuid::new_v4(), Uuid::new_v4()))
         .await
         .ok();
     app.post(

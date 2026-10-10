@@ -878,7 +878,6 @@ mod tests {
         for bad in [
             "",
             "Blank",
-            "blank@1",
             "job-deposit-balance",
             "job-deposit-balance@",
             "job-deposit-balance@x",

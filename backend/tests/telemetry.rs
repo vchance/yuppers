@@ -1026,7 +1026,10 @@ async fn what_is_exported_carries_the_resource_the_headers_and_nothing_personal(
     // The deal's draft said nothing of where it was started from: its steps
     // count under `unknown`, and nothing else by entry moves.
     let unknown = funnel::Entry::Unknown as usize;
-    assert_eq!(after.entries_sent[unknown], before.entries_sent[unknown] + 1);
+    assert_eq!(
+        after.entries_sent[unknown],
+        before.entries_sent[unknown] + 1
+    );
     assert_eq!(
         after.entries_in_force[unknown],
         before.entries_in_force[unknown] + 1

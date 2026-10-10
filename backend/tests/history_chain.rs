@@ -29,7 +29,7 @@ fn staff(app: &App, command: &str) -> (bool, String) {
 
 /// Runs statements on history with its guards lifted, in a transaction, as
 /// the payments test does for its one move.
-async fn with_guards_lifted(app: &App, statement: &str, exchange: Uuid, sequence: Option<i64>) {
+async fn with_guards_lifted(app: &App, statements: &[&str], exchange: Uuid, sequence: Option<i64>) {
     let mut tx = app.owner.begin().await.unwrap();
     for lift in [
         "ALTER TABLE exchange_event DISABLE TRIGGER exchange_event_append_only",
@@ -37,12 +37,14 @@ async fn with_guards_lifted(app: &App, statement: &str, exchange: Uuid, sequence
     ] {
         sqlx::query(lift).execute(&mut *tx).await.unwrap();
     }
-    sqlx::query(sqlx::AssertSqlSafe(statement.to_owned()))
-        .bind(exchange)
-        .bind(sequence)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
+    for statement in statements {
+        sqlx::query(sqlx::AssertSqlSafe((*statement).to_owned()))
+            .bind(exchange)
+            .bind(sequence)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
     for restore in [
         "ALTER TABLE exchange_event ENABLE TRIGGER exchange_event_append_only",
         "ALTER TABLE exchange_event ENABLE TRIGGER exchange_event_chain_only",
@@ -105,7 +107,7 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
     // goes on without one, and the check says what is left to do.
     with_guards_lifted(
         &app,
-        "UPDATE exchange_event SET chain_hash = NULL WHERE exchange_id = $1 AND $2::bigint IS NULL",
+        &["UPDATE exchange_event SET chain_hash = NULL WHERE exchange_id = $1 AND $2::bigint IS NULL"],
         exchange,
         None,
     )
@@ -162,7 +164,7 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
     // Tampering: one row's note is rewritten, with the guards lifted.
     with_guards_lifted(
         &app,
-        "UPDATE exchange_event SET note = 'edited later' WHERE exchange_id = $1 AND sequence = $2",
+        &["UPDATE exchange_event SET note = 'edited later' WHERE exchange_id = $1 AND sequence = $2"],
         exchange,
         Some(3),
     )
@@ -204,7 +206,14 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
             .unwrap();
     with_guards_lifted(
         &app,
-        "DELETE FROM exchange_event WHERE exchange_id = $1 AND sequence = $2",
+        // What points at the last row is moved first, as anyone deleting it
+        // would have to; the exchange still says how far its history went.
+        &[
+            "DELETE FROM outbox WHERE exchange_id = $1 AND event_sequence = $2",
+            "UPDATE contribution SET last_event_seq = $2 - 1
+             WHERE exchange_id = $1 AND last_event_seq = $2",
+            "DELETE FROM exchange_event WHERE exchange_id = $1 AND sequence = $2",
+        ],
         other_exchange,
         Some(last),
     )
@@ -219,7 +228,11 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
     let emptied_exchange: Uuid = emptied.exchange.parse().unwrap();
     with_guards_lifted(
         &app,
-        "DELETE FROM exchange_event WHERE exchange_id = $1 AND $2::bigint IS NULL",
+        &[
+            "DELETE FROM outbox WHERE exchange_id = $1 AND $2::bigint IS NULL",
+            "UPDATE contribution SET last_event_seq = NULL WHERE exchange_id = $1 AND $2::bigint IS NULL",
+            "DELETE FROM exchange_event WHERE exchange_id = $1 AND $2::bigint IS NULL",
+        ],
         emptied_exchange,
         None,
     )

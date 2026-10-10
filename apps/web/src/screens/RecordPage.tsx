@@ -215,7 +215,7 @@ function Record({ record }: { record: RecordDocument }) {
         )}
       </section>
 
-      {record.history_chain && <p className="hint">{record.history_chain}</p>}
+      {record.history_chain && <p className="hint record-chain">{record.history_chain}</p>}
     </div>
   )
 }

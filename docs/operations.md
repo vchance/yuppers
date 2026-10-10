@@ -135,7 +135,7 @@ From both, the **funnel** (`backend/src/funnel.rs`): each step counted where it 
 |---|---|---|
 | `yuppers_accounts_created_total` | counter | `channel`: `email`, `phone`. A first sign-in made an account (the api) |
 | `yuppers_yups_created_total` | counter | A first proposal was sent, opening a negotiation |
-| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`) |
+| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`), or it was claimed with no share recorded |
 | `yuppers_invitations_claimed_total` | counter | The other party opened and claimed an invitation |
 | `yuppers_agreements_in_force_total` | counter | Both signed, the first time an exchange came into force (an amendment in force is not another) |
 | `yuppers_contributions_confirmed_total`, `yuppers_contributions_disputed_total` | counter | A recipient confirmed a delivery; a party disputed a contribution |
@@ -149,7 +149,7 @@ From the worker, the funnel's **daily snapshot**: the previous UTC day's counts,
 | Metric | Type | |
 |---|---|---|
 | `yuppers_daily_yups_created` | gauge | first proposals sent that day (an exchange's first `REVISION_SENT` event) |
-| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on, and claimed, that day |
+| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on (a claim counts as one if none was recorded), and claimed, that day |
 | `yuppers_daily_agreements_in_force` | gauge | agreements that first came into force that day |
 | `yuppers_daily_agreements_completed` | gauge | agreements closed as completed that day |
 

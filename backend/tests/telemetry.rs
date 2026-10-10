@@ -1230,13 +1230,14 @@ async fn a_claim_counts_as_a_share_only_when_none_was_recorded() {
 
     // Shared first: the claim leaves the time and the counter as they were.
     let deal = app.negotiating().await;
-    app.post(
-        &deal.ana,
-        &format!("/v1/exchanges/{}/invitation/shared", deal.exchange),
-        json!({}),
-    )
-    .await
-    .ok();
+    let shared = app
+        .post(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/invitation/shared", deal.exchange),
+            json!({}),
+        )
+        .await;
+    assert_eq!(shared.status, StatusCode::NO_CONTENT, "{}", shared.body);
     let recorded = shared_at(&app, &deal.exchange).await;
     assert!(recorded.is_some());
     let before = shared_total();

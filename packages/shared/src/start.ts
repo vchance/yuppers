@@ -5,10 +5,10 @@ import type { Draft } from './draft'
 import { startedFrom, templateById, type StartChoice, type Template } from './templates'
 
 /*
- * Making the draft a chooser's choice starts (DESIGN.md §4.4). A draft is
- * made on the service first, as it always was, and then the starting
- * working copy is saved into it, so that leaving and coming back finds the
- * draft and not the chooser.
+ * Starting from a choice in the chooser (DESIGN.md §4.4). The draft is made
+ * on the service first, as it always was, and then the starting working copy
+ * is saved into it, so that leaving and coming back finds the draft and not
+ * the chooser.
  */
 
 /** The template an exchange was started from, in this session only, for the band above its items. */
@@ -35,6 +35,7 @@ export async function beginYup(
     }
   }
   if (choice.kind === 'template') templatesStarted.set(exchange.id, choice.template.id)
+  else templatesStarted.delete(exchange.id)
   return exchange
 }
 

@@ -192,6 +192,10 @@ export interface FakeService {
   sharedAt: string | null;
   /** The list of exchanges as someone new sees it: empty. */
   noExchanges: boolean;
+  /** The body of the request that made a draft, if one was made. */
+  created: unknown;
+  /** The working copy last saved into the draft that was made, if any. */
+  saved: unknown;
   /** The devices registered for push, by ID, with what was registered. */
   devices: Map<string, unknown>;
   /** Whether the service texts agreement updates (`sms_updates` in its meta). */
@@ -220,6 +224,8 @@ export function fakeService(): FakeService {
     proposed: false,
     sharedAt: null,
     noExchanges: false,
+    created: null,
+    saved: null,
     devices: new Map(),
     texting: true,
     textUpdates: new Set(),
@@ -401,8 +407,17 @@ function respond(
     service.proposed = true;
     return [200, { exchange: sentExchange(service), invitation_token: SENT_INVITATION }];
   }
+  // Starting a yup: the draft that is made starts empty, and is read back
+  // with whatever working copy was saved into it.
+  if (call === 'POST /v1/exchanges') {
+    service.created = body;
+    service.saved = null;
+    return [200, { ...draftExchange(), draft: undefined }];
+  }
   if (call === `GET /v1/exchanges/${DRAFT}`) {
-    return [200, service.proposed ? sentExchange(service) : draftExchange()];
+    if (service.proposed) return [200, sentExchange(service)];
+    if (service.created) return [200, { ...draftExchange(), draft: service.saved ?? undefined }];
+    return [200, draftExchange()];
   }
   // The initiator opened a way to send the link: the latest time is kept.
   if (call === `POST /v1/exchanges/${DRAFT}/invitation/shared`) {
@@ -413,7 +428,10 @@ function respond(
     service.exchange = { ...service.exchange, invitation_shared_at: '2026-10-02T06:35:00Z' };
     return [204, null];
   }
-  if (call === `PUT /v1/exchanges/${DRAFT}/draft`) return [204, null];
+  if (call === `PUT /v1/exchanges/${DRAFT}/draft`) {
+    service.saved = (body as { body: unknown }).body;
+    return [204, null];
+  }
   if (call === `POST /v1/exchanges/${EXCHANGE}/commands`) {
     const { expected_version, command } = body as {
       expected_version: number;

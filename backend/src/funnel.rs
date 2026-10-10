@@ -2,7 +2,8 @@
 //! "Telemetry"): accounts created, yups created (a first proposal sent),
 //! invitations shared and claimed, agreements come into force, contributions
 //! confirmed and disputed, agreements closed, and the codes, texts and emails
-//! sent. Counts only: no label here ever names a person, an exchange, an
+//! sent. A claim counts as a share when none was recorded, so there are never
+//! more claims than shares. Counts only: no label here ever names a person, an exchange, an
 //! address or a number, and every label is from a fixed set.
 //!
 //! One set of counters for the process, like the historian's, rather than

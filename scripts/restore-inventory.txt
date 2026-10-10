@@ -141,6 +141,10 @@
 0019 grant relation staff_list_limit SELECT
 0019 grant relation staff_list_limit UPDATE
 0014 grant relation staff_member SELECT
+0032 grant relation terms_acceptance DELETE
+0032 grant relation terms_acceptance INSERT
+0032 grant relation terms_acceptance SELECT
+0032 grant relation terms_acceptance_id_seq USAGE
 0012 grant relation wallet_auth_token DELETE
 0012 grant relation wallet_auth_token INSERT
 0012 grant relation wallet_auth_token SELECT

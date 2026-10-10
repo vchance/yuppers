@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 /*
@@ -18,6 +18,12 @@ import { dirname, resolve } from 'node:path'
 // The mobile app's package is CommonJS, so the tests are compiled as CommonJS.
 export const repoRoot = resolve(__dirname, '../../../..')
 export const mobileRoot = resolve(repoRoot, 'apps/mobile')
+
+/** The version of the Terms and the Privacy policy the service knows, which a sign-in names (`backend/src/terms.rs`). */
+export function termsVersion(): string {
+  const source = readFileSync(resolve(repoRoot, 'backend/src/terms.rs'), 'utf8')
+  return /TERMS_VERSION: &str = "([^"]+)"/.exec(source)![1]
+}
 
 const host = '127.0.0.1'
 

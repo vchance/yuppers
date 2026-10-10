@@ -6,6 +6,7 @@ import type {
   RecordDocument,
   RevisionView,
 } from '@yuppers/shared'
+import { TERMS_VERSION } from '@yuppers/shared'
 
 /*
  * A stand-in for the service, for rendering the web app's screens in a test
@@ -849,7 +850,13 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return [204, null]
   }
   if (call === 'POST /v1/auth/sessions') {
-    const { code, identifier } = body as { code?: string; identifier?: string }
+    const { code, identifier, terms_version } = body as {
+      code?: string
+      identifier?: string
+      terms_version?: string
+    }
+    // Like the service: the version of the sentence shown above the button.
+    if (terms_version !== TERMS_VERSION) return [422, { code: 'TERMS_VERSION_UNKNOWN' }]
     if (code !== GOOD_CODE) return [400, { code: 'INVALID_CODE' }]
     // Anyone but Ana signs in for the first time, to an account with no name yet.
     service.account =

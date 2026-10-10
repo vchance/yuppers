@@ -170,7 +170,7 @@
             }
           },
           "422": {
-            "description": "Invalid request",
+            "description": "Invalid request, or a `terms_version` the service does not know (`TERMS_VERSION_UNKNOWN`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3508,6 +3508,20 @@
               "string",
               "null"
             ]
+          },
+          "terms_accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it was accepted, as RFC 3339."
+          },
+          "terms_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version of the Terms and the Privacy policy accepted at the\nlatest sign-in (`TERMS_VERSION`). Absent until the account signs in\nagain after this was first recorded. Only the account's own."
           }
         }
       },
@@ -4271,6 +4285,13 @@
               "null"
             ],
             "description": "The language the client is showing, as a tag such as `es-MX`. Used only\nwhen this creates the account; an unsupported one becomes the default."
+          },
+          "terms_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version of the Terms and the Privacy policy the client showed\nabove the button (`TERMS_VERSION`); signing in is the assent to both.\nA version the service does not know is refused. Absent from builds\nthat predate it: the sign-in completes and nothing is recorded."
           }
         }
       },
@@ -4432,6 +4453,7 @@
           "PHONE_COUNTRY_NOT_SERVED",
           "PHONE_OPTED_OUT",
           "SMS_CONSENT_REQUIRED",
+          "TERMS_VERSION_UNKNOWN",
           "INVALID_CODE",
           "TOO_MANY_REQUESTS",
           "TOO_MANY_GUESSES",

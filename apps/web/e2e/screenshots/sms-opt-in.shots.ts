@@ -13,7 +13,7 @@ import {
   type Screen,
 } from '../../build/sms-opt-in'
 import { codeFrom } from '../support/codes'
-import { webRoot } from '../support/env'
+import { termsVersion, webRoot } from '../support/env'
 import { en, es, fill } from '../support/wording'
 import { apiPort, screenshotsLog, webOrigin } from './playwright.config'
 
@@ -113,7 +113,7 @@ async function proposal(
     screenshotsLog,
   )
   const session = await request.post(`${API}/v1/auth/sessions`, {
-    data: { identifier: email, code, delivery: 'TOKEN', language: 'en' },
+    data: { identifier: email, code, delivery: 'TOKEN', language: 'en', terms_version: termsVersion() },
   })
   const { token } = (await session.json()) as { token: string }
   const headers = { Authorization: `Bearer ${token}` }

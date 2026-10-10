@@ -502,7 +502,7 @@ async fn a_us_number_typed_without_plus_one_is_the_same_number() {
                 None,
                 Method::POST,
                 "/v1/auth/sessions",
-                Some(json!({ "identifier": typed, "code": CODE, "delivery": "TOKEN" })),
+                Some(json!({ "identifier": typed, "code": CODE, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
                 &[],
             )
             .await;

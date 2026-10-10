@@ -247,6 +247,19 @@ export interface Wording {
     emailLabel: string
     changeEmail: string
     /**
+     * The one sentence above the button that signs in: continuing is the
+     * assent to the Terms and the Privacy policy (`terms.ts`). Uses `{terms}`
+     * and `{privacy}`, which become links to the documents, named as
+     * `termsOfUse.link` and `privacy.policy` name them.
+     */
+    agreement: string
+    /**
+     * Not shown. Marks `agreement` as awaiting legal review, as
+     * `consent.pendingReview` marks the signing wording; the sentence is
+     * shown as it is. Remove with the review.
+     */
+    agreementPendingReview: string
+    /**
      * `identifierHint`, naming the country codes served: `{codes}`, such as
      * `+1, +52`. A US number needs none; the hint asks for one only for
      * numbers elsewhere.

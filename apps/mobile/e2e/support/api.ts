@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { codeFrom } from './codes'
-import { apiURL, webURL } from './env'
+import { apiURL, termsVersion, webURL } from './env'
 
 /*
  * Someone acting through the API rather than the app: in most tests, the
@@ -57,7 +57,7 @@ export class ApiPerson {
       call('POST', '/v1/auth/codes', { body: { identifier: email } }),
     )
     const session = (await call('POST', '/v1/auth/sessions', {
-      body: { identifier: email, code, delivery: 'TOKEN', language },
+      body: { identifier: email, code, delivery: 'TOKEN', language, terms_version: termsVersion() },
     })) as { token: string }
     const person = new ApiPerson(name, email, session.token)
     await person.call('PATCH', '/v1/me', { display_name: name, adult_confirmed: true })

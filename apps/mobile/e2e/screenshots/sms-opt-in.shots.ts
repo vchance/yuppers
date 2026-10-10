@@ -13,7 +13,7 @@ import {
   type Screen,
 } from '../../../web/build/sms-opt-in.ts'
 import { codeFrom } from '../support/codes'
-import { repoRoot } from '../support/env'
+import { repoRoot, termsVersion } from '../support/env'
 import { phone } from '../support/fixtures'
 import { en, es, fill } from '../support/wording'
 import { apiURL, screenshotsLog, webURL } from './playwright.config'
@@ -131,6 +131,7 @@ async function proposal(language: string): Promise<{ email: string; id: string; 
     code,
     delivery: 'TOKEN',
     language: 'en',
+    terms_version: termsVersion(),
   })) as { token: string }
   await call('PATCH', '/v1/me', { display_name: 'Ana Ruiz', adult_confirmed: true, language }, token)
   const draft = (await call('POST', '/v1/exchanges', { timezone: 'America/Chicago' }, token)) as {

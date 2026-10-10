@@ -21,6 +21,7 @@ use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::funnel::{Channel, funnel};
 use crate::languages;
 use crate::notifications::sms_updates::Source;
+use crate::terms;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RequestCode {
@@ -126,6 +127,11 @@ pub struct CreateSession {
     /// The language the client is showing, as a tag such as `es-MX`. Used only
     /// when this creates the account; an unsupported one becomes the default.
     pub language: Option<String>,
+    /// The version of the Terms and the Privacy policy the client showed
+    /// above the button (`TERMS_VERSION`); signing in is the assent to both.
+    /// A version the service does not know is refused. Absent from builds
+    /// that predate it: the sign-in completes and nothing is recorded.
+    pub terms_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -144,7 +150,7 @@ pub struct SessionCreated {
         (status = 200, description = "Signed in", body = SessionCreated),
         (status = 401, description = "The code is wrong, expired or used up", body = ErrorBody),
         (status = 403, description = "The account is suspended", body = ErrorBody),
-        (status = 422, description = "Invalid request", body = ErrorBody),
+        (status = 422, description = "Invalid request, or a `terms_version` the service does not know (`TERMS_VERSION_UNKNOWN`)", body = ErrorBody),
         (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody),
         (status = 503, description = "A code sent by text could not be checked, because the provider that made it did not answer; nothing was counted", body = ErrorBody)
     )
@@ -163,6 +169,11 @@ pub async fn create_session(
     }
 
     let identifier = Identifier::parse(&body.identifier)?;
+    // Before the code is looked at: a page that shows old wording gets no
+    // sign-in, and its code is still good once it is reloaded.
+    if let Some(version) = body.terms_version.as_deref() {
+        terms::check(version)?;
+    }
     auth::verify_code(
         &state.db,
         &settings.app_secret,
@@ -215,17 +226,33 @@ pub async fn create_session(
     };
 
     let token = auth::generate_token();
-    sqlx::query(
+    let session_id: Uuid = sqlx::query_scalar(
         "INSERT INTO account_session
             (account_id, token_hash, auth_method, authenticated_at, expires_at)
-         VALUES ($1, $2, $3, now(), now() + $4 * interval '1 second')",
+         VALUES ($1, $2, $3, now(), now() + $4 * interval '1 second')
+         RETURNING id",
     )
     .bind(account_id)
     .bind(auth::token_hash(&token).as_slice())
     .bind(method)
     .bind(settings.auth.session_initial().whole_seconds() as f64)
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await?;
+
+    // The language on screen, or the account's own when it was not said.
+    let shown = match body.language.as_deref().and_then(languages::resolve) {
+        Some(language) => language,
+        None => {
+            let own: String = sqlx::query_scalar("SELECT language FROM account WHERE id = $1")
+                .bind(account_id)
+                .fetch_one(&mut *tx)
+                .await?;
+            languages::resolve(&own).unwrap_or(languages::default())
+        }
+    };
+    if body.terms_version.is_some() {
+        terms::record(&mut tx, account_id, shown, Some(session_id)).await?;
+    }
 
     let account = account::load(&mut *tx, account_id).await?;
     tx.commit().await?;

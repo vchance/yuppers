@@ -80,6 +80,10 @@ With `SMS_CODE_DELIVERY` off (and `CODE_DELIVERY=resend` or `smtp`), a code for 
 
 `PUSH_DELIVERY=log` on both is for development: the worker writes each notification to its log. Turning push off again closes whatever is queued for push unsent, and the apps stop offering it; the devices stay registered, harmlessly, until their sessions end.
 
+## The terms version
+
+Signing in is the assent to the Terms and the Privacy policy: the sentence above the sign-in button names them, and the request that completes the sign-in carries the version shown (`terms_version`). The service refuses a version it does not know (`TERMS_VERSION_UNKNOWN`) and stores the one accepted, with the time, in `terms_acceptance` and on the account (`GET /v1/me`). The version is the documents' effective date. To publish new terms or a new policy, change `TERMS_VERSION` in `backend/src/terms.rs` and in `packages/shared/src/terms.ts` together with `LEGAL_EFFECTIVE_DATES` in `packages/shared/src/legal-text.ts`; a test fails if they differ. Pages loaded before the deploy are asked to reload on their next sign-in. The field is optional on the request, because builds already in users' hands (the TestFlight app) do not send it: without it the sign-in completes and nothing is recorded. It becomes required once every shipped client sends it, by raising the minimum client version (`backend/src/client_version.rs`) past the first build that does, and then making the field required in `CreateSession` and the API document. Nothing is backfilled: an account gets its first row at its next sign-in, and nothing yet asks an account that stays signed in to accept a newer version.
+
 ## Health checks
 
 | Path | Answers | Use it for |
@@ -135,7 +139,7 @@ From both, the **funnel** (`backend/src/funnel.rs`): each step counted where it 
 |---|---|---|
 | `yuppers_accounts_created_total` | counter | `channel`: `email`, `phone`. A first sign-in made an account (the api) |
 | `yuppers_yups_created_total` | counter | A first proposal was sent, opening a negotiation |
-| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`) |
+| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`), or it was claimed with no share recorded |
 | `yuppers_invitations_claimed_total` | counter | The other party opened and claimed an invitation |
 | `yuppers_agreements_in_force_total` | counter | Both signed, the first time an exchange came into force (an amendment in force is not another) |
 | `yuppers_contributions_confirmed_total`, `yuppers_contributions_disputed_total` | counter | A recipient confirmed a delivery; a party disputed a contribution |
@@ -150,7 +154,7 @@ From the worker, the funnel's **daily snapshot**: the previous UTC day's counts,
 | Metric | Type | |
 |---|---|---|
 | `yuppers_daily_yups_created` | gauge | first proposals sent that day (an exchange's first `REVISION_SENT` event) |
-| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on, and claimed, that day |
+| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on (a claim counts as one if none was recorded), and claimed, that day |
 | `yuppers_daily_agreements_in_force` | gauge | agreements that first came into force that day |
 | `yuppers_daily_agreements_completed` | gauge | agreements closed as completed that day |
 

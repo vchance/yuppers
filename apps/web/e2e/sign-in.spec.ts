@@ -113,7 +113,8 @@ test('where the service has no text messages, an email address is asked for, and
 
   await email.fill('+1 202 555 0142')
   await page.getByRole('button', { name: en.signIn.sendCode, exact: true }).click()
-  await expect(page.getByText(en.signIn.emailOnly)).toBeVisible()
+  // The notice itself, not the live region that repeats it for screen readers.
+  await expect(page.locator('p.notice', { hasText: en.signIn.emailOnly })).toBeVisible()
   await expect(email).toHaveAttribute('aria-invalid', 'true')
   await expect(page.getByText(en.errors.SERVICE_UNAVAILABLE)).toHaveCount(0)
   expect(codesAsked).toEqual([])

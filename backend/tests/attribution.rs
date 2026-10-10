@@ -27,21 +27,28 @@ fn signatures(record: &Value) -> Vec<&Value> {
 }
 
 #[tokio::test]
+#[allow(clippy::type_complexity)]
 async fn a_signature_keeps_the_kind_of_identifier_and_the_session_it_was_made_in() {
     let app = App::start(DATABASE).await;
     let deal = app.active().await;
     let exchange: Uuid = deal.exchange.parse().unwrap();
 
-    let rows: Vec<(String, Option<Vec<u8>>, Option<String>, Option<time::OffsetDateTime>, Option<Uuid>, Uuid)> =
-        sqlx::query_as(
-            "SELECT slot, signer_identifier_hash, signer_identifier_kind, session_verified_at,
+    let rows: Vec<(
+        String,
+        Option<Vec<u8>>,
+        Option<String>,
+        Option<time::OffsetDateTime>,
+        Option<Uuid>,
+        Uuid,
+    )> = sqlx::query_as(
+        "SELECT slot, signer_identifier_hash, signer_identifier_kind, session_verified_at,
                     session_id, account_id
              FROM acceptance WHERE exchange_id = $1 ORDER BY slot",
-        )
-        .bind(exchange)
-        .fetch_all(&app.owner)
-        .await
-        .unwrap();
+    )
+    .bind(exchange)
+    .fetch_all(&app.owner)
+    .await
+    .unwrap();
     assert_eq!(rows.len(), 2);
     for ((_, hash, kind, verified, session, account), user) in
         rows.iter().zip([&deal.ana, &deal.ben])
@@ -75,7 +82,10 @@ async fn the_record_says_what_kind_of_identifier_and_how_recently_and_nothing_mo
     assert_eq!(lines.len(), 2);
     for line in &lines {
         assert!(line.contains("email address"), "{line}");
-        assert!(line.contains("no more than 1 minute before signing"), "{line}");
+        assert!(
+            line.contains("no more than 1 minute before signing"),
+            "{line}"
+        );
     }
     // Nothing about who: neither the address nor its index is in the document.
     let text = record.to_string();

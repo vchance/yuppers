@@ -216,7 +216,12 @@ mod tests {
     fn every_language_says_how_the_signer_signed_in_and_that_the_history_is_chained() {
         for language in languages::supported() {
             let (_, export) = wording(language);
-            for (kind, seconds) in [("email", 30), ("phone", 90), ("email", 7_200), ("phone", 400_000)] {
+            for (kind, seconds) in [
+                ("email", 30),
+                ("phone", 90),
+                ("email", 7_200),
+                ("phone", 400_000),
+            ] {
                 let line = export.attribution(kind, seconds).expect(language);
                 assert!(!line.contains('{') && !line.contains('}'), "{line}");
             }
@@ -229,11 +234,36 @@ mod tests {
     #[test]
     fn the_time_since_signing_in_is_rounded_up_in_the_unit_that_fits() {
         let (_, export) = wording("en");
-        assert!(export.attribution("email", 0).unwrap().contains("1 minute "));
-        assert!(export.attribution("email", 61).unwrap().contains("2 minutes"));
-        assert!(export.attribution("phone", 3_600).unwrap().contains("60 minutes"));
-        assert!(export.attribution("phone", 3_601).unwrap().contains("2 hours"));
-        assert!(export.attribution("phone", 259_300).unwrap().contains("4 days"));
+        assert!(
+            export
+                .attribution("email", 0)
+                .unwrap()
+                .contains("1 minute ")
+        );
+        assert!(
+            export
+                .attribution("email", 61)
+                .unwrap()
+                .contains("2 minutes")
+        );
+        assert!(
+            export
+                .attribution("phone", 3_600)
+                .unwrap()
+                .contains("60 minutes")
+        );
+        assert!(
+            export
+                .attribution("phone", 3_601)
+                .unwrap()
+                .contains("2 hours")
+        );
+        assert!(
+            export
+                .attribution("phone", 259_300)
+                .unwrap()
+                .contains("4 days")
+        );
         // Only the kind is ever said.
         assert!(export.attribution("fax", 5).is_none());
     }

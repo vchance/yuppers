@@ -53,11 +53,13 @@ async fn with_guards_lifted(app: &App, statement: &str, exchange: Uuid, sequence
 }
 
 async fn hashes(app: &App, exchange: Uuid) -> Vec<Option<Vec<u8>>> {
-    sqlx::query_scalar("SELECT chain_hash FROM exchange_event WHERE exchange_id = $1 ORDER BY sequence")
-        .bind(exchange)
-        .fetch_all(&app.owner)
-        .await
-        .unwrap()
+    sqlx::query_scalar(
+        "SELECT chain_hash FROM exchange_event WHERE exchange_id = $1 ORDER BY sequence",
+    )
+    .bind(exchange)
+    .fetch_all(&app.owner)
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -87,7 +89,10 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
         .execute(&app.db)
         .await
         .unwrap_err();
-    assert!(refused.to_string().contains("permission denied"), "{refused}");
+    assert!(
+        refused.to_string().contains("permission denied"),
+        "{refused}"
+    );
     let refused = sqlx::query("UPDATE exchange_event SET chain_hash = $1 WHERE exchange_id = $2")
         .bind([0u8; 32].as_slice())
         .bind(exchange)
@@ -166,7 +171,10 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
     assert!(report.gaps.is_empty());
     let (ok, output) = staff(&app, "verify-chain");
     assert!(!ok, "{output}");
-    assert!(output.contains(&format!("MISMATCH exchange {exchange} entry 3")), "{output}");
+    assert!(
+        output.contains(&format!("MISMATCH exchange {exchange} entry 3")),
+        "{output}"
+    );
     // The other exchange is unharmed.
     assert!(report.mismatched.iter().all(|(id, _)| *id == exchange));
 }

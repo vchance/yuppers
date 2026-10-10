@@ -18,6 +18,7 @@ use crate::code_consent::{CodePurpose, CodeRequest, SmsCodeConsent};
 use crate::contact::{self, Kind};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
+use crate::funnel::{Channel, funnel};
 use crate::languages;
 use crate::notifications::sms_updates::Source;
 
@@ -189,10 +190,12 @@ pub async fn create_session(
     .fetch_optional(&mut *tx)
     .await?;
 
+    let mut created = false;
     let account_id = match existing {
         Some((_, status)) if status != "ACTIVE" => return Err(ErrorCode::AccountSuspended.into()),
         Some((id, _)) => id,
         None => {
+            created = true;
             let language = body
                 .language
                 .as_deref()
@@ -226,6 +229,9 @@ pub async fn create_session(
 
     let account = account::load(&mut *tx, account_id).await?;
     tx.commit().await?;
+    if created {
+        funnel().account_created(Channel::of(&identifier));
+    }
 
     Ok(match body.delivery {
         Delivery::Token => Json(SessionCreated {

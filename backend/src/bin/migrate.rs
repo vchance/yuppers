@@ -21,7 +21,14 @@ use yuppers_backend::{db, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    telemetry::init()?;
+    let telemetry = telemetry::init("migrate")?;
+    let outcome = run().await;
+    // A command's lines reach the collector too, however short it ran.
+    telemetry.shutdown().await;
+    outcome
+}
+
+async fn run() -> anyhow::Result<()> {
     BuildInfo::current().log_start("migrate");
     let config = MigrateConfig::from_env()?;
 

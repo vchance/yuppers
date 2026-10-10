@@ -113,6 +113,16 @@ envVarGroups:
         value: 5VZ3GTX3T3.app.yuppers
       - key: PUSH_DELIVERY
         value: "off"
+      # Traces, logs and metrics go to the owner's Grafana stack
+      # (grafana/otel-lgtm) over OTLP/HTTP, through a Cloudflare Tunnel at
+      # this name, with the Access service token in OTEL_EXPORTER_OTLP_HEADERS
+      # from yuppers-secrets (docs/operations.md, "Telemetry"). A collector
+      # that cannot be reached costs a warning every five minutes and
+      # nothing else, so this stays set while the tunnel is being set up.
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: https://otel.yuppers.app
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: production
       # Wallet passes are off: none of their settings are given.
 
   # Secrets shared by the api and the worker.
@@ -182,6 +192,13 @@ envVarGroups:
       - key: CONTACT_DATA_KEY
         sync: false
       - key: CONTACT_DATA_KEY_PREVIOUS
+        sync: false
+      # The Cloudflare Access service token the telemetry collector's tunnel
+      # asks for, as two headers:
+      # CF-Access-Client-Id=...,CF-Access-Client-Secret=... (docs/operations.md,
+      # "Telemetry"). Entered by hand in the dashboard; never logged. Without
+      # it the collector answers 403, which is warned about and nothing more.
+      - key: OTEL_EXPORTER_OTLP_HEADERS
         sync: false
 
 services:

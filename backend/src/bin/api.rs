@@ -6,16 +6,18 @@ use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::ApiConfig;
 use yuppers_backend::contact::{self, store};
 use yuppers_backend::domain::Rules;
+use yuppers_backend::funnel::funnel;
 use yuppers_backend::http::{self, AppState, Settings, WebApp};
 use yuppers_backend::metrics::{self, HttpMetrics, Text};
 use yuppers_backend::notifications::outbox::DeliveryRules;
 use yuppers_backend::notifications::sms_updates;
+use yuppers_backend::otel::MetricsSource;
 use yuppers_backend::wallet::Wallet;
 use yuppers_backend::{db, shutdown, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    telemetry::init()?;
+    let telemetry = telemetry::init("api")?;
     BuildInfo::current().log_start("api");
     let config = ApiConfig::from_env()?;
     if !config.proxies.trusts_a_header() {
@@ -123,19 +125,22 @@ async fn main() -> anyhow::Result<()> {
         None => None,
     };
 
-    // On a listener of its own, and only when asked for (docs/operations.md).
-    if let Some(addr) = config.metrics_addr {
+    // The metrics page: served on a listener of its own when asked for
+    // (docs/operations.md, "Metrics"), and pushed to the OpenTelemetry
+    // collector when one is configured ("Telemetry"). One page, two ways.
+    let page: MetricsSource = {
         let (requests, db) = (state.metrics.clone(), state.db.clone());
         let wallet = wallet.clone();
         let max_attempts = DeliveryRules::default().max_attempts;
         // Text messages are counted only while they are sent.
         let sms_cap = (sms || config.sms_codes).then_some(sms_cap);
-        metrics::serve(addr, move || {
+        Arc::new(move || {
             let (requests, db, wallet) = (requests.clone(), db.clone(), wallet.clone());
-            async move {
+            Box::pin(async move {
                 let mut text = Text::new();
                 BuildInfo::current().render_metrics(&mut text);
                 requests.render(&mut text);
+                funnel().render(&mut text);
                 wallet.render_metrics(&mut text);
                 metrics::render_pool(&mut text, &db);
                 metrics::render_outbox(&mut text, &db, max_attempts).await;
@@ -143,11 +148,19 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(cap) = sms_cap {
                     metrics::render_sms(&mut text, &db, cap).await;
                 }
-                text.finish()
-            }
+                text
+            })
+        })
+    };
+    if let Some(addr) = config.metrics_addr {
+        let page = page.clone();
+        metrics::serve(addr, move || {
+            let page = page.clone();
+            async move { page().await.finish() }
         })
         .await?;
     }
+    telemetry.metrics_from(page);
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "api listening");
@@ -162,5 +175,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("api shutting down");
         })
         .await?;
+    // The last requests' spans and lines go out before the process does.
+    telemetry.shutdown().await;
     Ok(())
 }

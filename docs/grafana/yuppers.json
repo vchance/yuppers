@@ -1,0 +1,505 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "Yuppers: funnel and request health",
+  "uid": "yuppers-funnel",
+  "description": "The product funnel and the service's health, from the metrics the api and the worker push over OTLP (docs/operations.md, \"Telemetry\" and \"Metrics\"). Expects the otel-lgtm stack's Prometheus data source (uid prometheus).",
+  "tags": ["yuppers"],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-7d", "to": "now" },
+  "timezone": "utc",
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(yuppers_build_info, deployment_environment)",
+        "definition": "label_values(yuppers_build_info, deployment_environment)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Funnel, over the time range shown",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100
+    },
+    {
+      "type": "stat",
+      "title": "Accounts created",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(yuppers_accounts_created_total{deployment_environment=~\"$environment\"}[$__range]))"
+        }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Yups created",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(yuppers_yups_created_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Invitations shared",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(yuppers_invitations_shared_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Invitations claimed",
+      "id": 4,
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(yuppers_invitations_claimed_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Agreements in force",
+      "id": 5,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(yuppers_agreements_in_force_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Agreements completed",
+      "id": 6,
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(yuppers_agreements_closed_total{deployment_environment=~\"$environment\", outcome=\"completed\"}[$__range]))" }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "bargauge",
+      "title": "The funnel, step by step",
+      "description": "Each step over the time range shown. An ordered scale: the ramp darkens down the funnel.",
+      "id": 7,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "Yups created", "expr": "sum(increase(yuppers_yups_created_total{deployment_environment=~\"$environment\"}[$__range]))" },
+        { "refId": "B", "legendFormat": "Invitations shared", "expr": "sum(increase(yuppers_invitations_shared_total{deployment_environment=~\"$environment\"}[$__range]))" },
+        { "refId": "C", "legendFormat": "Invitations claimed", "expr": "sum(increase(yuppers_invitations_claimed_total{deployment_environment=~\"$environment\"}[$__range]))" },
+        { "refId": "D", "legendFormat": "Agreements in force", "expr": "sum(increase(yuppers_agreements_in_force_total{deployment_environment=~\"$environment\"}[$__range]))" },
+        { "refId": "E", "legendFormat": "Agreements completed", "expr": "sum(increase(yuppers_agreements_closed_total{deployment_environment=~\"$environment\", outcome=\"completed\"}[$__range]))" }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "min": 0, "color": { "mode": "fixed", "fixedColor": "#5598e7" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Yups created" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } }] },
+          { "matcher": { "id": "byName", "options": "Invitations shared" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#5598e7" } }] },
+          { "matcher": { "id": "byName", "options": "Invitations claimed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }] },
+          { "matcher": { "id": "byName", "options": "Agreements in force" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1c5cab" } }] },
+          { "matcher": { "id": "byName", "options": "Agreements completed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#184f95" } }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Steps per hour",
+      "description": "How each step moves through the range, an hour at a time.",
+      "id": 8,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "Yups created", "expr": "sum(increase(yuppers_yups_created_total{deployment_environment=~\"$environment\"}[1h]))" },
+        { "refId": "B", "legendFormat": "Invitations shared", "expr": "sum(increase(yuppers_invitations_shared_total{deployment_environment=~\"$environment\"}[1h]))" },
+        { "refId": "C", "legendFormat": "Invitations claimed", "expr": "sum(increase(yuppers_invitations_claimed_total{deployment_environment=~\"$environment\"}[1h]))" },
+        { "refId": "D", "legendFormat": "Agreements in force", "expr": "sum(increase(yuppers_agreements_in_force_total{deployment_environment=~\"$environment\"}[1h]))" },
+        { "refId": "E", "legendFormat": "Agreements completed", "expr": "sum(increase(yuppers_agreements_closed_total{deployment_environment=~\"$environment\", outcome=\"completed\"}[1h]))" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "pointSize": 4, "showPoints": "never", "spanNulls": false, "gradientMode": "none", "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Yups created" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "Invitations shared" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "Invitations claimed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "Agreements in force" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "Agreements completed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Daily snapshot: the previous UTC day, from the database",
+      "description": "Taken by the worker once a day, so a deploy that starts the counters again loses nothing. Each point is one day's count.",
+      "id": 9,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "Yups created", "expr": "max(yuppers_daily_yups_created{deployment_environment=~\"$environment\"})" },
+        { "refId": "B", "legendFormat": "Invitations shared", "expr": "max(yuppers_daily_invitations_shared{deployment_environment=~\"$environment\"})" },
+        { "refId": "C", "legendFormat": "Invitations claimed", "expr": "max(yuppers_daily_invitations_claimed{deployment_environment=~\"$environment\"})" },
+        { "refId": "D", "legendFormat": "Agreements in force", "expr": "max(yuppers_daily_agreements_in_force{deployment_environment=~\"$environment\"})" },
+        { "refId": "E", "legendFormat": "Agreements completed", "expr": "max(yuppers_daily_agreements_completed{deployment_environment=~\"$environment\"})" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "spanNulls": true, "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Yups created" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "Invitations shared" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "Invitations claimed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "Agreements in force" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "Agreements completed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] }
+        ]
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Closed, by outcome",
+      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{outcome}}", "expr": "sum by (outcome) (increase(yuppers_agreements_closed_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": {
+        "orientation": "horizontal", "displayMode": "basic", "showUnfilled": true, "valueMode": "color", "namePlacement": "left", "sizing": "auto", "minVizWidth": 8, "minVizHeight": 16,
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0, "color": { "mode": "fixed", "fixedColor": "#3987e5" } }, "overrides": [] }
+    },
+    {
+      "type": "row",
+      "title": "Requests",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+      "id": 101
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests per second, by status class",
+      "id": 11,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (rate(yuppers_http_requests_total{deployment_environment=~\"$environment\"}[$__rate_interval]))" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps", "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "2xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "3xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "4xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "5xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] },
+          { "matcher": { "id": "byName", "options": "1xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#898781" } }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency, p50 / p95 / p99",
+      "description": "Over every route. The 95th percentile above 500 ms for a route is worth a look (docs/operations.md, \"What to watch\").",
+      "id": 12,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(yuppers_http_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))" },
+        { "refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(yuppers_http_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))" },
+        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum by (le) (rate(yuppers_http_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p50" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } }] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "p99" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1c5cab" } }] }
+        ]
+      }
+    },
+    {
+      "type": "stat",
+      "title": "5xx, share of requests (5 min)",
+      "id": 13,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(yuppers_http_requests_total{deployment_environment=~\"$environment\", status=\"5xx\"}[5m])) / sum(rate(yuppers_http_requests_total{deployment_environment=~\"$environment\"}[5m]))" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit", "decimals": 2, "noValue": "0%",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "#0ca30c", "value": null }, { "color": "#d03b3b", "value": 0.01 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Worker: seconds since its last pass",
+      "description": "Above 60 the worker is down or stuck (docs/operations.md, \"When the worker is down\").",
+      "id": 14,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "time() - max(yuppers_worker_last_pass_timestamp_seconds{deployment_environment=~\"$environment\"})" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 30 }, { "color": "#d03b3b", "value": 60 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Outbox: oldest pending, age",
+      "id": 15,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max(yuppers_outbox_oldest_pending_age_seconds{deployment_environment=~\"$environment\"})" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "#0ca30c", "value": null }, { "color": "#d03b3b", "value": 600 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Outbox: given up",
+      "id": 16,
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max(yuppers_outbox_messages{deployment_environment=~\"$environment\", state=\"given_up\"})" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "#0ca30c", "value": null }, { "color": "#d03b3b", "value": 1 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Reports waiting for review",
+      "description": "Every report is reviewed within 24 hours; the oldest's age is in the tooltip of yuppers_reports_oldest_open_age_seconds.",
+      "id": 17,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max(yuppers_reports_open{deployment_environment=~\"$environment\"})" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 1 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Telemetry: records dropped",
+      "description": "Spans and log records not exported over the range: the collector refused them or the buffer was full.",
+      "id": 18,
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(yuppers_telemetry_dropped_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 1 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "title": "Routes: requests and p95 latency over the range",
+      "id": 19,
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 34 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "format": "table", "instant": true, "expr": "sum by (route, method) (increase(yuppers_http_requests_total{deployment_environment=~\"$environment\"}[$__range]))" },
+        { "refId": "B", "format": "table", "instant": true, "expr": "histogram_quantile(0.95, sum by (le, route, method) (rate(yuppers_http_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__range])))" },
+        { "refId": "C", "format": "table", "instant": true, "expr": "sum by (route, method) (increase(yuppers_http_requests_total{deployment_environment=~\"$environment\", status=\"5xx\"}[$__range]))" }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "route", "mode": "outer" } },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time 1": true, "Time 2": true, "Time 3": true, "method 2": true, "method 3": true },
+            "renameByName": { "method 1": "Method", "route": "Route", "Value #A": "Requests", "Value #B": "p95 (s)", "Value #C": "5xx" }
+          }
+        },
+        { "id": "sortBy", "options": { "sort": [{ "field": "Requests", "desc": true }] } }
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Requests" }, "properties": [{ "id": "decimals", "value": 0 }] },
+          { "matcher": { "id": "byName", "options": "5xx" }, "properties": [{ "id": "decimals", "value": 0 }] },
+          { "matcher": { "id": "byName", "options": "p95 (s)" }, "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 3 }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Database pool: connections in use, against the limit",
+      "id": 20,
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 34 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service_name}} in use", "expr": "max by (service_name) (yuppers_db_pool_in_use{deployment_environment=~\"$environment\"})" },
+        { "refId": "B", "legendFormat": "limit", "expr": "max(yuppers_db_pool_max{deployment_environment=~\"$environment\"})" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "yuppers-api in use" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "yuppers-worker in use" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "limit" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#898781" } }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }] }
+        ]
+      }
+    },
+    {
+      "type": "row",
+      "title": "Messages",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 },
+      "id": 102
+    },
+    {
+      "type": "timeseries",
+      "title": "Sent per hour: codes, texts, emails",
+      "id": 21,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "codes by email", "expr": "sum(increase(yuppers_codes_sent_total{deployment_environment=~\"$environment\", channel=\"email\"}[1h]))" },
+        { "refId": "B", "legendFormat": "codes by phone", "expr": "sum(increase(yuppers_codes_sent_total{deployment_environment=~\"$environment\", channel=\"phone\"}[1h]))" },
+        { "refId": "C", "legendFormat": "update texts", "expr": "sum(increase(yuppers_texts_sent_total{deployment_environment=~\"$environment\"}[1h]))" },
+        { "refId": "D", "legendFormat": "emails", "expr": "sum(increase(yuppers_emails_sent_total{deployment_environment=~\"$environment\"}[1h]))" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "codes by email" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "codes by phone" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "update texts" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "emails" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] }
+        ]
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Text messages this hour, against the cap",
+      "description": "Codes by Twilio Verify and update texts together; each is paid for (docs/operations.md, \"Text messages, which cost money\").",
+      "id": 22,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{result}}", "expr": "max by (result) (yuppers_sms_codes_this_hour{deployment_environment=~\"$environment\"})" },
+        { "refId": "B", "legendFormat": "cap", "expr": "max(yuppers_sms_codes_hourly_cap{deployment_environment=~\"$environment\"})" }
+      ],
+      "options": {
+        "orientation": "horizontal", "displayMode": "basic", "showUnfilled": true, "valueMode": "color", "namePlacement": "left", "sizing": "auto", "minVizWidth": 8, "minVizHeight": 16,
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "min": 0, "color": { "mode": "fixed", "fixedColor": "#3987e5" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "cap" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#898781" } }] },
+          { "matcher": { "id": "byName", "options": "refused" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#fab219" } }] },
+          { "matcher": { "id": "byName", "options": "failed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      }
+    }
+  ]
+}

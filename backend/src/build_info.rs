@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::metrics::{Kind, Text};
+use crate::metrics::{BUILD_INFO, Kind, Text};
 
 /// What a commit or time is shown as when the build does not say.
 pub const UNKNOWN: &str = "unknown";
@@ -118,12 +118,12 @@ impl BuildInfo {
     /// beside the numbers it produced.
     pub fn render_metrics(&self, text: &mut Text) {
         text.family(
-            "yuppers_build_info",
+            BUILD_INFO,
             Kind::Gauge,
             "The running build: package version and git commit. Always 1.",
         );
         text.sample(
-            "yuppers_build_info",
+            BUILD_INFO,
             &[("version", self.version), ("commit", self.commit())],
             1.0,
         );

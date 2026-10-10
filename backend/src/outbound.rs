@@ -21,6 +21,9 @@ use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client as HyperClient;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
+use tracing::Instrument;
+
+use crate::otel::{SpanExt, SpanKind};
 
 /// The most of an answer that is read. The providers' answers are a few
 /// kilobytes; anything far larger is not one of them.
@@ -72,7 +75,42 @@ impl Client {
     /// POSTs `body` to `url` with the given headers, and reads the answer.
     /// An error says what went wrong in general terms and never quotes the
     /// URL's query, the headers or either body.
+    ///
+    /// In a span of its own (`crate::otel`): the provider's host, the
+    /// method and the status it answered with, nothing of the path, which
+    /// can name an account at the provider, nor of the bodies.
     pub async fn post(
+        &self,
+        url: &str,
+        headers: &[(header::HeaderName, HeaderValue)],
+        body: Vec<u8>,
+    ) -> anyhow::Result<Answer> {
+        let span = tracing::info_span!("provider request");
+        span.otel_kind(SpanKind::Client);
+        span.otel_attr("http.request.method", "POST");
+        if let Some(host) = url
+            .parse::<hyper::Uri>()
+            .ok()
+            .and_then(|uri| uri.host().map(str::to_owned))
+        {
+            span.otel_attr("server.address", host);
+        }
+        let answer = self.send(url, headers, body).instrument(span.clone()).await;
+        match &answer {
+            Ok(answer) => {
+                span.otel_attr("http.response.status_code", answer.status.as_u16());
+                if answer.status.is_server_error() {
+                    span.otel_error();
+                }
+            }
+            Err(_) => span.otel_error(),
+        }
+        answer
+    }
+
+    /// [`post`](Self::post) without the span: what the telemetry exporter
+    /// uses, so that exporting is not itself something to export.
+    pub(crate) async fn send(
         &self,
         url: &str,
         headers: &[(header::HeaderName, HeaderValue)],

@@ -21,7 +21,8 @@ use crate::build_info::{self, BuildInfo};
 use crate::client_version::{self, MinimumClientVersions};
 use crate::domain::Rules;
 use crate::error::{ErrorBody, ErrorCode};
-use crate::metrics::HttpMetrics;
+use crate::metrics::{self, HttpMetrics};
+use crate::otel::{self, SpanExt, SpanKind};
 use crate::wallet::{Wallet, WalletPlatform};
 
 pub mod account;
@@ -160,10 +161,14 @@ pub fn request_id(headers: &HeaderMap) -> String {
 /// line when it is answered, and counts it.
 ///
 /// The span holds the method, the path and the request ID, so every line
-/// logged while the request is handled carries them. The path only: a query
-/// string could carry something a person typed, and never belongs in a log.
-/// Nor does anything else from the request or the response: no body, no
-/// other header, no token, no cookie.
+/// logged while the request is handled carries them, and the trace and
+/// span IDs (`crate::otel`), so a line and the exported trace can be put
+/// together. The path only: a query string could carry something a person
+/// typed, and never belongs in a log. Nor does anything else from the
+/// request or the response: no body, no other header, no token, no cookie.
+///
+/// Exported, the span is `GET /v1/exchanges/{id}`: the method and the
+/// route's template, with the status it answered, never the path itself.
 async fn observe(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let started = Instant::now();
     let id = request_id(request.headers());
@@ -178,12 +183,22 @@ async fn observe(State(state): State<AppState>, request: Request, next: Next) ->
         Some(route) if route.starts_with(wallet::DEVICE_ROUTES) => route.as_str(),
         _ => request.uri().path(),
     };
+    // Every request is a trace of its own: no client or proxy upstream
+    // traces, so none is believed about where a trace began.
+    let ids = otel::Ids::new();
     let span = tracing::info_span!(
         "request",
         method = %method,
         path = path,
         request_id = %id,
+        trace_id = %ids.trace_hex(),
+        span_id = %ids.span_hex(),
     );
+    let template = route.as_deref().unwrap_or(metrics::UNMATCHED);
+    span.otel_name(format!("{method} {template}"));
+    span.otel_kind(SpanKind::Server);
+    span.otel_attr("http.request.method", method.as_str().to_owned());
+    span.otel_attr("http.route", template.to_owned());
 
     let mut response = next.run(request).instrument(span.clone()).await;
 
@@ -192,6 +207,10 @@ async fn observe(State(state): State<AppState>, request: Request, next: Next) ->
     state
         .metrics
         .observe(&method, route.as_deref(), status, elapsed);
+    span.otel_attr("http.response.status_code", status.as_u16());
+    if status.is_server_error() {
+        span.otel_error();
+    }
     // To the microsecond: most requests take less than a millisecond.
     let latency_ms = elapsed.as_micros() as f64 / 1000.0;
     span.in_scope(|| {

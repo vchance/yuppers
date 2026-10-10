@@ -99,6 +99,17 @@ pub async fn texting(database: &'static str) -> Texting {
 }
 
 impl Texting {
+    /// Every code sent so far, by email or by text.
+    pub fn codes(&self) -> Vec<String> {
+        let by_email = self.mailbox.0.lock().unwrap();
+        let by_text = self.verify.0.lock().unwrap();
+        by_email
+            .iter()
+            .map(|(_, code)| code.clone())
+            .chain(by_text.iter().map(|(.., code)| code.clone()))
+            .collect()
+    }
+
     /// The latest code sent to an identifier, by email or by text.
     pub fn code(&self, to: &str) -> String {
         let by_email = self

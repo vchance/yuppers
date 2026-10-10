@@ -103,7 +103,7 @@ Every build carries the git commit it was made from and when it was made (the im
 
 ## Logs
 
-Every process writes to standard output, one line per event. `LOG_FORMAT=text` (the default) is for reading; `LOG_FORMAT=json` writes one JSON object per line: `timestamp`, `level`, `target`, `message`, the event's own fields, and for anything logged while handling a request, `span` with that request's `method`, `path` and `request_id`.
+Every process writes to standard output, one line per event. `LOG_FORMAT=text` (the default) is for reading; `LOG_FORMAT=json` writes one JSON object per line: `timestamp`, `level`, `target`, `message`, the event's own fields, and for anything logged while handling a request, `span` with that request's `method`, `path`, `request_id`, `trace_id` and `span_id` (the trace's identifiers, the same ones the exported trace has; "Telemetry" below). In the worker, a line logged by a job carries `span` with the `job` (`timers`, `reminders`, `notifications`, ...) and the pass's `trace_id`.
 
 Each request writes one line when it is answered, `request completed`, with:
 
@@ -113,6 +113,7 @@ Each request writes one line when it is answered, `request completed`, with:
 | `status` | The status code returned |
 | `latency_ms` | Time to answer, in milliseconds to the microsecond |
 | `request_id` | `X-Request-Id` from the request if it is 1 to 64 letters, digits, `-`, `_` or `.`; otherwise a new UUID. Returned in the response's `X-Request-Id`, and on every other line logged for that request |
+| `trace_id`, `span_id` | The request's trace (32 hexadecimal characters) and its span (16), made by the service for each request; no client's or proxy's trace header is believed. In Grafana, the trace by that ID is the same request |
 
 A proxy that sets its own request ID ties its logs to the service's that way.
 
@@ -126,7 +127,31 @@ Useful lines besides requests: `api listening`, `worker started`, `worker shutti
 
 ## Metrics
 
-Off unless `METRICS_ADDR` is set. Then the process serves `GET /metrics` in the Prometheus text format on that address, a listener of its own: it is never on the API's port, so publishing the API cannot publish the metrics by accident. Keep the metrics port on the private network, reachable only by the scraper. The api and the worker each have their own; a scraper collects both.
+Off unless `METRICS_ADDR` is set. Then the process serves `GET /metrics` in the Prometheus text format on that address, a listener of its own: it is never on the API's port, so publishing the API cannot publish the metrics by accident. Keep the metrics port on the private network, reachable only by the scraper. The api and the worker each have their own; a scraper collects both. The same page is pushed to an OpenTelemetry collector every fifteen seconds when one is configured ("Telemetry" below): the names below are what Prometheus shows either way (over OTLP a metric travels under its OpenTelemetry name, `yuppers.http.requests` with the unit `{request}`, and the collector derives the name below from it).
+
+From both, the **funnel** (`backend/src/funnel.rs`): each step counted where it happens, since the process started. No label names a person or an exchange.
+
+| Metric | Type | Labels |
+|---|---|---|
+| `yuppers_accounts_created_total` | counter | `channel`: `email`, `phone`. A first sign-in made an account (the api) |
+| `yuppers_yups_created_total` | counter | A first proposal was sent, opening a negotiation |
+| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`) |
+| `yuppers_invitations_claimed_total` | counter | The other party opened and claimed an invitation |
+| `yuppers_agreements_in_force_total` | counter | Both signed, the first time an exchange came into force (an amendment in force is not another) |
+| `yuppers_contributions_confirmed_total`, `yuppers_contributions_disputed_total` | counter | A recipient confirmed a delivery; a party disputed a contribution |
+| `yuppers_agreements_closed_total` | counter | `outcome`: `withdrawn`, `declined`, `expired`, `discarded` (nothing was agreed), `completed`, `ended_by_agreement`, `unresolved_close_request`, `unresolved_inactive`. The timers' closures count in the worker, the parties' in the api |
+| `yuppers_codes_sent_total` | counter | `channel`: `email`, `phone`. One-time codes handed to a provider (the api) |
+| `yuppers_texts_sent_total` | counter | Agreement updates sent by text (the worker) |
+| `yuppers_emails_sent_total` | counter | `kind`: `notice` (about an exchange, reminders included), `account` (a report to review, accounts combined). Emails the worker sent from the outbox; codes count under `yuppers_codes_sent_total` |
+
+From the worker, the funnel's **daily snapshot**: the previous UTC day's counts, read from the database once a day (on the worker's first pass, then after each midnight UTC; the `funnel snapshot` log line carries the same numbers), so that a deploy, which starts the counters above again, loses nothing. Aggregate counts only.
+
+| Metric | Type | |
+|---|---|---|
+| `yuppers_daily_yups_created` | gauge | first proposals sent that day (an exchange's first `REVISION_SENT` event) |
+| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on, and claimed, that day |
+| `yuppers_daily_agreements_in_force` | gauge | agreements that first came into force that day |
+| `yuppers_daily_agreements_completed` | gauge | agreements closed as completed that day |
 
 From the api:
 
@@ -174,6 +199,24 @@ From both, read from the database at each scrape (so they are right however many
 | `yuppers_reports_open` | gauge | abuse reports waiting for review ("Reviewing reports") |
 | `yuppers_reports_oldest_open_age_seconds` | gauge | how long the oldest open report has waited since it was made; 0 when none |
 
+## Telemetry
+
+Off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Then the api and the worker each push three signals to that OpenTelemetry collector over OTLP/HTTP with the JSON encoding (`backend/src/otel.rs`), with the same conventions as the owner's other services, so one Grafana shows them all alike:
+
+- **Traces.** A span per request, named `GET /v1/exchanges/{id}` (the method and the route's template, `unmatched` for the web app's pages), with `http.request.method`, `http.route`, `http.response.status_code` and `request_id`; within it, a span per database operation (`exchange.load`, `exchange.view`, `exchange.persist`, `revision.insert`, with `db.system.name` and `db.operation.name`, never the SQL) and per provider request (`provider request`, with the provider's host, the method and the status; never the path or the bodies). The worker makes a trace per pass, `worker pass`, with a span per job (`worker timers`, `worker notifications`, ...). A span whose request answered 5xx, whose provider could not be reached, or in which an error was logged has the error status. Trace IDs are the service's own, never taken from a client or a proxy.
+- **Logs.** Every line the process writes to standard output (at the level `RUST_LOG` allows) as a log record, with the same fields as attributes, `target`, the severity, and the trace and span it happened in, so a line and its trace find each other in Grafana (Loki's `trace_id` to Tempo).
+- **Metrics.** The page `METRICS_ADDR` would serve ("Metrics" above), every fifteen seconds, cumulative since the process started, under the OpenTelemetry names (`yuppers.http.requests`, unit `{request}`; `yuppers.http.request.duration`, unit `s`); the collector gives them the Prometheus names listed above. Plus `yuppers_telemetry_dropped_total{signal}`: spans or log records not exported because the buffer was full or the collector refused them.
+
+Every signal carries the resource `service.name` (`yuppers-api`, `yuppers-worker`, or `OTEL_SERVICE_NAME`), `service.namespace=yuppers`, `service.version` (the crate's), `service.instance.id` (Render's instance ID, else the host name, else random), `deployment.environment` (`DEPLOYMENT_ENVIRONMENT`: `production`, `development` by default) and `vcs.commit` (the build's commit, when known), merged with `OTEL_RESOURCE_ATTRIBUTES`. `OTEL_EXPORTER_OTLP_HEADERS` (`Name=value,Name=value`) goes with every request, which is how a collector behind a Cloudflare Tunnel is passed: `CF-Access-Client-Id=...,CF-Access-Client-Secret=...`. Only `http/json` is spoken: `OTEL_EXPORTER_OTLP_PROTOCOL` set to anything else stops the process at start.
+
+**What is never exported** is what is never logged: the rule for a log line ("Logs" above) is the rule for a span attribute and a log record, decided where each is written. No request or response body, no query string, no header, no token, no one-time code, no email address, no phone number, no payment option. The one field a request's log line has that its span does not is `path`, which can name an exchange; the span has the route's template instead. `backend/tests/telemetry.rs` exports a sign-in, a yup from its draft to an agreement in force with payment options shown, and two people's whole life with text updates, STOP and START replies and a deletion by text, to a stand-in collector, and checks that none of their addresses, numbers, codes, tokens, cookies, invitation tokens or payment options is anywhere in what arrived, in any signal.
+
+**Cost and failure.** Recording is a push onto a bounded buffer (4,096 spans, 4,096 log records); exporting happens on a task of its own, every two seconds, 256 records to a POST, metrics every fifteen seconds. A collector that is slow, down or refusing costs the records of that interval, counted in `yuppers_telemetry_dropped_total`, and one `telemetry export failed` warning (with the signal and the status, never the headers), then at most one every five minutes; `telemetry export recovered` when it answers again. Nothing waits for it: a request is not slower and readiness is not affected, and the test above covers both with a collector that cannot be reached. On SIGTERM each process sends what is buffered, within five seconds, before it exits; `migrate` and `replay-deletions` do the same at their end, so a one-off command's lines arrive too.
+
+**Locally**, against the `grafana/otel-lgtm` image (OTLP on 4318, Grafana on 3000, `admin`/`admin`): `docker run --rm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm`, then `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 cargo run --bin api` and the same for the worker. Grafana's Explore shows the traces (Tempo, service `yuppers-api`), the logs (Loki, `{service_name="yuppers-api"}`) and the metrics (Prometheus, `yuppers_http_requests_total`). **The dashboard**: import `docs/grafana/yuppers.json` (Dashboards → New → Import → upload) into that Grafana, or the owner's; it expects the stack's Prometheus data source (uid `prometheus`) and is built from the metric names above: the funnel for the time range chosen, the previous day's snapshot, request rates and latency, errors, the outbox, the worker's last pass, the messages sent, and what the exporter dropped. It filters by `deployment_environment`, so `development` traffic from a laptop and `production` traffic stay apart.
+
+**In production** the endpoint is `https://otel.yuppers.app`, a Cloudflare Tunnel to the owner's stack; [docs/deploy-render.md](deploy-render.md), "Telemetry", says what is set where. The copy of the logs that reaches it holds nothing personal, like the logs themselves; how long the stack keeps it is the stack's own setting.
+
 ## What to watch
 
 Starting points; tune them once there is real traffic.
@@ -190,6 +233,8 @@ Starting points; tune them once there is real traffic.
 - **Wallet passes**, once on: `wallet pass update given up on` in the worker's log, or rows in `wallet_pass` with `update_status = 'FAILED'` (`last_error` says why; APNs refusing the certificate means it expired or was revoked). And the pass type certificate: `yuppers_wallet_cert_expiry_seconds` below 2,592,000 (30 days) is the cue to renew, and below 604,800 (7 days) is urgent: at 0 every Apple pass stops updating and no new one can be added, though the api and the worker keep running everything else. Renewing takes a new certificate from Apple's developer account and a restart (docs/wallet.md).
 - **Reports.** `yuppers_reports_oldest_open_age_seconds` above 72,000 (20 hours): a report is close to its 24 hours without review; tell whoever is on call. Any open report on a day nobody is named is the same alarm.
 - **Refusals** are not errors: `429` is a limit working (too many codes asked for, too many wrong guesses), and `4xx` in general is a person or a client being told no. Watch them for sudden jumps, not as failures.
+- **Telemetry.** `yuppers_telemetry_dropped_total` growing, or `telemetry export failed` in a log: the collector is down, the tunnel's token has changed, or the service is logging far more than usual. The service itself is unaffected; only the dashboards go stale.
+- **The funnel.** `yuppers_daily_yups_created` at 0 on a day with sign-ins, or `yuppers_invitations_claimed_total` not moving while `yuppers_invitations_shared_total` does: people share links nobody opens, which is a product question, not an outage, but one the dashboard asks every morning.
 
 ## Reviewing reports
 

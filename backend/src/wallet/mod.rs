@@ -278,7 +278,7 @@ impl Wallet {
     pub fn render_metrics(&self, text: &mut crate::metrics::Text) {
         if let Some(expires) = self.apple_certificate_expires() {
             text.single(
-                "yuppers_wallet_cert_expiry_seconds",
+                crate::metrics::WALLET_CERT_EXPIRY,
                 crate::metrics::Kind::Gauge,
                 "Seconds until the Apple pass type certificate expires; negative once it has, and Apple Wallet passes are then off.",
                 (expires - OffsetDateTime::now_utc()).whole_seconds() as f64,

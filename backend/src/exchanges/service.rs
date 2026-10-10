@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
+use tracing::Instrument;
 use uuid::Uuid;
 
 use super::dto::{
@@ -257,6 +258,17 @@ async fn record_signature(
 }
 
 async fn view(
+    conn: &mut PgConnection,
+    rules: &Rules,
+    id: Uuid,
+    account: Uuid,
+) -> Result<ExchangeView, ApiError> {
+    view_in(conn, rules, id, account)
+        .instrument(crate::db::span("exchange.view"))
+        .await
+}
+
+async fn view_in(
     conn: &mut PgConnection,
     rules: &Rules,
     id: Uuid,
@@ -1152,6 +1164,7 @@ pub async fn invitation_shared(db: &PgPool, session: &Session, id: Uuid) -> Resu
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    crate::funnel::funnel().invitation_shared();
     Ok(())
 }
 

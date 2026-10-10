@@ -1,5 +1,6 @@
-//! What the service writes to its log and counts in its metrics, read back
-//! from a real request (docs/operations.md, "Logs" and "Metrics").
+//! What the service writes to its log, counts in its metrics and exports to
+//! an OpenTelemetry collector, read back from real requests
+//! (docs/operations.md, "Logs", "Metrics" and "Telemetry").
 //!
 //! Needs PostgreSQL and the connection strings from `.env`, like the other
 //! API tests; it gets a database of its own.
@@ -8,15 +9,20 @@ mod common;
 
 use std::io::Write;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use axum::http::{Method, StatusCode};
+use axum::Router;
+use axum::body::Bytes;
+use axum::extract::State;
+use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use common::App;
 use serde_json::{Value, json};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
-use yuppers_backend::auth::{CodeMessage, CodeSender, SendFuture};
-use yuppers_backend::domain::Rules;
+use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture};
+use yuppers_backend::funnel::funnel;
 use yuppers_backend::metrics::Text;
+use yuppers_backend::otel::{self, Config};
 use yuppers_backend::telemetry::{self, LogFormat};
 
 /// Every test here takes turns. A log subscriber set for one test's thread
@@ -25,6 +31,15 @@ use yuppers_backend::telemetry::{self, LogFormat};
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 const DATABASE: &str = "yuppers_test_telemetry";
+
+/// Sign-in rules that never refuse a code: every test here asks from the one
+/// test address, and the whole life of two people asks for many.
+fn generous() -> AuthRules {
+    AuthRules {
+        code_requests_per_address_per_hour: 1_000_000,
+        ..AuthRules::default()
+    }
+}
 
 /// Keeps the codes the service "sent", without logging them.
 #[derive(Default)]
@@ -210,11 +225,23 @@ fn assert_nothing_personal(log: &str, secrets: &Secrets, format: LogFormat) {
         assert!(!log.contains(value), "the log holds the {what}:\n{log}");
     }
     for line in log.lines() {
+        // Without the timestamp, and without the trace and span IDs, which
+        // are random hexadecimal that a code could match by chance too.
         let without_time = match format {
-            LogFormat::Text => line.split_once(' ').map_or("", |(_, rest)| rest).to_owned(),
+            LogFormat::Text => line
+                .split_once(' ')
+                .map_or("", |(_, rest)| rest)
+                .split(' ')
+                .filter(|part| !part.starts_with("trace_id=") && !part.starts_with("span_id="))
+                .collect::<Vec<_>>()
+                .join(" "),
             LogFormat::Json => {
                 let mut event: Value = serde_json::from_str(line).unwrap();
                 event.as_object_mut().unwrap().remove("timestamp");
+                if let Some(span) = event["span"].as_object_mut() {
+                    span.remove("trace_id");
+                    span.remove("span_id");
+                }
                 event.to_string()
             }
         };
@@ -227,20 +254,198 @@ fn assert_nothing_personal(log: &str, secrets: &Secrets, format: LogFormat) {
     }
 }
 
+// ---- A collector to export to -------------------------------------------------
+
+/// One request the collector received: the path, the headers and the body.
+#[derive(Clone, Debug)]
+struct Received {
+    path: String,
+    headers: HeaderMap,
+    body: Value,
+}
+
+/// A stand-in for an OTLP/HTTP collector, keeping everything it is sent.
+#[derive(Clone, Default)]
+struct Collector(Arc<Mutex<Vec<Received>>>);
+
+impl Collector {
+    /// Starts listening on a port of its own; the address to export to.
+    async fn start() -> (Self, String) {
+        let collector = Self::default();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let app =
+            Router::new()
+                .fallback(
+                    |State(collector): State<Collector>,
+                     uri: Uri,
+                     headers: HeaderMap,
+                     body: Bytes| async move {
+                        collector.0.lock().unwrap().push(Received {
+                            path: uri.path().to_owned(),
+                            headers,
+                            body: serde_json::from_slice(&body).unwrap_or(Value::Null),
+                        });
+                        (StatusCode::OK, "{}")
+                    },
+                )
+                .with_state(collector.clone());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (collector, address)
+    }
+
+    fn received(&self) -> Vec<Received> {
+        self.0.lock().unwrap().clone()
+    }
+
+    /// The bodies posted to `path`.
+    fn documents(&self, path: &str) -> Vec<Value> {
+        self.received()
+            .into_iter()
+            .filter(|received| received.path == path)
+            .map(|received| received.body)
+            .collect()
+    }
+
+    /// Every span exported.
+    fn spans(&self) -> Vec<Value> {
+        self.documents("/v1/traces")
+            .iter()
+            .flat_map(|document| array(&document["resourceSpans"][0]["scopeSpans"][0]["spans"]))
+            .collect()
+    }
+
+    /// Every log record exported.
+    fn logs(&self) -> Vec<Value> {
+        self.documents("/v1/logs")
+            .iter()
+            .flat_map(|document| array(&document["resourceLogs"][0]["scopeLogs"][0]["logRecords"]))
+            .collect()
+    }
+
+    /// Every metric exported, by name, the last document's value of each.
+    fn metrics(&self) -> Vec<Value> {
+        self.documents("/v1/metrics")
+            .iter()
+            .flat_map(|document| {
+                array(&document["resourceMetrics"][0]["scopeMetrics"][0]["metrics"])
+            })
+            .collect()
+    }
+}
+
+fn array(value: &Value) -> Vec<Value> {
+    value.as_array().cloned().unwrap_or_default()
+}
+
+/// An attribute of a span, record or data point, by key.
+fn attribute(of: &Value, key: &str) -> Option<Value> {
+    array(&of["attributes"])
+        .into_iter()
+        .find(|attribute| attribute["key"] == key)
+        .map(|attribute| attribute["value"].clone())
+}
+
+/// `document` with every timestamp, identifier and measurement taken out,
+/// as text, for scanning: they are digits and hexadecimal a code could
+/// match by chance (the fraction of a latency, the sum of a histogram).
+fn scannable(document: &Value) -> String {
+    fn strip(value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                for key in [
+                    "timeUnixNano",
+                    "startTimeUnixNano",
+                    "endTimeUnixNano",
+                    "observedTimeUnixNano",
+                    "traceId",
+                    "spanId",
+                    "parentSpanId",
+                ] {
+                    object.remove(key);
+                }
+                for key in ["doubleValue", "sum"] {
+                    if object.get(key).is_some_and(Value::is_number) {
+                        object[key] = json!(0);
+                    }
+                }
+                for value in object.values_mut() {
+                    strip(value);
+                }
+            }
+            Value::Array(items) => items.iter_mut().for_each(strip),
+            _ => {}
+        }
+    }
+    let mut copy = document.clone();
+    strip(&mut copy);
+    copy.to_string()
+}
+
+/// A configuration for the collector at `address`, as a deployment would
+/// write it: a service name, an environment and Cloudflare Access's two
+/// headers.
+fn exporting_to(address: &str) -> Config {
+    Config::new(
+        address,
+        vec![
+            ("service.name".to_owned(), "yuppers-api".to_owned()),
+            ("service.namespace".to_owned(), "yuppers".to_owned()),
+            ("deployment.environment".to_owned(), "test".to_owned()),
+        ],
+    )
+    .unwrap()
+    .with_header("CF-Access-Client-Id", "test-client-id.access")
+    .unwrap()
+    .with_header("CF-Access-Client-Secret", "test-client-secret-value")
+    .unwrap()
+    .with_timeout(Duration::from_secs(1))
+}
+
+/// Checks that none of `secrets`, nor any of `codes`, is anywhere in what
+/// the collector received.
+fn assert_nothing_personal_exported(collector: &Collector, secrets: &[&str], codes: &[String]) {
+    let received = collector.received();
+    assert!(!received.is_empty());
+    for document in received {
+        let text = scannable(&document.body);
+        for secret in secrets {
+            assert!(
+                !text.contains(secret),
+                "{} holds {secret:?}:\n{text}",
+                document.path
+            );
+        }
+        for code in codes {
+            assert!(
+                !holds_number(&text, code),
+                "{} holds a one-time code:\n{text}",
+                document.path
+            );
+        }
+    }
+}
+
 async fn signed_in_with_log(format: LogFormat) -> (String, Secrets) {
     let _turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
     // Everything, at every level, so nothing is missed by being quieter
     // than a deployment might set it.
-    let subscriber = telemetry::subscriber(format, EnvFilter::new("trace"), false, move || {
-        writer.clone()
-    });
+    let subscriber = telemetry::subscriber(
+        format,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     // A test runs on one thread, so this holds for everything it does.
     let _guard = tracing::subscriber::set_default(subscriber);
 
     let codes = Arc::new(Codes::default());
-    let app = App::start_sending(DATABASE, Rules::default(), codes.clone()).await;
+    let app = App::start_messaging(DATABASE, generous(), codes.clone(), false).await;
     let secrets = sign_in(&app, &codes).await;
     (log.text(), secrets)
 }
@@ -396,10 +601,13 @@ async fn payment_options_are_never_logged() {
     let _turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Json, EnvFilter::new("trace"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Json,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     let _guard = tracing::subscriber::set_default(subscriber);
 
     let app = App::start(DATABASE).await;
@@ -468,10 +676,13 @@ async fn a_payment_option_copied_into_another_account_fails_closed_and_is_logged
     let _turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Json, EnvFilter::new("trace"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Json,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     let _guard = tracing::subscriber::set_default(subscriber);
 
     let app = App::start(DATABASE).await;
@@ -529,4 +740,450 @@ async fn a_payment_option_copied_into_another_account_fails_closed_and_is_logged
     for value in ["bens-own", "copied-venmo", "copycheck"] {
         assert!(!text.contains(value), "the log holds {value}:\n{text}");
     }
+}
+
+// ---- OpenTelemetry export ------------------------------------------------------
+
+/// A sign-in, a yup from its draft to an agreement in force with the
+/// invitation shared and claimed on the way, and payment options saved:
+/// everything exported arrives at the collector with the resource and the
+/// headers, spans and lines agree on their identifiers, the funnel counts
+/// each step, and nothing personal is in any of it.
+#[tokio::test]
+async fn what_is_exported_carries_the_resource_the_headers_and_nothing_personal() {
+    let _turn = TURN.lock().await;
+    let (collector, address) = Collector::start().await;
+    let (layer, exporter) = otel::start(exporting_to(&address));
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber = telemetry::subscriber(
+        LogFormat::Json,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        Some(layer),
+    );
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let before = funnel().counts();
+
+    let codes = Arc::new(Codes::default());
+    let app = App::start_messaging(DATABASE, generous(), codes.clone(), false).await;
+    let metrics = app.metrics.clone();
+    exporter.metrics_from(Arc::new(move || {
+        let metrics = metrics.clone();
+        Box::pin(async move {
+            let mut text = Text::new();
+            metrics.render(&mut text);
+            funnel().render(&mut text);
+            text
+        })
+    }));
+
+    let secrets = sign_in(&app, &codes).await;
+    // Ana proposes, shares the link, Ben takes it, Ana confirms him, he
+    // signs; Ana saves a payment option and shows it.
+    let deal = app.negotiating().await;
+    let shared = app
+        .post(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/invitation/shared", deal.exchange),
+            json!({}),
+        )
+        .await;
+    assert_eq!(shared.status, StatusCode::NO_CONTENT, "{}", shared.body);
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "CONFIRM_COUNTERPARTY" }),
+    )
+    .await
+    .ok();
+    let view = app
+        .command(&deal.ben, &deal.exchange, common::accept(&deal.revision))
+        .await
+        .ok();
+    assert_eq!(view["state"], "ACTIVE");
+    app.call(
+        Some(&deal.ana),
+        Method::PUT,
+        "/v1/me/payment-handles",
+        Some(json!({ "venmo": "exportcheck-venmo", "zelle": "exportcheck@zelle.test" })),
+        &[],
+    )
+    .await
+    .ok();
+    app.view(&deal.ben, &deal.exchange).await;
+    app.call(None, Method::GET, "/no/such/page", None, &[])
+        .await;
+
+    // Everything buffered goes out at shutdown, the metrics with it.
+    exporter.shutdown().await;
+
+    // Each signal arrived, with the headers on every request.
+    let received = collector.received();
+    for path in ["/v1/traces", "/v1/logs", "/v1/metrics"] {
+        assert!(
+            received.iter().any(|request| request.path == path),
+            "nothing was posted to {path}: {:?}",
+            received.iter().map(|r| r.path.as_str()).collect::<Vec<_>>()
+        );
+    }
+    for request in &received {
+        assert_eq!(
+            request.headers["cf-access-client-id"],
+            "test-client-id.access"
+        );
+        assert_eq!(
+            request.headers["cf-access-client-secret"],
+            "test-client-secret-value"
+        );
+        assert_eq!(request.headers["content-type"], "application/json");
+        let resource = &request.body[match request.path.as_str() {
+            "/v1/traces" => "resourceSpans",
+            "/v1/logs" => "resourceLogs",
+            _ => "resourceMetrics",
+        }][0]["resource"];
+        let attributes: Vec<(String, String)> = array(&resource["attributes"])
+            .iter()
+            .map(|attribute| {
+                (
+                    attribute["key"].as_str().unwrap().to_owned(),
+                    attribute["value"]["stringValue"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                )
+            })
+            .collect();
+        for expected in [
+            ("service.name", "yuppers-api"),
+            ("service.namespace", "yuppers"),
+            ("deployment.environment", "test"),
+        ] {
+            assert!(
+                attributes.contains(&(expected.0.to_owned(), expected.1.to_owned())),
+                "{} lacks {expected:?}: {attributes:?}",
+                request.path
+            );
+        }
+    }
+
+    // The request's span: named by the route, with the status, never the
+    // path; the line about it is in the same trace and span.
+    let spans = collector.spans();
+    let signed_in = spans
+        .iter()
+        .find(|span| span["name"] == "POST /v1/auth/sessions")
+        .unwrap_or_else(|| panic!("{spans:#?}"));
+    assert_eq!(signed_in["kind"], 2, "a server span");
+    assert_eq!(
+        attribute(signed_in, "http.response.status_code"),
+        Some(json!({ "intValue": "200" }))
+    );
+    assert_eq!(
+        attribute(signed_in, "http.route"),
+        Some(json!({ "stringValue": "/v1/auth/sessions" }))
+    );
+    assert_eq!(
+        attribute(signed_in, "http.request.method"),
+        Some(json!({ "stringValue": "POST" }))
+    );
+    assert!(attribute(signed_in, "request_id").is_some());
+    assert_eq!(attribute(signed_in, "path"), None);
+    assert!(signed_in.get("parentSpanId").is_none());
+    assert_eq!(signed_in["traceId"].as_str().unwrap().len(), 32);
+    assert!(signed_in.get("status").is_none(), "{signed_in}");
+    let by_template = spans
+        .iter()
+        .find(|span| span["name"] == "GET /v1/exchanges/{id}")
+        .unwrap_or_else(|| panic!("{spans:#?}"));
+    assert!(
+        !spans.iter().any(|span| {
+            span["name"]
+                .as_str()
+                .is_some_and(|name| name.contains(&deal.exchange))
+        }),
+        "a span names an exchange"
+    );
+    // The database spans: the view, a child of the request's, and the load
+    // within it.
+    let view = spans
+        .iter()
+        .find(|span| {
+            span["name"] == "exchange.view" && span["parentSpanId"] == by_template["spanId"]
+        })
+        .unwrap_or_else(|| panic!("{spans:#?}"));
+    let load = spans
+        .iter()
+        .find(|span| span["name"] == "exchange.load" && span["parentSpanId"] == view["spanId"])
+        .unwrap_or_else(|| panic!("{spans:#?}"));
+    assert_eq!(load["kind"], 3, "a client span");
+    assert_eq!(load["traceId"], by_template["traceId"]);
+    assert_eq!(
+        attribute(load, "db.system.name"),
+        Some(json!({ "stringValue": "postgresql" }))
+    );
+    let unmatched = spans
+        .iter()
+        .find(|span| span["name"] == "GET unmatched")
+        .unwrap_or_else(|| panic!("{spans:#?}"));
+    assert_eq!(
+        attribute(unmatched, "http.response.status_code"),
+        Some(json!({ "intValue": "404" }))
+    );
+
+    let logs = collector.logs();
+    let completed = logs
+        .iter()
+        .find(|record| {
+            record["body"]["stringValue"] == "request completed"
+                && record["traceId"] == signed_in["traceId"]
+        })
+        .unwrap_or_else(|| panic!("{logs:#?}"));
+    assert_eq!(completed["spanId"], signed_in["spanId"]);
+    assert_eq!(completed["severityNumber"], 9);
+    assert_eq!(completed["severityText"], "INFO");
+    assert_eq!(
+        attribute(completed, "status"),
+        Some(json!({ "intValue": "200" }))
+    );
+    assert_eq!(
+        attribute(completed, "method"),
+        Some(json!({ "stringValue": "POST" }))
+    );
+    assert_eq!(
+        attribute(completed, "request_id"),
+        attribute(signed_in, "request_id")
+    );
+    assert!(attribute(completed, "latency_ms").is_some());
+    assert_eq!(attribute(completed, "path"), None);
+    // The same line is on standard output, with the same identifiers.
+    let line = log
+        .text()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|event| {
+            event["message"] == "request completed"
+                && event["span"]["trace_id"] == signed_in["traceId"]
+        })
+        .unwrap_or_else(|| panic!("{}", log.text()));
+    assert_eq!(line["span"]["span_id"], signed_in["spanId"]);
+    assert_eq!(line["span"]["path"], "/v1/auth/sessions");
+
+    // The metrics: requests by route, and the funnel.
+    let metrics = collector.metrics();
+    let metric = |name: &str| {
+        metrics
+            .iter()
+            .rev()
+            .find(|metric| metric["name"] == name)
+            .cloned()
+            .unwrap_or_else(|| panic!("no {name} in {metrics:#?}"))
+    };
+    let requests = metric("yuppers.http.requests");
+    assert_eq!(requests["unit"], "{request}");
+    assert!(
+        array(&requests["sum"]["dataPoints"]).iter().any(|point| {
+            attribute(point, "route") == Some(json!({ "stringValue": "/v1/auth/sessions" }))
+                && attribute(point, "status") == Some(json!({ "stringValue": "2xx" }))
+                && point["asInt"] == "2"
+        }),
+        "{requests:#?}"
+    );
+    assert_eq!(
+        metric("yuppers.http.request.duration")["histogram"]["aggregationTemporality"],
+        2
+    );
+    let value = |name: &str, label: Option<(&str, &str)>| -> u64 {
+        let family = metric(name);
+        let points = array(&family["sum"]["dataPoints"]);
+        let point = points
+            .iter()
+            .find(|point| match label {
+                Some((key, value)) => {
+                    attribute(point, key) == Some(json!({ "stringValue": value }))
+                }
+                None => true,
+            })
+            .unwrap_or_else(|| panic!("{family:#?}"));
+        point["asInt"].as_str().unwrap().parse().unwrap()
+    };
+    let after = funnel().counts();
+    // One sign-in made an account by email; the people of the deal were
+    // made directly. Two codes went by email, one by phone.
+    assert_eq!(after.accounts_email, before.accounts_email + 1);
+    assert_eq!(after.accounts_phone, before.accounts_phone);
+    assert_eq!(after.codes_email, before.codes_email + 2);
+    assert_eq!(after.codes_phone, before.codes_phone + 1);
+    assert_eq!(after.yups_created, before.yups_created + 1);
+    assert_eq!(after.invitations_shared, before.invitations_shared + 1);
+    assert_eq!(after.invitations_claimed, before.invitations_claimed + 1);
+    assert_eq!(after.agreements_in_force, before.agreements_in_force + 1);
+    assert_eq!(after.closed, before.closed);
+    assert_eq!(
+        value("yuppers.accounts.created", Some(("channel", "email"))),
+        after.accounts_email
+    );
+    assert_eq!(
+        value("yuppers.codes.sent", Some(("channel", "phone"))),
+        after.codes_phone
+    );
+    assert_eq!(value("yuppers.yups.created", None), after.yups_created);
+    assert_eq!(
+        value("yuppers.invitations.shared", None),
+        after.invitations_shared
+    );
+    assert_eq!(
+        value("yuppers.invitations.claimed", None),
+        after.invitations_claimed
+    );
+    assert_eq!(
+        value("yuppers.agreements.in_force", None),
+        after.agreements_in_force
+    );
+    assert_eq!(
+        value("yuppers.agreements.closed", Some(("outcome", "completed"))),
+        after.closed[4]
+    );
+    assert_eq!(
+        metric("yuppers.telemetry.dropped")["sum"]["isMonotonic"],
+        true
+    );
+
+    // Nothing personal, in any signal.
+    let local_part = secrets.email.split('@').next().unwrap().to_owned();
+    let phone_digits = secrets.phone.trim_start_matches('+').to_owned();
+    assert_nothing_personal_exported(
+        &collector,
+        &[
+            secrets.email.as_str(),
+            local_part.as_str(),
+            "telemetry-test.invalid",
+            secrets.phone.as_str(),
+            phone_digits.as_str(),
+            secrets.token.as_str(),
+            secrets.cookie.as_str(),
+            deal.invitation.as_str(),
+            deal.ana.email.as_str(),
+            deal.ben.email.as_str(),
+            "exportcheck",
+            &deal.exchange,
+        ],
+        &secrets.codes,
+    );
+}
+
+/// Two people's whole life with the service, texting included: signing in
+/// by email and by phone, an invitation bound to an address, text updates
+/// turned on and STOP and START replied, payment options, combining
+/// accounts, a deletion by a code sent by text. Nothing of theirs is
+/// exported.
+#[tokio::test]
+async fn a_whole_life_with_texting_exports_nothing_personal() {
+    let _turn = TURN.lock().await;
+    let (collector, address) = Collector::start().await;
+    let (layer, exporter) = otel::start(exporting_to(&address));
+    let subscriber = telemetry::subscriber(
+        LogFormat::Json,
+        EnvFilter::new("trace"),
+        false,
+        std::io::sink,
+        Some(layer),
+    );
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let before = funnel().counts();
+
+    let texting = common::texting::texting(DATABASE).await;
+    let secrets = texting.whole_life().await;
+    let codes = texting.codes();
+    assert!(codes.len() >= 8, "{}", codes.len());
+    exporter.shutdown().await;
+
+    let after = funnel().counts();
+    assert!(after.accounts_phone > before.accounts_phone, "{after:?}");
+    assert!(after.codes_phone > before.codes_phone, "{after:?}");
+    let spans = collector.spans();
+    assert!(
+        spans
+            .iter()
+            .any(|span| span["name"] == "POST /v1/sms/inbound"),
+        "{spans:#?}"
+    );
+    let secrets: Vec<&str> = secrets.iter().map(String::as_str).collect();
+    assert_nothing_personal_exported(&collector, &secrets, &codes);
+}
+
+/// A collector that cannot be reached costs the service nothing it would
+/// notice: requests answer as fast, readiness holds, one warning is
+/// written, and shutdown returns within its time limit.
+#[tokio::test]
+async fn an_unreachable_collector_slows_nothing_and_fails_nothing() {
+    let _turn = TURN.lock().await;
+    // A port nothing listens on.
+    let taken = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = format!("http://{}", taken.local_addr().unwrap());
+    drop(taken);
+    let (layer, exporter) = otel::start(exporting_to(&address));
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber = telemetry::subscriber(
+        LogFormat::Text,
+        EnvFilter::new("info"),
+        false,
+        move || writer.clone(),
+        Some(layer),
+    );
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let app = App::start(DATABASE).await;
+    let metrics = app.metrics.clone();
+    exporter.metrics_from(Arc::new(move || {
+        let metrics = metrics.clone();
+        Box::pin(async move {
+            let mut text = Text::new();
+            metrics.render(&mut text);
+            text
+        })
+    }));
+    // Past the first flush, so requests are made while exports fail.
+    tokio::time::sleep(otel::FLUSH_EVERY + Duration::from_millis(200)).await;
+    let ana = app.user("Ana").await;
+    for _ in 0..20 {
+        let started = Instant::now();
+        let reply = app.call(None, Method::GET, "/healthz", None, &[]).await;
+        assert_eq!(reply.status, StatusCode::NO_CONTENT);
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+    let ready = app.call(None, Method::GET, "/readyz", None, &[]).await;
+    assert_eq!(ready.status, StatusCode::NO_CONTENT, "{}", ready.body);
+    let me = app.get(&ana, "/v1/me").await;
+    assert_eq!(me.status, StatusCode::OK);
+
+    let started = Instant::now();
+    exporter.shutdown().await;
+    assert!(
+        started.elapsed() < otel::SHUTDOWN_TIMEOUT + Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+
+    let text = log.text();
+    let warnings = text
+        .lines()
+        .filter(|line| line.contains("telemetry export failed"))
+        .count();
+    assert_eq!(warnings, 1, "once, not once per attempt:\n{text}");
+    assert!(!text.contains("test-client-secret-value"), "{text}");
+    assert!(text.contains("request completed"), "{text}");
 }

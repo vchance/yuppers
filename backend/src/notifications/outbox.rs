@@ -47,6 +47,7 @@ use crate::domain::reminder;
 use crate::domain::revision::ContributionId;
 use crate::error::Redacted;
 use crate::exchanges::reminders;
+use crate::funnel::EmailKind;
 use crate::review;
 
 /// The numbers behind delivery. Placeholders: none of these is a recorded
@@ -399,6 +400,15 @@ async fn deliver_next(
             .execute(&mut *tx)
             .await?;
             delivered.sent += 1;
+            // About the account itself (a report to review, accounts
+            // combined), or about an exchange.
+            let kind =
+                if payload["staff"].is_string() || payload[combine::NOTICE_PAYLOAD].is_number() {
+                    EmailKind::Account
+                } else {
+                    EmailKind::Notice
+                };
+            crate::funnel::funnel().email_sent(kind);
         }
         Attempt::Failed(error) => {
             // Kept short: a provider's error can be a whole page.

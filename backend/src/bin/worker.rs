@@ -2,14 +2,21 @@
 //! purge of old network metadata, of old sign-in limit counts, and of ended
 //! sessions, old idempotency keys and finished notifications
 //! (`yuppers_backend::sweep`; DESIGN.md §13, §14). Runs as its own process so slow jobs never stall requests.
+//!
+//! Every pass over the jobs is a trace of its own, with a span per job
+//! (`yuppers_backend::otel`), so a slow pass can be read job by job.
 
+use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
-use time::OffsetDateTime;
+use sqlx::PgPool;
+use time::{Date, OffsetDateTime};
 use tokio::sync::watch;
+use tokio::time::Interval;
+use tracing::Instrument;
 use yuppers_backend::auth::{purge_one_time_codes, purge_sign_in_limits};
 use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::WorkerConfig;
@@ -18,11 +25,13 @@ use yuppers_backend::domain::Rules;
 use yuppers_backend::error::Redacted;
 use yuppers_backend::exchanges::reminders::run_reminders;
 use yuppers_backend::exchanges::service::{purge_network_metadata, run_timers};
+use yuppers_backend::funnel::{self, funnel};
 use yuppers_backend::metrics::{self, Text, WorkerMetrics};
 use yuppers_backend::notifications::outbox::{self, Delivery, DeliveryRules};
 use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
 use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::wording::Wording;
+use yuppers_backend::otel::{self, MetricsSource, SpanExt};
 use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
 use yuppers_backend::{code_consent, combine, db, shutdown, sweep, telemetry};
 
@@ -30,7 +39,7 @@ const TICK: Duration = Duration::from_secs(5);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    telemetry::init()?;
+    let telemetry = telemetry::init("worker")?;
     BuildInfo::current().log_start("worker");
     let config = WorkerConfig::from_env()?;
     let db = db::pool(&config.database_url)?;
@@ -82,38 +91,44 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     };
-    let receipt_rules = ReceiptRules::default();
-    // When the push service was last asked for receipts.
-    let mut last_receipts: Option<std::time::Instant> = None;
-    // When old working rows were last swept (`sweep::SWEEP_EVERY`).
-    let mut last_sweep: Option<std::time::Instant> = None;
     if push_delivery.sender.is_none() {
         tracing::info!("push notifications are off (PUSH_DELIVERY)");
     }
 
-    // On a listener of its own, and only when asked for (docs/operations.md).
+    // The metrics page: served on a listener of its own when asked for
+    // (docs/operations.md, "Metrics"), and pushed to the OpenTelemetry
+    // collector when one is configured ("Telemetry").
     let metrics = Arc::new(WorkerMetrics::default());
-    if let Some(addr) = config.metrics_addr {
+    let page: MetricsSource = {
         let (jobs, db) = (metrics.clone(), db.clone());
         let max_attempts = delivery.rules.max_attempts;
         let passes = wallet.as_ref().map(|wallet| wallet.wallet.clone());
-        metrics::serve(addr, move || {
+        Arc::new(move || {
             let (jobs, db, passes) = (jobs.clone(), db.clone(), passes.clone());
-            async move {
+            Box::pin(async move {
                 let mut text = Text::new();
                 BuildInfo::current().render_metrics(&mut text);
                 jobs.render(&mut text);
+                funnel().render(&mut text);
                 if let Some(passes) = &passes {
                     passes.render_metrics(&mut text);
                 }
                 metrics::render_pool(&mut text, &db);
                 metrics::render_outbox(&mut text, &db, max_attempts).await;
                 metrics::render_reports(&mut text, &db).await;
-                text.finish()
-            }
+                text
+            })
+        })
+    };
+    if let Some(addr) = config.metrics_addr {
+        let page = page.clone();
+        metrics::serve(addr, move || {
+            let page = page.clone();
+            async move { page().await.finish() }
         })
         .await?;
     }
+    telemetry.metrics_from(page);
 
     let mut ticker = tokio::time::interval(TICK);
     // Set once the process is asked to stop. Delivery looks at it between
@@ -129,229 +144,388 @@ async fn main() -> anyhow::Result<()> {
         });
     }
     tracing::info!("worker started");
-    // Whether the database is known not to be a restored copy waiting for
-    // its deletion log to be replayed. Nothing runs until it is.
-    let mut replay_checked = false;
+
+    let mut worker = Worker {
+        db,
+        rules,
+        delivery,
+        push_delivery,
+        sms_delivery,
+        receipt_rules: ReceiptRules::default(),
+        wallet,
+        metrics,
+        stopping,
+        last_receipts: None,
+        last_sweep: None,
+        replay_checked: false,
+        snapshot_day: None,
+    };
 
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                if !replay_checked {
-                    match db::replay_pending(&db).await {
-                        Ok(true) => anyhow::bail!(db::REPLAY_PENDING),
-                        Ok(false) => replay_checked = true,
-                        Err(error) => {
-                            tracing::error!(
-                                error = %Redacted(&error),
-                                "could not check whether this database waits for a deletion replay; nothing runs until it can"
-                            );
-                            continue;
-                        }
-                    }
-                }
-                let timers = run_timers(&db, &rules, OffsetDateTime::now_utc()).await;
-                metrics.timers(&timers);
-                match timers {
-                    Ok(0) => {}
-                    Ok(changed) => tracing::info!(changed, "timers ran"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "timers failed"),
-                }
-                // After the timers, so an exchange they have just closed is
-                // not reminded of anything.
-                let reminders = run_reminders(&db, &rules, OffsetDateTime::now_utc()).await;
-                metrics.reminders(&reminders);
-                match reminders {
-                    Ok(0) => {}
-                    Ok(reminders) => tracing::info!(reminders, "reminders queued"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "reminders failed"),
-                }
-                match purge_network_metadata(&db, &rules, OffsetDateTime::now_utc()).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "network metadata purged"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "network metadata purge failed"),
-                }
-                match sms_updates::purge_consent(&db, &rules, OffsetDateTime::now_utc()).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "text update consent records past retention removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "consent record purge failed"),
-                }
-                match sms_updates::purge_inbound_seen(&db, OffsetDateTime::now_utc()).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "message IDs of texts received past retention removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "received text ID purge failed"),
-                }
-                match code_consent::purge(&db, &rules, OffsetDateTime::now_utc()).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "code consent records past retention removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "code consent purge failed"),
-                }
-                match purge_sign_in_limits(&db).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "old sign-in limit counts removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "sign-in limit purge failed"),
-                }
-                match purge_one_time_codes(&db).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "one-time codes past use removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "one-time code purge failed"),
-                }
-                match combine::purge(&db).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "old account notices, offers and proofs removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "combine purge failed"),
-                }
-                if last_sweep.is_none_or(|last| last.elapsed() >= sweep::SWEEP_EVERY) {
-                    last_sweep = Some(std::time::Instant::now());
-                    match sweep::sweep(&db, OffsetDateTime::now_utc(), delivery.rules.max_attempts).await {
-                        Ok(swept) if swept.is_empty() => {}
-                        Ok(swept) => tracing::info!(
-                            sessions = swept.sessions,
-                            idempotency_keys = swept.idempotency_keys,
-                            notifications = swept.notifications,
-                            "old sessions, idempotency keys and notifications removed"
-                        ),
-                        Err(error) => tracing::error!(error = %Redacted(&error), "sweep of old rows failed"),
-                    }
-                }
-                // After both, so what they just caused goes out in the same
-                // pass.
-                let delivered = outbox::deliver_due_until(
-                    &db,
-                    &delivery,
-                    OffsetDateTime::now_utc(),
-                    || stopping.load(Ordering::Relaxed),
-                )
-                .await;
-                if let Ok(delivered) = &delivered {
-                    metrics.delivered(delivered);
-                }
-                match delivered {
-                    Ok(delivered) if delivered.is_empty() => {}
-                    Ok(delivered) => {
-                        tracing::info!(
-                            sent = delivered.sent,
-                            failed = delivered.failed,
-                            given_up = delivered.given_up,
-                            dropped = delivered.dropped,
-                            "notifications delivered"
-                        );
-                        // A full batch, or one cut short by its time
-                        // budget, means more may be waiting. Go round again
-                        // now rather than a tick later, so a burst drains as
-                        // fast as it can be sent instead of one batch per
-                        // tick (README, "Load check"). The timers still run
-                        // first on every round.
-                        if delivered.handled() >= delivery.rules.batch || delivered.cut_short {
-                            ticker.reset_immediately();
-                        }
-                    }
-                    Err(error) => tracing::error!(error = %Redacted(&error), "notification delivery failed"),
-                }
-                // The same notices by push, to those with the app.
-                let pushed = push::deliver_push_due_until(
-                    &db,
-                    &push_delivery,
-                    OffsetDateTime::now_utc(),
-                    || stopping.load(Ordering::Relaxed),
-                )
-                .await;
-                if let Ok(pushed) = &pushed {
-                    metrics.pushed(pushed);
-                }
-                match pushed {
-                    Ok(pushed) if pushed.rows.is_empty() => {}
-                    Ok(pushed) => {
-                        tracing::info!(
-                            sent = pushed.rows.sent,
-                            failed = pushed.rows.failed,
-                            given_up = pushed.rows.given_up,
-                            dropped = pushed.rows.dropped,
-                            devices_removed = pushed.devices_removed,
-                            "push notifications delivered"
-                        );
-                        if pushed.rows.handled() >= push_delivery.rules.batch || pushed.rows.cut_short {
-                            ticker.reset_immediately();
-                        }
-                    }
-                    Err(error) => tracing::error!(error = %Redacted(&error), "push delivery failed"),
-                }
-                // Agreement updates by text, to those who turned them on.
-                let texted = sms_updates::deliver_sms_due_until(
-                    &db,
-                    &sms_delivery,
-                    OffsetDateTime::now_utc(),
-                    || stopping.load(Ordering::Relaxed),
-                )
-                .await;
-                match texted {
-                    Ok(texted) if texted.is_empty() => {}
-                    Ok(texted) => {
-                        tracing::info!(
-                            sent = texted.sent,
-                            failed = texted.failed,
-                            given_up = texted.given_up,
-                            dropped = texted.dropped,
-                            "update texts delivered"
-                        );
-                        if texted.handled() >= sms_delivery.rules.batch || texted.cut_short {
-                            ticker.reset_immediately();
-                        }
-                    }
-                    Err(error) => tracing::error!(error = %Redacted(&error), "update text delivery failed"),
-                }
-                let receipts_due = last_receipts
-                    .is_none_or(|last: std::time::Instant| last.elapsed() >= receipt_rules.every);
-                if let Some(sender) = push_delivery.sender.as_ref().filter(|_| receipts_due) {
-                    last_receipts = Some(std::time::Instant::now());
-                    let read = push::check_receipts(
-                        &db,
-                        sender.as_ref(),
-                        &receipt_rules,
-                        OffsetDateTime::now_utc(),
-                    )
-                    .await;
-                    metrics.receipts(&read);
-                    match read {
-                        Ok(read) if read.devices_removed > 0 => tracing::info!(
-                            devices_removed = read.devices_removed,
-                            "push receipts read"
-                        ),
-                        Ok(_) => {}
-                        // The service's own words are never in it.
-                        Err(error) => tracing::warn!(%error, "push receipts could not be read"),
-                    }
-                }
-                match push::purge_devices(&db).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "devices of ended sessions removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "device purge failed"),
-                }
-                // Whether or not receipts can be read, or push is on.
-                match push::purge_tickets(&db, &receipt_rules, OffsetDateTime::now_utc()).await {
-                    Ok(0) => {}
-                    Ok(removed) => tracing::info!(removed, "push tickets past their receipts removed"),
-                    Err(error) => tracing::error!(error = %Redacted(&error), "push ticket purge failed"),
-                }
-                if let Some(wallet) = &wallet {
-                    match deliver_wallet_updates(&db, &rules, wallet, OffsetDateTime::now_utc()).await {
-                        Ok(updated) if updated.handled() == 0 => {}
-                        Ok(updated) => tracing::info!(
-                            sent = updated.sent,
-                            unchanged = updated.unchanged,
-                            failed = updated.failed,
-                            given_up = updated.given_up,
-                            "wallet passes updated"
-                        ),
-                        Err(error) => tracing::error!(error = %Redacted(&error), "wallet pass updates failed"),
-                    }
-                }
-                let now = OffsetDateTime::now_utc().unix_timestamp();
-                metrics.pass_finished(u64::try_from(now).unwrap_or(0));
+                let ids = otel::Ids::new();
+                let span = tracing::info_span!(
+                    "worker pass",
+                    trace_id = %ids.trace_hex(),
+                    span_id = %ids.span_hex(),
+                );
+                worker.pass(&mut ticker, &ids).instrument(span).await?;
             }
             _ = stop_rx.wait_for(|stop| *stop) => {
                 tracing::info!("worker shutting down");
+                telemetry.shutdown().await;
                 return Ok(());
             }
         }
+    }
+}
+
+/// Everything a pass over the jobs needs, and what the last passes left.
+struct Worker {
+    db: PgPool,
+    rules: Rules,
+    delivery: Delivery,
+    push_delivery: PushDelivery,
+    sms_delivery: SmsDelivery,
+    receipt_rules: ReceiptRules,
+    wallet: Option<WalletDelivery>,
+    metrics: Arc<WorkerMetrics>,
+    stopping: Arc<AtomicBool>,
+    /// When the push service was last asked for receipts.
+    last_receipts: Option<Instant>,
+    /// When old working rows were last swept (`sweep::SWEEP_EVERY`).
+    last_sweep: Option<Instant>,
+    /// Whether the database is known not to be a restored copy waiting for
+    /// its deletion log to be replayed. Nothing runs until it is.
+    replay_checked: bool,
+    /// The UTC day on which the funnel's daily snapshot was last taken.
+    snapshot_day: Option<Date>,
+}
+
+/// One job of a pass, in a span of its own within the pass's trace, so the
+/// lines it logs carry the job's name and the trace.
+async fn job<T>(pass: &otel::Ids, name: &'static str, work: impl Future<Output = T>) -> T {
+    let ids = pass.child();
+    let span = tracing::info_span!(
+        "job",
+        job = name,
+        trace_id = %ids.trace_hex(),
+        span_id = %ids.span_hex(),
+    );
+    span.otel_name(format!("worker {name}"));
+    work.instrument(span).await
+}
+
+impl Worker {
+    /// One pass over every job. Fails only for the one thing that must stop
+    /// the worker: a database that waits for its deletion log to be replayed.
+    async fn pass(&mut self, ticker: &mut Interval, pass: &otel::Ids) -> anyhow::Result<()> {
+        if !self.replay_checked {
+            match db::replay_pending(&self.db).await {
+                Ok(true) => anyhow::bail!(db::REPLAY_PENDING),
+                Ok(false) => self.replay_checked = true,
+                Err(error) => {
+                    tracing::error!(
+                        error = %Redacted(&error),
+                        "could not check whether this database waits for a deletion replay; nothing runs until it can"
+                    );
+                    return Ok(());
+                }
+            }
+        }
+        let db = self.db.clone();
+        let rules = self.rules.clone();
+        let stopping = self.stopping.clone();
+
+        let timers = job(
+            pass,
+            "timers",
+            run_timers(&db, &rules, OffsetDateTime::now_utc()),
+        )
+        .await;
+        self.metrics.timers(&timers);
+        match timers {
+            Ok(0) => {}
+            Ok(changed) => tracing::info!(changed, "timers ran"),
+            Err(error) => tracing::error!(error = %Redacted(&error), "timers failed"),
+        }
+        // After the timers, so an exchange they have just closed is
+        // not reminded of anything.
+        let reminders = job(
+            pass,
+            "reminders",
+            run_reminders(&db, &rules, OffsetDateTime::now_utc()),
+        )
+        .await;
+        self.metrics.reminders(&reminders);
+        match reminders {
+            Ok(0) => {}
+            Ok(reminders) => tracing::info!(reminders, "reminders queued"),
+            Err(error) => tracing::error!(error = %Redacted(&error), "reminders failed"),
+        }
+        job(pass, "purges", async {
+            match purge_network_metadata(&db, &rules, OffsetDateTime::now_utc()).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(removed, "network metadata purged"),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "network metadata purge failed")
+                }
+            }
+            match sms_updates::purge_consent(&db, &rules, OffsetDateTime::now_utc()).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(
+                    removed,
+                    "text update consent records past retention removed"
+                ),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "consent record purge failed")
+                }
+            }
+            match sms_updates::purge_inbound_seen(&db, OffsetDateTime::now_utc()).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(
+                    removed,
+                    "message IDs of texts received past retention removed"
+                ),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "received text ID purge failed")
+                }
+            }
+            match code_consent::purge(&db, &rules, OffsetDateTime::now_utc()).await {
+                Ok(0) => {}
+                Ok(removed) => {
+                    tracing::info!(removed, "code consent records past retention removed")
+                }
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "code consent purge failed")
+                }
+            }
+            match purge_sign_in_limits(&db).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(removed, "old sign-in limit counts removed"),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "sign-in limit purge failed")
+                }
+            }
+            match purge_one_time_codes(&db).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(removed, "one-time codes past use removed"),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "one-time code purge failed")
+                }
+            }
+            match combine::purge(&db).await {
+                Ok(0) => {}
+                Ok(removed) => {
+                    tracing::info!(removed, "old account notices, offers and proofs removed")
+                }
+                Err(error) => tracing::error!(error = %Redacted(&error), "combine purge failed"),
+            }
+        })
+        .await;
+        if self
+            .last_sweep
+            .is_none_or(|last| last.elapsed() >= sweep::SWEEP_EVERY)
+        {
+            self.last_sweep = Some(Instant::now());
+            let max_attempts = self.delivery.rules.max_attempts;
+            job(pass, "sweep", async {
+                match sweep::sweep(&db, OffsetDateTime::now_utc(), max_attempts).await {
+                    Ok(swept) if swept.is_empty() => {}
+                    Ok(swept) => tracing::info!(
+                        sessions = swept.sessions,
+                        idempotency_keys = swept.idempotency_keys,
+                        notifications = swept.notifications,
+                        "old sessions, idempotency keys and notifications removed"
+                    ),
+                    Err(error) => {
+                        tracing::error!(error = %Redacted(&error), "sweep of old rows failed")
+                    }
+                }
+            })
+            .await;
+        }
+        // Once a day, the previous UTC day's funnel from the database
+        // (`yuppers_backend::funnel`): on the first pass, then after each
+        // midnight UTC.
+        let today = OffsetDateTime::now_utc().date();
+        if self.snapshot_day != Some(today) {
+            let taken = job(
+                pass,
+                "funnel snapshot",
+                funnel::snapshot(&db, OffsetDateTime::now_utc()),
+            )
+            .await;
+            match taken {
+                Ok(_) => self.snapshot_day = Some(today),
+                Err(error) => tracing::error!(error = %Redacted(&error), "funnel snapshot failed"),
+            }
+        }
+        // After both, so what they just caused goes out in the same
+        // pass.
+        let delivered = job(
+            pass,
+            "notifications",
+            outbox::deliver_due_until(&db, &self.delivery, OffsetDateTime::now_utc(), || {
+                stopping.load(Ordering::Relaxed)
+            }),
+        )
+        .await;
+        if let Ok(delivered) = &delivered {
+            self.metrics.delivered(delivered);
+        }
+        match delivered {
+            Ok(delivered) if delivered.is_empty() => {}
+            Ok(delivered) => {
+                tracing::info!(
+                    sent = delivered.sent,
+                    failed = delivered.failed,
+                    given_up = delivered.given_up,
+                    dropped = delivered.dropped,
+                    "notifications delivered"
+                );
+                // A full batch, or one cut short by its time
+                // budget, means more may be waiting. Go round again
+                // now rather than a tick later, so a burst drains as
+                // fast as it can be sent instead of one batch per
+                // tick (README, "Load check"). The timers still run
+                // first on every round.
+                if delivered.handled() >= self.delivery.rules.batch || delivered.cut_short {
+                    ticker.reset_immediately();
+                }
+            }
+            Err(error) => {
+                tracing::error!(error = %Redacted(&error), "notification delivery failed")
+            }
+        }
+        // The same notices by push, to those with the app.
+        let pushed = job(
+            pass,
+            "push",
+            push::deliver_push_due_until(
+                &db,
+                &self.push_delivery,
+                OffsetDateTime::now_utc(),
+                || stopping.load(Ordering::Relaxed),
+            ),
+        )
+        .await;
+        if let Ok(pushed) = &pushed {
+            self.metrics.pushed(pushed);
+        }
+        match pushed {
+            Ok(pushed) if pushed.rows.is_empty() => {}
+            Ok(pushed) => {
+                tracing::info!(
+                    sent = pushed.rows.sent,
+                    failed = pushed.rows.failed,
+                    given_up = pushed.rows.given_up,
+                    dropped = pushed.rows.dropped,
+                    devices_removed = pushed.devices_removed,
+                    "push notifications delivered"
+                );
+                if pushed.rows.handled() >= self.push_delivery.rules.batch || pushed.rows.cut_short
+                {
+                    ticker.reset_immediately();
+                }
+            }
+            Err(error) => tracing::error!(error = %Redacted(&error), "push delivery failed"),
+        }
+        // Agreement updates by text, to those who turned them on.
+        let texted = job(
+            pass,
+            "texts",
+            sms_updates::deliver_sms_due_until(
+                &db,
+                &self.sms_delivery,
+                OffsetDateTime::now_utc(),
+                || stopping.load(Ordering::Relaxed),
+            ),
+        )
+        .await;
+        match texted {
+            Ok(texted) if texted.is_empty() => {}
+            Ok(texted) => {
+                tracing::info!(
+                    sent = texted.sent,
+                    failed = texted.failed,
+                    given_up = texted.given_up,
+                    dropped = texted.dropped,
+                    "update texts delivered"
+                );
+                if texted.handled() >= self.sms_delivery.rules.batch || texted.cut_short {
+                    ticker.reset_immediately();
+                }
+            }
+            Err(error) => tracing::error!(error = %Redacted(&error), "update text delivery failed"),
+        }
+        let receipts_due = self
+            .last_receipts
+            .is_none_or(|last: Instant| last.elapsed() >= self.receipt_rules.every);
+        if let Some(sender) = self.push_delivery.sender.as_ref().filter(|_| receipts_due) {
+            self.last_receipts = Some(Instant::now());
+            let read = job(
+                pass,
+                "push receipts",
+                push::check_receipts(
+                    &db,
+                    sender.as_ref(),
+                    &self.receipt_rules,
+                    OffsetDateTime::now_utc(),
+                ),
+            )
+            .await;
+            self.metrics.receipts(&read);
+            match read {
+                Ok(read) if read.devices_removed > 0 => {
+                    tracing::info!(devices_removed = read.devices_removed, "push receipts read")
+                }
+                Ok(_) => {}
+                // The service's own words are never in it.
+                Err(error) => tracing::warn!(%error, "push receipts could not be read"),
+            }
+        }
+        let receipt_rules = &self.receipt_rules;
+        job(pass, "device purges", async {
+            match push::purge_devices(&db).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(removed, "devices of ended sessions removed"),
+                Err(error) => tracing::error!(error = %Redacted(&error), "device purge failed"),
+            }
+            // Whether or not receipts can be read, or push is on.
+            match push::purge_tickets(&db, receipt_rules, OffsetDateTime::now_utc()).await {
+                Ok(0) => {}
+                Ok(removed) => tracing::info!(removed, "push tickets past their receipts removed"),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "push ticket purge failed")
+                }
+            }
+        })
+        .await;
+        if let Some(wallet) = &self.wallet {
+            let updated = job(
+                pass,
+                "wallet passes",
+                deliver_wallet_updates(&db, &rules, wallet, OffsetDateTime::now_utc()),
+            )
+            .await;
+            match updated {
+                Ok(updated) if updated.handled() == 0 => {}
+                Ok(updated) => tracing::info!(
+                    sent = updated.sent,
+                    unchanged = updated.unchanged,
+                    failed = updated.failed,
+                    given_up = updated.given_up,
+                    "wallet passes updated"
+                ),
+                Err(error) => {
+                    tracing::error!(error = %Redacted(&error), "wallet pass updates failed")
+                }
+            }
+        }
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        self.metrics.pass_finished(u64::try_from(now).unwrap_or(0));
+        Ok(())
     }
 }

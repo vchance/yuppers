@@ -1059,10 +1059,13 @@ async fn no_log_holds_a_whole_phone_number_and_only_the_development_delivery_hol
     let turn = TURN.lock().await;
     let log = Log::default();
     let writer = log.clone();
-    let subscriber =
-        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
-            writer.clone()
-        });
+    let subscriber = telemetry::subscriber(
+        LogFormat::Text,
+        EnvFilter::new("trace"),
+        false,
+        move || writer.clone(),
+        None,
+    );
     let _guard = tracing::subscriber::set_default(subscriber);
     let _turn = turn;
 

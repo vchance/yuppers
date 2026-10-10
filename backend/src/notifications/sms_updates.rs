@@ -723,6 +723,7 @@ async fn deliver_next(
             .execute(&mut *tx)
             .await?;
             delivered.sent += 1;
+            crate::funnel::funnel().text_sent();
         }
         Attempt::Failed(error) => {
             let error: String = error.chars().take(500).collect();

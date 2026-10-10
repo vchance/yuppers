@@ -1,18 +1,27 @@
-//! Metrics in the Prometheus text format (docs/operations.md, "Metrics").
+//! Metrics, in the Prometheus text format and as OpenTelemetry metrics
+//! (docs/operations.md, "Metrics" and "Telemetry").
 //!
-//! Off unless `METRICS_ADDR` is set, and then served on a listener of its
-//! own, never on the public port: what the service is doing is not for
-//! everyone who can reach the API.
+//! The text format is served on `METRICS_ADDR` when it is set, on a listener
+//! of its own, never on the public port: what the service is doing is not
+//! for everyone who can reach the API. The same page is pushed as OTLP
+//! metrics when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`crate::otel`). One
+//! page, written once by the api or the worker ([`Text`]), two encodings.
 //!
-//! Written by hand rather than through a metrics library. There are a dozen
-//! families, the text format is small and stable, and keeping the counts in
-//! plain structs that the API state and the worker own, instead of a
+//! Written by hand rather than through a metrics library. There are a few
+//! dozen families, both formats are small and stable, and keeping the counts
+//! in plain structs that the API state and the worker own, instead of a
 //! process-wide recorder, lets every test read its own numbers. It also adds
 //! nothing to the dependency tree that the weekly audit has to watch.
 //!
 //! Labels are kept to bounded sets: an HTTP request is counted under the
 //! route's template (`/v1/exchanges/{id}`), never the path it was called
 //! with, which would grow a series for every exchange.
+//!
+//! Each family has one name, written the OpenTelemetry way ([`Name`]:
+//! `yuppers.http.requests`, with a unit); its Prometheus name is derived from
+//! it the way the OpenTelemetry collector and Prometheus's OTLP receiver
+//! derive it (`yuppers_http_requests_total`), so a dashboard sees one name
+//! whichever way the metric arrived.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -26,6 +35,7 @@ use axum::Router;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{Method, StatusCode};
 use axum::routing::get;
+use serde_json::{Value as Json, json};
 use sqlx::PgPool;
 
 use crate::auth::{SMS_FAILED, SMS_REFUSED, SMS_REFUSED_COUNTRY, SMS_REFUSED_PREFIX, SMS_SENT};
@@ -46,10 +56,82 @@ pub const LATENCY_BUCKETS: [f64; 13] = [
 /// and assets, and anything unknown.
 pub const UNMATCHED: &str = "unmatched";
 
-// ---- The text format -------------------------------------------------------
+// ---- Names -----------------------------------------------------------------
+
+/// A metric family's name and unit, as OpenTelemetry writes them: dotted,
+/// lowercase, `yuppers.<subsystem>.<thing>`, with a UCUM unit (`s` seconds,
+/// `By` bytes, `{request}` a count of requests, which adds no suffix).
+///
+/// The Prometheus name is derived ([`Name::prometheus`]), never written by
+/// hand, so the two can never drift apart. `tests::every_prometheus_name_is_the_documented_one`
+/// holds the derived names to the ones docs/operations.md lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Name {
+    pub otel: &'static str,
+    pub unit: &'static str,
+}
+
+impl Name {
+    pub const fn new(otel: &'static str, unit: &'static str) -> Self {
+        Self { otel, unit }
+    }
+
+    /// The name in the Prometheus text format: dots become underscores, the
+    /// unit adds its suffix (`s` → `_seconds`, `By` → `_bytes`; a `{count}`
+    /// unit or none adds nothing) and a counter ends in `_total`. This is the
+    /// translation the OpenTelemetry collector and Prometheus's OTLP
+    /// receiver apply by default, so Grafana shows one name for a metric
+    /// whether it was scraped from `/metrics` or pushed over OTLP.
+    pub fn prometheus(&self, kind: Kind) -> String {
+        let mut name = self.otel.replace('.', "_");
+        let suffix = match self.unit {
+            "s" => "_seconds",
+            "ms" => "_milliseconds",
+            "By" => "_bytes",
+            unit if unit.is_empty() || unit.starts_with('{') => "",
+            other => unreachable!("no Prometheus suffix is known for the unit {other}"),
+        };
+        if !name.ends_with(suffix) {
+            name.push_str(suffix);
+        }
+        if matches!(kind, Kind::Counter) {
+            name.push_str("_total");
+        }
+        name
+    }
+}
+
+/// The build, `yuppers_build_info`.
+pub const BUILD_INFO: Name = Name::new("yuppers.build.info", "");
+pub const HTTP_REQUESTS: Name = Name::new("yuppers.http.requests", "{request}");
+pub const HTTP_REQUEST_DURATION: Name = Name::new("yuppers.http.request.duration", "s");
+pub const DB_POOL_MAX: Name = Name::new("yuppers.db.pool.max", "{connection}");
+pub const DB_POOL_SIZE: Name = Name::new("yuppers.db.pool.size", "{connection}");
+pub const DB_POOL_IN_USE: Name = Name::new("yuppers.db.pool.in_use", "{connection}");
+pub const DATABASE_UP: Name = Name::new("yuppers.database.up", "");
+pub const OUTBOX_MESSAGES: Name = Name::new("yuppers.outbox.messages", "{message}");
+pub const OUTBOX_OLDEST_PENDING_AGE: Name = Name::new("yuppers.outbox.oldest_pending_age", "s");
+pub const REPORTS_OPEN: Name = Name::new("yuppers.reports.open", "{report}");
+pub const REPORTS_OLDEST_OPEN_AGE: Name = Name::new("yuppers.reports.oldest_open_age", "s");
+pub const SMS_CODES_HOURLY_CAP: Name = Name::new("yuppers.sms.codes.hourly_cap", "{code}");
+pub const SMS_CODES_THIS_HOUR: Name = Name::new("yuppers.sms.codes.this_hour", "{code}");
+pub const SMS_CODES_REFUSED_THIS_HOUR: Name =
+    Name::new("yuppers.sms.codes.refused_this_hour", "{code}");
+pub const OUTBOX_DELIVERIES: Name = Name::new("yuppers.outbox.deliveries", "{message}");
+pub const PUSH_DELIVERIES: Name = Name::new("yuppers.push.deliveries", "{message}");
+pub const PUSH_DEVICES_REMOVED: Name = Name::new("yuppers.push.devices_removed", "{device}");
+pub const PUSH_RECEIPT_CHECKS: Name = Name::new("yuppers.push.receipt_checks", "{request}");
+pub const WORKER_RUNS: Name = Name::new("yuppers.worker.runs", "{run}");
+pub const WORKER_TIMER_CHANGES: Name = Name::new("yuppers.worker.timer_changes", "{change}");
+pub const WORKER_REMINDERS_QUEUED: Name =
+    Name::new("yuppers.worker.reminders_queued", "{reminder}");
+pub const WORKER_LAST_PASS_TIMESTAMP: Name = Name::new("yuppers.worker.last_pass_timestamp", "s");
+pub const WALLET_CERT_EXPIRY: Name = Name::new("yuppers.wallet.cert_expiry", "s");
+
+// ---- A page of metrics -------------------------------------------------------
 
 /// What kind of metric a family is.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Counter,
     Gauge,
@@ -66,10 +148,43 @@ impl Kind {
     }
 }
 
-/// A page of metrics being written.
+/// One histogram's observations: how many fell in each bucket (one more
+/// bucket than there are bounds, the last for everything above the top
+/// bound), their total and their sum.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistogramSample {
+    pub bounds: &'static [f64],
+    pub counts: Vec<u64>,
+    pub count: u64,
+    pub sum: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Value {
+    Number(f64),
+    Histogram(HistogramSample),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Sample {
+    labels: Vec<(String, String)>,
+    value: Value,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Family {
+    name: Name,
+    kind: Kind,
+    help: String,
+    samples: Vec<Sample>,
+}
+
+/// A page of metrics being written: every family with its samples, in the
+/// order they were added. Written out as Prometheus text ([`Text::finish`])
+/// or as OpenTelemetry metrics ([`Text::otlp`]).
 #[derive(Default)]
 pub struct Text {
-    out: String,
+    families: Vec<Family>,
 }
 
 impl Text {
@@ -79,37 +194,214 @@ impl Text {
 
     /// Starts a family: its help line and type. Every sample of the family
     /// follows it.
-    pub fn family(&mut self, name: &str, kind: Kind, help: &str) {
-        let help = help.replace('\\', "\\\\").replace('\n', "\\n");
-        let _ = writeln!(self.out, "# HELP {name} {help}");
-        let _ = writeln!(self.out, "# TYPE {name} {}", kind.as_str());
+    pub fn family(&mut self, name: Name, kind: Kind, help: &str) {
+        self.families.push(Family {
+            name,
+            kind,
+            help: help.to_owned(),
+            samples: Vec::new(),
+        });
+    }
+
+    fn family_mut(&mut self, name: Name) -> &mut Family {
+        let found = self.families.iter().rposition(|family| family.name == name);
+        let index = match found {
+            Some(index) => index,
+            None => {
+                // Every family is started before its samples. Should one not
+                // be, it is written as a gauge without help rather than lost.
+                self.family(name, Kind::Gauge, "");
+                self.families.len() - 1
+            }
+        };
+        &mut self.families[index]
+    }
+
+    fn push(&mut self, name: Name, labels: &[(&str, &str)], value: Value) {
+        let labels = labels
+            .iter()
+            .map(|(label, value)| ((*label).to_owned(), (*value).to_owned()))
+            .collect();
+        self.family_mut(name).samples.push(Sample { labels, value });
     }
 
     /// One sample.
-    pub fn sample(&mut self, name: &str, labels: &[(&str, &str)], value: f64) {
-        self.out.push_str(name);
-        if !labels.is_empty() {
-            self.out.push('{');
-            for (index, (label, value)) in labels.iter().enumerate() {
-                if index > 0 {
-                    self.out.push(',');
-                }
-                let _ = write!(self.out, "{label}=\"{}\"", escape_label(value));
-            }
-            self.out.push('}');
-        }
-        let _ = writeln!(self.out, " {}", number(value));
+    pub fn sample(&mut self, name: Name, labels: &[(&str, &str)], value: f64) {
+        self.push(name, labels, Value::Number(value));
+    }
+
+    /// One histogram's observations.
+    pub fn histogram(&mut self, name: Name, labels: &[(&str, &str)], sample: HistogramSample) {
+        debug_assert_eq!(sample.counts.len(), sample.bounds.len() + 1);
+        self.push(name, labels, Value::Histogram(sample));
     }
 
     /// A family with a single unlabeled sample.
-    pub fn single(&mut self, name: &str, kind: Kind, help: &str, value: f64) {
+    pub fn single(&mut self, name: Name, kind: Kind, help: &str, value: f64) {
         self.family(name, kind, help);
         self.sample(name, &[], value);
     }
 
-    pub fn finish(self) -> String {
-        self.out
+    /// Whether anything has been written.
+    pub fn is_empty(&self) -> bool {
+        self.families.is_empty()
     }
+
+    /// The page in the Prometheus text format.
+    pub fn finish(self) -> String {
+        let mut out = String::new();
+        for family in &self.families {
+            let name = family.name.prometheus(family.kind);
+            let help = family.help.replace('\\', "\\\\").replace('\n', "\\n");
+            let _ = writeln!(out, "# HELP {name} {help}");
+            let _ = writeln!(out, "# TYPE {name} {}", family.kind.as_str());
+            for sample in &family.samples {
+                let labels: Vec<(&str, &str)> = sample
+                    .labels
+                    .iter()
+                    .map(|(label, value)| (label.as_str(), value.as_str()))
+                    .collect();
+                match &sample.value {
+                    Value::Number(value) => write_sample(&mut out, &name, &labels, *value),
+                    Value::Histogram(histogram) => {
+                        let mut cumulative = 0;
+                        for (bound, count) in histogram.bounds.iter().zip(&histogram.counts) {
+                            cumulative += count;
+                            let le = number(*bound);
+                            let labels = [labels.as_slice(), &[("le", le.as_str())]].concat();
+                            write_sample(
+                                &mut out,
+                                &format!("{name}_bucket"),
+                                &labels,
+                                cumulative as f64,
+                            );
+                        }
+                        let labels_inf = [labels.as_slice(), &[("le", "+Inf")]].concat();
+                        write_sample(
+                            &mut out,
+                            &format!("{name}_bucket"),
+                            &labels_inf,
+                            histogram.count as f64,
+                        );
+                        write_sample(&mut out, &format!("{name}_sum"), &labels, histogram.sum);
+                        write_sample(
+                            &mut out,
+                            &format!("{name}_count"),
+                            &labels,
+                            histogram.count as f64,
+                        );
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The page as the `metrics` array of an OTLP `scopeMetrics` entry
+    /// (`crate::otel`): each family once, with its OpenTelemetry name, unit
+    /// and description, cumulative since `start_unix_nano`, the process's
+    /// start, and read at `time_unix_nano`. Counters and histograms are
+    /// cumulative, so a push that is lost costs resolution, never a count.
+    pub fn otlp(&self, start_unix_nano: u128, time_unix_nano: u128) -> Vec<Json> {
+        let start = start_unix_nano.to_string();
+        let time = time_unix_nano.to_string();
+        self.families
+            .iter()
+            .map(|family| {
+                let points: Vec<Json> = family
+                    .samples
+                    .iter()
+                    .map(|sample| {
+                        let mut point = json!({
+                            "attributes": attributes(&sample.labels),
+                            "startTimeUnixNano": start,
+                            "timeUnixNano": time,
+                        });
+                        match &sample.value {
+                            Value::Number(value) => {
+                                let (key, value) = otlp_number(*value);
+                                point[key] = value;
+                            }
+                            Value::Histogram(histogram) => {
+                                point["count"] = json!(histogram.count.to_string());
+                                point["sum"] = json!(histogram.sum);
+                                point["bucketCounts"] = Json::Array(
+                                    histogram
+                                        .counts
+                                        .iter()
+                                        .map(|count| json!(count.to_string()))
+                                        .collect(),
+                                );
+                                point["explicitBounds"] = json!(histogram.bounds);
+                            }
+                        }
+                        point
+                    })
+                    .collect();
+                let data = match family.kind {
+                    Kind::Counter => json!({
+                        "sum": {
+                            "aggregationTemporality": 2,
+                            "isMonotonic": true,
+                            "dataPoints": points,
+                        }
+                    }),
+                    Kind::Gauge => json!({ "gauge": { "dataPoints": points } }),
+                    Kind::Histogram => json!({
+                        "histogram": {
+                            "aggregationTemporality": 2,
+                            "dataPoints": points,
+                        }
+                    }),
+                };
+                let mut metric = json!({
+                    "name": family.name.otel,
+                    "unit": family.name.unit,
+                    "description": family.help,
+                });
+                for (key, value) in data.as_object().into_iter().flatten() {
+                    metric[key] = value.clone();
+                }
+                metric
+            })
+            .collect()
+    }
+}
+
+/// Labels as OTLP attributes.
+fn attributes(labels: &[(String, String)]) -> Json {
+    Json::Array(
+        labels
+            .iter()
+            .map(|(key, value)| json!({ "key": key, "value": { "stringValue": value } }))
+            .collect(),
+    )
+}
+
+/// A number as an OTLP data point holds it: a whole number as `asInt` (a
+/// 64-bit integer, which OTLP's JSON encoding writes as a string), anything
+/// else as `asDouble`.
+fn otlp_number(value: f64) -> (&'static str, Json) {
+    if value.fract() == 0.0 && value.abs() < 9.0e15 {
+        ("asInt", json!((value as i64).to_string()))
+    } else {
+        ("asDouble", json!(value))
+    }
+}
+
+fn write_sample(out: &mut String, name: &str, labels: &[(&str, &str)], value: f64) {
+    out.push_str(name);
+    if !labels.is_empty() {
+        out.push('{');
+        for (index, (label, value)) in labels.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, "{label}=\"{}\"", escape_label(value));
+        }
+        out.push('}');
+    }
+    let _ = writeln!(out, " {}", number(value));
 }
 
 /// A label value, escaped as the format requires.
@@ -224,7 +516,7 @@ impl HttpMetrics {
             .clone();
 
         text.family(
-            "yuppers_http_requests_total",
+            HTTP_REQUESTS,
             Kind::Counter,
             "HTTP requests answered, by route template, method and status class.",
         );
@@ -234,16 +526,11 @@ impl HttpMetrics {
                 ("method", series.method),
                 ("status", series.status),
             ];
-            text.sample(
-                "yuppers_http_requests_total",
-                &labels,
-                histogram.count as f64,
-            );
+            text.sample(HTTP_REQUESTS, &labels, histogram.count as f64);
         }
 
-        let name = "yuppers_http_request_duration_seconds";
         text.family(
-            name,
+            HTTP_REQUEST_DURATION,
             Kind::Histogram,
             "Time from receiving a request to answering it, by route template, method and status class.",
         );
@@ -253,21 +540,20 @@ impl HttpMetrics {
                 ("method", series.method),
                 ("status", series.status),
             ];
-            let mut cumulative = 0;
-            for (bound, count) in LATENCY_BUCKETS.iter().zip(histogram.buckets) {
-                cumulative += count;
-                let le = number(*bound);
-                let labels = [labels.as_slice(), &[("le", le.as_str())]].concat();
-                text.sample(&format!("{name}_bucket"), &labels, cumulative as f64);
-            }
-            let labels_inf = [labels.as_slice(), &[("le", "+Inf")]].concat();
-            text.sample(
-                &format!("{name}_bucket"),
-                &labels_inf,
-                histogram.count as f64,
+            // Slower than every bound: counted in the last bucket only.
+            let in_buckets: u64 = histogram.buckets.iter().sum();
+            let mut counts = histogram.buckets.to_vec();
+            counts.push(histogram.count - in_buckets);
+            text.histogram(
+                HTTP_REQUEST_DURATION,
+                &labels,
+                HistogramSample {
+                    bounds: &LATENCY_BUCKETS,
+                    counts,
+                    count: histogram.count,
+                    sum: histogram.sum,
+                },
             );
-            text.sample(&format!("{name}_sum"), &labels, histogram.sum);
-            text.sample(&format!("{name}_count"), &labels, histogram.count as f64);
         }
     }
 }
@@ -280,19 +566,19 @@ pub fn render_pool(text: &mut Text, pool: &PgPool) {
     let size = pool.size();
     let idle = u32::try_from(pool.num_idle()).unwrap_or(u32::MAX);
     text.single(
-        "yuppers_db_pool_max",
+        DB_POOL_MAX,
         Kind::Gauge,
         "Connections the pool may open at most.",
         f64::from(pool.options().get_max_connections()),
     );
     text.single(
-        "yuppers_db_pool_size",
+        DB_POOL_SIZE,
         Kind::Gauge,
         "Connections the pool has open.",
         f64::from(size),
     );
     text.single(
-        "yuppers_db_pool_in_use",
+        DB_POOL_IN_USE,
         Kind::Gauge,
         "Open connections in use by a request or a job.",
         f64::from(size.saturating_sub(idle)),
@@ -324,28 +610,20 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
     match state {
         Ok((pending, given_up, oldest)) => {
             text.single(
-                "yuppers_database_up",
+                DATABASE_UP,
                 Kind::Gauge,
                 "1 if the database answered the last scrape's query, 0 if not.",
                 1.0,
             );
             text.family(
-                "yuppers_outbox_messages",
+                OUTBOX_MESSAGES,
                 Kind::Gauge,
                 "Notifications not yet completed: pending (waiting, or between retries) and given_up (out of attempts, left for someone to look at).",
             );
-            text.sample(
-                "yuppers_outbox_messages",
-                &[("state", "pending")],
-                pending as f64,
-            );
-            text.sample(
-                "yuppers_outbox_messages",
-                &[("state", "given_up")],
-                given_up as f64,
-            );
+            text.sample(OUTBOX_MESSAGES, &[("state", "pending")], pending as f64);
+            text.sample(OUTBOX_MESSAGES, &[("state", "given_up")], given_up as f64);
             text.single(
-                "yuppers_outbox_oldest_pending_age_seconds",
+                OUTBOX_OLDEST_PENDING_AGE,
                 Kind::Gauge,
                 "How long the oldest pending notification has waited since it was queued; 0 when none is pending.",
                 oldest.unwrap_or(0.0).max(0.0),
@@ -354,7 +632,7 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
         Err(error) => {
             tracing::warn!(%error, "metrics could not read the outbox");
             text.single(
-                "yuppers_database_up",
+                DATABASE_UP,
                 Kind::Gauge,
                 "1 if the database answered the last scrape's query, 0 if not.",
                 0.0,
@@ -381,13 +659,13 @@ pub async fn render_reports(text: &mut Text, pool: &PgPool) {
     match state {
         Ok((open, oldest)) => {
             text.single(
-                "yuppers_reports_open",
+                REPORTS_OPEN,
                 Kind::Gauge,
                 "Abuse reports waiting for review.",
                 open as f64,
             );
             text.single(
-                "yuppers_reports_oldest_open_age_seconds",
+                REPORTS_OLDEST_OPEN_AGE,
                 Kind::Gauge,
                 "How long the oldest open report has waited since it was made; 0 when none is open.",
                 oldest.unwrap_or(0.0).max(0.0),
@@ -418,7 +696,7 @@ pub async fn render_sms(text: &mut Text, pool: &PgPool, cap: i64) {
     .fetch_all(pool)
     .await;
     text.single(
-        "yuppers_sms_codes_hourly_cap",
+        SMS_CODES_HOURLY_CAP,
         Kind::Gauge,
         "Codes the service may send by text message per hour (SMS_MAX_PER_HOUR).",
         cap as f64,
@@ -438,7 +716,7 @@ pub async fn render_sms(text: &mut Text, pool: &PgPool, cap: i64) {
         ("prefix_cap", count(SMS_REFUSED_PREFIX)),
         ("country", count(SMS_REFUSED_COUNTRY)),
     ];
-    let name = "yuppers_sms_codes_this_hour";
+    let name = SMS_CODES_THIS_HOUR;
     text.family(
         name,
         Kind::Gauge,
@@ -451,7 +729,7 @@ pub async fn render_sms(text: &mut Text, pool: &PgPool, cap: i64) {
     ] {
         text.sample(name, &[("result", result)], value as f64);
     }
-    let name = "yuppers_sms_codes_refused_this_hour";
+    let name = SMS_CODES_REFUSED_THIS_HOUR;
     text.family(
         name,
         Kind::Gauge,
@@ -550,7 +828,7 @@ impl WorkerMetrics {
     }
 
     pub fn render(&self, text: &mut Text) {
-        let name = "yuppers_outbox_deliveries_total";
+        let name = OUTBOX_DELIVERIES;
         text.family(
             name,
             Kind::Counter,
@@ -565,7 +843,7 @@ impl WorkerMetrics {
             text.sample(name, &[("result", result)], read(counter));
         }
 
-        let name = "yuppers_push_deliveries_total";
+        let name = PUSH_DELIVERIES;
         text.family(
             name,
             Kind::Counter,
@@ -580,12 +858,12 @@ impl WorkerMetrics {
             text.sample(name, &[("result", result)], read(counter));
         }
         text.single(
-            "yuppers_push_devices_removed_total",
+            PUSH_DEVICES_REMOVED,
             Kind::Counter,
             "Devices removed because the push service said their token is no longer registered, when sending or in a receipt.",
             read(&self.push_devices_removed),
         );
-        let name = "yuppers_push_receipt_checks_total";
+        let name = PUSH_RECEIPT_CHECKS;
         text.family(
             name,
             Kind::Counter,
@@ -598,7 +876,7 @@ impl WorkerMetrics {
             text.sample(name, &[("result", result)], read(counter));
         }
 
-        let name = "yuppers_worker_runs_total";
+        let name = WORKER_RUNS;
         text.family(
             name,
             Kind::Counter,
@@ -614,19 +892,19 @@ impl WorkerMetrics {
         }
 
         text.single(
-            "yuppers_worker_timer_changes_total",
+            WORKER_TIMER_CHANGES,
             Kind::Counter,
             "Exchanges the timers changed: revisions expired, close requests lapsed, inactivity prompts and closures.",
             read(&self.timer_changes),
         );
         text.single(
-            "yuppers_worker_reminders_queued_total",
+            WORKER_REMINDERS_QUEUED,
             Kind::Counter,
             "Reminders queued in the outbox.",
             read(&self.reminders_queued),
         );
         text.single(
-            "yuppers_worker_last_pass_timestamp_seconds",
+            WORKER_LAST_PASS_TIMESTAMP,
             Kind::Gauge,
             "When the worker last finished a pass over its jobs, in seconds since the Unix epoch; 0 before the first.",
             read(&self.last_pass),
@@ -669,11 +947,12 @@ mod tests {
 
     #[test]
     fn samples_are_written_in_the_text_format_with_labels_escaped() {
+        const DEMO: Name = Name::new("demo", "{thing}");
         let mut text = Text::new();
-        text.family("demo_total", Kind::Counter, "A demo.\nSecond line.");
-        text.sample("demo_total", &[], 3.0);
+        text.family(DEMO, Kind::Counter, "A demo.\nSecond line.");
+        text.sample(DEMO, &[], 3.0);
         text.sample(
-            "demo_total",
+            DEMO,
             &[("a", "plain"), ("b", "quote \" back\\slash\nnewline")],
             0.25,
         );
@@ -686,6 +965,146 @@ mod tests {
         );
         assert_eq!(number(f64::INFINITY), "+Inf");
         assert_eq!(number(1e-3), "0.001");
+    }
+
+    /// The names docs/operations.md lists, derived from the OpenTelemetry
+    /// names the way the collector derives them. A new family goes in both.
+    #[test]
+    fn every_prometheus_name_is_the_documented_one() {
+        for (name, kind, expected) in [
+            (BUILD_INFO, Kind::Gauge, "yuppers_build_info"),
+            (HTTP_REQUESTS, Kind::Counter, "yuppers_http_requests_total"),
+            (
+                HTTP_REQUEST_DURATION,
+                Kind::Histogram,
+                "yuppers_http_request_duration_seconds",
+            ),
+            (DB_POOL_MAX, Kind::Gauge, "yuppers_db_pool_max"),
+            (DB_POOL_SIZE, Kind::Gauge, "yuppers_db_pool_size"),
+            (DB_POOL_IN_USE, Kind::Gauge, "yuppers_db_pool_in_use"),
+            (DATABASE_UP, Kind::Gauge, "yuppers_database_up"),
+            (OUTBOX_MESSAGES, Kind::Gauge, "yuppers_outbox_messages"),
+            (
+                OUTBOX_OLDEST_PENDING_AGE,
+                Kind::Gauge,
+                "yuppers_outbox_oldest_pending_age_seconds",
+            ),
+            (REPORTS_OPEN, Kind::Gauge, "yuppers_reports_open"),
+            (
+                REPORTS_OLDEST_OPEN_AGE,
+                Kind::Gauge,
+                "yuppers_reports_oldest_open_age_seconds",
+            ),
+            (
+                SMS_CODES_HOURLY_CAP,
+                Kind::Gauge,
+                "yuppers_sms_codes_hourly_cap",
+            ),
+            (
+                SMS_CODES_THIS_HOUR,
+                Kind::Gauge,
+                "yuppers_sms_codes_this_hour",
+            ),
+            (
+                SMS_CODES_REFUSED_THIS_HOUR,
+                Kind::Gauge,
+                "yuppers_sms_codes_refused_this_hour",
+            ),
+            (
+                OUTBOX_DELIVERIES,
+                Kind::Counter,
+                "yuppers_outbox_deliveries_total",
+            ),
+            (
+                PUSH_DELIVERIES,
+                Kind::Counter,
+                "yuppers_push_deliveries_total",
+            ),
+            (
+                PUSH_DEVICES_REMOVED,
+                Kind::Counter,
+                "yuppers_push_devices_removed_total",
+            ),
+            (
+                PUSH_RECEIPT_CHECKS,
+                Kind::Counter,
+                "yuppers_push_receipt_checks_total",
+            ),
+            (WORKER_RUNS, Kind::Counter, "yuppers_worker_runs_total"),
+            (
+                WORKER_TIMER_CHANGES,
+                Kind::Counter,
+                "yuppers_worker_timer_changes_total",
+            ),
+            (
+                WORKER_REMINDERS_QUEUED,
+                Kind::Counter,
+                "yuppers_worker_reminders_queued_total",
+            ),
+            (
+                WORKER_LAST_PASS_TIMESTAMP,
+                Kind::Gauge,
+                "yuppers_worker_last_pass_timestamp_seconds",
+            ),
+            (
+                WALLET_CERT_EXPIRY,
+                Kind::Gauge,
+                "yuppers_wallet_cert_expiry_seconds",
+            ),
+        ] {
+            assert_eq!(name.prometheus(kind), expected, "{name:?}");
+            assert!(
+                name.otel.starts_with("yuppers."),
+                "{name:?} is not namespaced"
+            );
+        }
+    }
+
+    #[test]
+    fn the_page_is_also_written_as_otlp_metrics() {
+        let mut text = Text::new();
+        text.single(DB_POOL_MAX, Kind::Gauge, "Pool.", 10.0);
+        text.family(HTTP_REQUESTS, Kind::Counter, "Requests.");
+        text.sample(HTTP_REQUESTS, &[("route", "/v1/meta")], 3.0);
+        text.family(HTTP_REQUEST_DURATION, Kind::Histogram, "Latency.");
+        text.histogram(
+            HTTP_REQUEST_DURATION,
+            &[("route", "/v1/meta")],
+            HistogramSample {
+                bounds: &[0.1, 1.0],
+                counts: vec![2, 0, 1],
+                count: 3,
+                sum: 12.5,
+            },
+        );
+        let metrics = text.otlp(1_000, 2_000);
+        assert_eq!(metrics.len(), 3);
+
+        assert_eq!(metrics[0]["name"], "yuppers.db.pool.max");
+        assert_eq!(metrics[0]["unit"], "{connection}");
+        assert_eq!(metrics[0]["description"], "Pool.");
+        assert_eq!(metrics[0]["gauge"]["dataPoints"][0]["asInt"], "10");
+        assert_eq!(metrics[0]["gauge"]["dataPoints"][0]["timeUnixNano"], "2000");
+
+        let sum = &metrics[1]["sum"];
+        assert_eq!(sum["aggregationTemporality"], 2, "cumulative");
+        assert_eq!(sum["isMonotonic"], true);
+        let point = &sum["dataPoints"][0];
+        assert_eq!(point["asInt"], "3");
+        assert_eq!(point["startTimeUnixNano"], "1000");
+        assert_eq!(point["attributes"][0]["key"], "route");
+        assert_eq!(point["attributes"][0]["value"]["stringValue"], "/v1/meta");
+
+        let point = &metrics[2]["histogram"]["dataPoints"][0];
+        assert_eq!(metrics[2]["unit"], "s");
+        assert_eq!(point["count"], "3");
+        assert_eq!(point["sum"], 12.5);
+        assert_eq!(point["bucketCounts"], json!(["2", "0", "1"]));
+        assert_eq!(point["explicitBounds"], json!([0.1, 1.0]));
+
+        // Fractions stay doubles.
+        assert_eq!(otlp_number(0.25), ("asDouble", json!(0.25)));
+        assert_eq!(otlp_number(7.0), ("asInt", json!("7")));
     }
 
     #[test]

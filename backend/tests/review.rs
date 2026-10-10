@@ -935,7 +935,7 @@ async fn a_suspended_account_is_signed_out_and_kept_out_until_lifted() {
                 None,
                 Method::POST,
                 "/v1/auth/sessions",
-                Some(json!({ "identifier": email, "code": code, "delivery": "TOKEN" })),
+                Some(json!({ "identifier": email, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
                 &[],
             )
             .await

@@ -557,6 +557,24 @@ async fn attempt(
         .bind(account)
         .execute(&mut *tx)
         .await?;
+    // Its acceptances of the terms, and those of accounts combined into it:
+    // personal rows like the others here, and what those accounts kept of
+    // them.
+    sqlx::query(
+        "DELETE FROM terms_acceptance
+         WHERE account_id = $1
+            OR account_id IN (SELECT id FROM account WHERE merged_into = $1)",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE account SET terms_version = NULL, terms_accepted_at = NULL
+         WHERE merged_into = $1",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM account_proof WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)
@@ -615,7 +633,8 @@ async fn attempt(
          SET status = 'DELETED',
              email_encrypted = NULL, email_index = NULL,
              phone_encrypted = NULL, phone_index = NULL,
-             display_name = '', language = $2
+             display_name = '', language = $2,
+             terms_version = NULL, terms_accepted_at = NULL
          WHERE id = $1",
     )
     .bind(account)

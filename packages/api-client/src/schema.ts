@@ -1083,6 +1083,14 @@ export interface components {
             language: string;
             notice?: components["schemas"]["AccountNotice"] | null;
             phone?: string | null;
+            /** @description When it was accepted, as RFC 3339. */
+            terms_accepted_at?: string | null;
+            /**
+             * @description The version of the Terms and the Privacy policy accepted at the
+             *     latest sign-in (`TERMS_VERSION`). Absent until the account signs in
+             *     again after this was first recorded. Only the account's own.
+             */
+            terms_version?: string | null;
         };
         /** @description A notice the app shows once on the account. */
         AccountNotice: {
@@ -1397,6 +1405,13 @@ export interface components {
              *     when this creates the account; an unsupported one becomes the default.
              */
             language?: string | null;
+            /**
+             * @description The version of the Terms and the Privacy policy the client showed
+             *     above the button (`TERMS_VERSION`); signing in is the assent to both.
+             *     A version the service does not know is refused. Absent from builds
+             *     that predate it: the sign-in completes and nothing is recorded.
+             */
+            terms_version?: string | null;
         };
         DeleteAccount: {
             /** @description Where the code was sent. */
@@ -1463,7 +1478,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "IDENTIFIER_TOO_RECENT" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "TERMS_VERSION_UNKNOWN" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "IDENTIFIER_TOO_RECENT" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -2767,7 +2782,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Invalid request */
+            /** @description Invalid request, or a `terms_version` the service does not know (`TERMS_VERSION_UNKNOWN`) */
             422: {
                 headers: {
                     [name: string]: unknown;

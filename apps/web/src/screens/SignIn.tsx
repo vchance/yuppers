@@ -20,6 +20,7 @@ import { useI18n, useSession } from '../app/context'
 import { ConsentCheckbox } from '../components/ConsentCheckbox'
 import { InAppBrowserNote } from '../components/InAppBrowserNote'
 import { LegalLink } from '../components/LegalLink'
+import { TermsAssent } from '../components/TermsAssent'
 import { ErrorNote, Failure, Field, Notice } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
@@ -245,6 +246,8 @@ export function SignIn() {
       <Failure code={failure} id={failureId} />
       {resent && <Notice>{w.resent}</Notice>}
       {!resendReady && <p className="hint">{w.resendSoon}</p>}
+      {/* Signing in is the assent to both documents (`terms.ts`). */}
+      <TermsAssent />
       <div className="actions">
         <button type="submit" className="primary" disabled={busy}>
           {w.submit}

@@ -2,6 +2,7 @@ import type { ApiClient } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { ApiFailure, createExchangeApi, type SessionHolding } from './api'
+import { TERMS_VERSION } from './terms'
 
 const ID = '0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70'
 
@@ -83,6 +84,7 @@ test('signing in asks for the session the way this client holds it', async () =>
       code: '123456',
       delivery: session.delivery,
       language: 'es',
+      terms_version: TERMS_VERSION,
     })
   }
 })

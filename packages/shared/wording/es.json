@@ -226,7 +226,9 @@
     "identifierHintUs": "Solo números de teléfono de EE. UU., como (555) 123-4567.",
     "emailOnly": "Inicia sesión con tu correo electrónico. Por ahora no podemos enviar códigos a números de teléfono.",
     "invalidEmail": "Escribe un correo electrónico válido.",
-    "changeEmail": "Usar otro correo electrónico"
+    "changeEmail": "Usar otro correo electrónico",
+    "agreement": "Al continuar, aceptas los {terms} y la {privacy}.",
+    "agreementPendingReview": "La redacción de la frase de aceptación está pendiente de revisión legal."
   },
   "inAppBrowser": {
     "noteIos": "Estás en el navegador de {app}, que quizá no mantenga tu sesión abierta. Abre esta página en Safari para mantener la sesión abierta.",
@@ -1352,6 +1354,7 @@
     "REPORT_RESOLVED": "Esta denuncia ya se resolvió.",
     "SUBJECT_IS_REVIEWER": "La persona denunciada es revisora. Solo el propietario puede suspender a una persona revisora, o levantar su suspensión, después de quitarle ese rol.",
     "PHONE_OPTED_OUT": "Este número respondió STOP a nuestros mensajes, así que no podemos enviarle un código. Entra con tu correo electrónico, o responde START a uno de nuestros mensajes para volver a recibirlos.",
+    "TERMS_VERSION_UNKNOWN": "Los Términos o la Política de privacidad cambiaron mientras esta página estaba abierta. Vuelve a cargar la página para leerlos y luego inicia sesión de nuevo.",
     "SMS_CONSENT_REQUIRED": "Para recibir un código por mensaje de texto, marca la casilla junto al número. Si no ves la casilla, vuelve a cargar la página o actualiza la app."
   },
   "a11y": {

@@ -11,6 +11,7 @@ import type {
 
 import { clientHeader, parseVersion, type ClientIdentity } from './client-version'
 import { idempotencyKeys } from './idempotency'
+import { TERMS_VERSION } from './terms'
 import { invitationOptions } from './share'
 import type { ReportReason } from './safety'
 
@@ -229,7 +230,14 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
       return send(() =>
         client.POST('/v1/auth/sessions', {
           headers: headers(),
-          body: { identifier, code, delivery: session.delivery, language },
+          body: {
+            identifier,
+            code,
+            delivery: session.delivery,
+            language,
+            // The sentence above the button, which signing in assents to.
+            terms_version: TERMS_VERSION,
+          },
         }),
       )
     },

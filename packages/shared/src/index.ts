@@ -372,6 +372,8 @@ export type {
   SmsUpdatesControl,
   SmsUpdatesStep,
 } from './sms-updates'
+export { TERMS_ASSENT_DOCUMENTS, TERMS_VERSION, termsAssentPieces } from './terms'
+export type { TermsAssentPiece } from './terms'
 export {
   readsAsPhone,
   SMS_CODE_CONSENT_VERSION,

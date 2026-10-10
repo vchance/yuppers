@@ -29,6 +29,7 @@
 // raised out of the way: SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR=1000000.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
@@ -189,12 +190,18 @@ async function call(endpoint, method, path, { token, body, idempotent } = {}) {
 
 // ---- One pair -------------------------------------------------------------------
 
+/** The version of the Terms and the Privacy policy the service knows, which a sign-in names. */
+function termsVersion() {
+  const source = readFileSync(new URL("../backend/src/terms.rs", import.meta.url), "utf8");
+  return /TERMS_VERSION: &str = "([^"]+)"/.exec(source)[1];
+}
+
 async function signIn(codes, label) {
   const identifier = `load-${run}-${label}@example.test`;
   await call("POST /v1/auth/codes", "POST", "/v1/auth/codes", { body: { identifier } });
   const code = await codes.code(identifier);
   const session = await call("POST /v1/auth/sessions", "POST", "/v1/auth/sessions", {
-    body: { identifier, code, delivery: "TOKEN", language: "en" },
+    body: { identifier, code, delivery: "TOKEN", language: "en", terms_version: termsVersion() },
   });
   const token = session.token;
   await call("PATCH /v1/me", "PATCH", "/v1/me", {

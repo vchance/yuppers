@@ -46,6 +46,10 @@ pub enum ErrorCode {
     /// the request named no `sms_consent`, or wording that is not the current
     /// one. Nothing was counted or sent. An email address needs none.
     SmsConsentRequired,
+    /// A sign-in named a version of the Terms and the Privacy policy that
+    /// the service does not know: a page loaded before they changed.
+    /// Reloading shows the current sentence. Nothing was stored.
+    TermsVersionUnknown,
     /// The one-time code is wrong, expired or used up. Deliberately one code
     /// for all three, so a guesser learns nothing.
     InvalidCode,
@@ -161,6 +165,7 @@ impl From<ErrorCode> for ApiError {
             | PhoneCountryNotServed
             | NotInvitedAddress
             | SmsConsentRequired
+            | TermsVersionUnknown
             | InvalidRevision
             | IdempotencyKeyReused => StatusCode::UNPROCESSABLE_ENTITY,
             InvalidCode | Unauthenticated | SessionTooOld => StatusCode::UNAUTHORIZED,

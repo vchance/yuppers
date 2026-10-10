@@ -1,5 +1,6 @@
 import type { Account, ErrorCode, ExchangeView } from '@yuppers/api-client';
 import type { PaymentHandles, RevisionView, Wording } from '@yuppers/shared';
+import { TERMS_VERSION } from '@yuppers/shared';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { answerRecordAndSafety } from './fake-record';
@@ -284,6 +285,10 @@ function respond(
     return [204, null];
   }
   if (call === 'POST /v1/auth/sessions') {
+    // Like the service: the version of the sentence shown above the button.
+    if ((body as { terms_version?: string }).terms_version !== TERMS_VERSION) {
+      return [422, { code: 'TERMS_VERSION_UNKNOWN' }];
+    }
     service.account = { ...ana, display_name: '', adult_confirmed: false };
     return [200, { account: service.account, token: TOKEN }];
   }

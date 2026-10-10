@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { SMS_CODE_CONSENT_VERSION } from '@yuppers/shared'
+import { SMS_CODE_CONSENT_VERSION, TERMS_VERSION } from '@yuppers/shared'
 import { act } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
@@ -337,4 +337,48 @@ describe('waiting for the code', () => {
     )
     expect(document.body.textContent).not.toContain(w.resent)
   })
+})
+
+describe('agreeing to the Terms and the Privacy policy', () => {
+  for (const language of ['en', 'es'] as const) {
+    test(`is one sentence with two links above the button that signs in, in ${language}`, async () => {
+      const { wording, service } = await start('/', null, language)
+      const w = wording.signIn
+      await until(() => hasLabel(w.identifierLabel), 'the email or phone field')
+      await type(field(w.identifierLabel), 'ben@example.test')
+      await press(button(w.sendCode))
+      await until(() => hasLabel(w.codeLabel), 'the code field')
+
+      const sentence = document.querySelector('.terms-assent')!
+      // Each link also says, to screen readers only, that it opens a new tab.
+      expect(sentence.textContent!.replaceAll(` ${wording.help.newTab}`, '')).toBe(
+        w.agreement
+          .replace('{terms}', wording.termsOfUse.link)
+          .replace('{privacy}', wording.privacy.policy),
+      )
+      const links = [...sentence.querySelectorAll('a')]
+      expect(links.map((link) => link.getAttribute('href'))).toEqual([
+        language === 'en' ? '/terms' : '/es/terms',
+        language === 'en' ? '/privacy' : '/es/privacy',
+      ])
+      expect(links[0].textContent).toContain(wording.termsOfUse.link)
+      expect(links[1].textContent).toContain(wording.privacy.policy)
+      // The sentence is the assent: no box, and it is above the button.
+      expect(document.querySelector('input[type="checkbox"]')).toBeNull()
+      const submit = button(w.submit)
+      expect(
+        sentence.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+
+      // Signing in names the version shown.
+      await type(field(w.codeLabel), '123456')
+      await press(submit)
+      await until(
+        () => service.sent.some((request) => request.call === 'POST /v1/auth/sessions'),
+        'the sign-in',
+      )
+      const sent = service.sent.find((request) => request.call === 'POST /v1/auth/sessions')
+      expect(sent?.body).toMatchObject({ terms_version: TERMS_VERSION })
+    })
+  }
 })

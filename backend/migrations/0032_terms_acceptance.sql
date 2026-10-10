@@ -30,3 +30,4 @@ ALTER TABLE account
     ADD CONSTRAINT account_terms_whole CHECK ((terms_version IS NULL) = (terms_accepted_at IS NULL));
 
 GRANT SELECT, INSERT, DELETE ON terms_acceptance TO exchange_app;
+GRANT USAGE ON SEQUENCE terms_acceptance_id_seq TO exchange_app;

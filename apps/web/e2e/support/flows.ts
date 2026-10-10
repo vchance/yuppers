@@ -75,11 +75,13 @@ export async function signUp(person: Person): Promise<void> {
 
 // ---- Writing and sending terms -------------------------------------------------
 
-/** Starts an exchange from the list, which opens the composer on the new draft. */
+/** Starts an exchange from the list, from the blank form, which opens the composer on the new draft. */
 export async function startExchange(person: Person): Promise<string> {
   const { page } = person
   await page.goto('/')
   await page.getByRole('button', { name: en.home.start }).click()
+  // New yup opens on the choices; the blank form is the composer as it was.
+  await page.getByRole('button', { name: en.templates.blank.name, exact: true }).click()
   await page.waitForURL(UUID)
   await expect(page.getByRole('heading', { name: en.composer.titleFirst, level: 1 })).toBeVisible()
   return exchangeIdOf(page)

@@ -155,6 +155,21 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   // Writing a proposal, and the signing step.
   await page.goto('/')
   await page.getByRole('button', { name: es.home.start }).click()
+  await expect(page.getByRole('heading', { name: es.templates.chooserTitle, level: 1 })).toBeVisible()
+  await check('the choices for a new yup')
+  await page.getByRole('button', { name: es.templates.copy.name, exact: true }).click()
+  await expect(page.getByRole('heading', { name: es.templates.copyHeading, level: 1 })).toBeVisible()
+  await check('copying a previous yup')
+  await page.getByRole('button', { name: es.templates.back, exact: true }).click()
+  await page
+    .getByRole('button', { name: es.templates.entries['job-deposit-balance'].name, exact: true })
+    .click()
+  await expect(page.getByRole('heading', { name: es.composer.titleFirst, level: 1 })).toBeVisible()
+  await check('the composer, started from a common agreement')
+  await page.getByRole('button', { name: es.templates.swapSides, exact: true }).click()
+  await page.goto('/')
+  await page.getByRole('button', { name: es.home.start }).click()
+  await page.getByRole('button', { name: es.templates.blank.name, exact: true }).click()
   await expect(page.getByRole('heading', { name: es.composer.titleFirst, level: 1 })).toBeVisible()
   await page.getByLabel(es.composer.otherName).fill('Ana')
   await page.getByRole('button', { name: es.composer.addYours }).click()
@@ -190,6 +205,11 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   await page.getByRole('button', { name: es.invitationLink.sendDone, exact: true }).click()
   await expect(page.getByText(/^Compartiste el enlace el /)).toBeVisible()
   await check('the exchange, waiting for the person invited')
+
+  // The sample yup, which anyone can read.
+  await page.goto('/es/example')
+  await expect(page.getByRole('heading', { name: es.sample.title, level: 1 })).toBeVisible()
+  await check('the example')
 
   // Help: the list of topics, and the longest topic with its contents.
   await page.goto('/help')

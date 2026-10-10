@@ -62,6 +62,7 @@ async function signUp(page: Page, name: string) {
 async function propose(page: Page, invitee: string | null, description: string) {
   await page.goto('/')
   await shown(page, 'button', en.home.start).click()
+  await shown(page, 'button', en.templates.blank.name).click()
   await expect(
     page.getByRole('heading', { name: en.composer.titleFirst, level: 1 }).last(),
   ).toBeVisible()

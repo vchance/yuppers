@@ -17,142 +17,145 @@
       "layout": "{body}\n\nOpen the yup: {link}\n\nYou’re getting this email because you’re part of yup {code} on {productName}. These emails never include the terms; sign in to see them.",
       "messages": {
         "INVITATION_CLAIMED": {
-          "subject": "The person you invited has joined ({code})",
+          "subject": "The person you invited has joined: {yup}",
           "body": "The person you invited has opened your invitation and joined the yup. They can now review the terms you sent."
         },
         "INVITATION_CLAIMED_UNCONFIRMED": {
-          "subject": "Confirm who joined your yup ({code})",
+          "subject": "Confirm who joined your yup: {yup}",
           "body": "Someone has used your invitation link to join the yup. Check that it is the person you meant to invite, then confirm them. Nothing can be agreed until you do."
         },
         "COUNTERPARTY_CONFIRMED": {
-          "subject": "You’ve been confirmed ({code})",
+          "subject": "You’ve been confirmed: {yup}",
           "body": "The other party has confirmed that you are the person they invited. The two of you can now reach an agreement."
         },
         "CLAIMANT_LEFT": {
-          "subject": "The person who opened your invitation has left ({code})",
+          "subject": "The person who opened your invitation has left: {yup}",
           "body": "The person who used your invitation link has left the yup before you confirmed them. Nothing they signed has any effect. Your proposal is still open: create a new invitation link for the person you meant to invite."
         },
         "REVISION_SENT": {
-          "subject": "New terms to review ({code})",
+          "subject": "New terms to review: {yup}",
           "body": "The other party has sent new terms. Review them, then accept them, decline them or send your own."
         },
         "AMENDMENT_PROPOSED": {
-          "subject": "A change to your agreement is proposed ({code})",
+          "subject": "A change to your agreement is proposed: {yup}",
           "body": "The other party has proposed a change to your agreement. The agreement stays as it is unless you accept the change."
         },
         "ACCEPTANCE_WAITING": {
-          "subject": "The terms were accepted and are waiting for you ({code})",
+          "subject": "The terms were accepted and are waiting for you: {yup}",
           "body": "The other party has accepted the terms. Their acceptance takes effect once you confirm that they are the person you meant to invite."
         },
         "AGREEMENT_IN_FORCE": {
-          "subject": "Your agreement is signed and on record ({code})",
+          "subject": "Your agreement is signed and on record: {yup}",
           "body": "Both of you have signed the same terms, so the agreement is now in force and on record. Sign in to read, print or download your copy at any time: {recordLink}\n\nFrom here you can track what each of you delivers."
         },
         "AMENDMENT_IN_FORCE": {
-          "subject": "The change to your agreement is signed and on record ({code})",
+          "subject": "The change to your agreement is signed and on record: {yup}",
           "body": "Both of you have signed the change, so it is now part of the agreement, and the agreement as it now stands is on record. Sign in to read, print or download your copy at any time: {recordLink}"
         },
         "AMENDMENT_DECLINED": {
-          "subject": "The change you proposed was declined ({code})",
+          "subject": "The change you proposed was declined: {yup}",
           "body": "The other party has declined the change you proposed. The agreement stays as it was."
         },
         "AMENDMENT_WITHDRAWN": {
-          "subject": "A proposed change was withdrawn ({code})",
+          "subject": "A proposed change was withdrawn: {yup}",
           "body": "The other party has withdrawn the change they proposed. The agreement stays as it was."
         },
         "AMENDMENT_EXPIRED": {
-          "subject": "A proposed change expired ({code})",
+          "subject": "A proposed change expired: {yup}",
           "body": "A proposed change to your agreement expired before it was accepted. The agreement stays as it was."
         },
         "DELIVERY_CLAIMED": {
-          "subject": "Something was marked as delivered ({code})",
+          "subject": "Something was marked as delivered: {yup}",
           "body": "The other party has marked one of their contributions as delivered. Review it, then confirm it or dispute it."
         },
         "CLAIM_RETRACTED": {
-          "subject": "A delivery was unmarked ({code})",
+          "subject": "A delivery was unmarked: {yup}",
           "body": "The other party has taken back their claim that a contribution was delivered. There is nothing for you to review for now."
         },
         "DELIVERY_CONFIRMED": {
-          "subject": "A delivery was confirmed ({code})",
+          "subject": "A delivery was confirmed: {yup}",
           "body": "The other party has confirmed that they received one of your contributions."
         },
         "DISPUTE_OPENED": {
-          "subject": "A delivery was disputed ({code})",
+          "subject": "A delivery was disputed: {yup}",
           "body": "The other party has disputed a contribution you marked as delivered. Read their reason in the agreement and respond."
         },
         "CONTRIBUTION_WAIVED": {
-          "subject": "A contribution was waived ({code})",
+          "subject": "A contribution was waived: {yup}",
           "body": "The other party has waived one of your contributions. You are no longer expected to deliver it."
         },
         "END_PROPOSED": {
-          "subject": "A proposal to end your agreement ({code})",
+          "subject": "A proposal to end your agreement: {yup}",
           "body": "The other party has proposed that the two of you end the agreement together. If you accept, everything still outstanding is released."
         },
         "END_PROPOSAL_CANCELLED": {
-          "subject": "The proposal to end your agreement was cancelled ({code})",
+          "subject": "The proposal to end your agreement was cancelled: {yup}",
           "body": "The proposal to end the agreement together has been cancelled. The agreement carries on as before."
         },
         "CLOSE_REQUESTED": {
-          "subject": "The other party has asked to close your agreement ({code})",
+          "subject": "The other party has asked to close your agreement: {yup}",
           "body": "The other party has asked to close the agreement with matters still unresolved. You have a limited time to respond: you can add a statement, resolve what is outstanding or agree to end it. After that, the agreement closes as unresolved."
         },
         "CLOSE_REQUEST_RETRACTED": {
-          "subject": "The request to close your agreement was withdrawn ({code})",
+          "subject": "The request to close your agreement was withdrawn: {yup}",
           "body": "The other party has withdrawn their request to close the agreement. It stays open."
         },
         "STATEMENT_ADDED": {
-          "subject": "A statement was added to your agreement ({code})",
+          "subject": "A statement was added to your agreement: {yup}",
           "body": "The other party has added a statement about the request to close the agreement. You can read it in the agreement."
         },
         "INACTIVITY_PROMPTED": {
-          "subject": "Is your agreement still under way? ({code})",
+          "subject": "Checking in on your agreement: {yup}",
           "body": "Nothing has happened in this agreement for some time. If neither of you does anything in it, it will be closed as unresolved."
         },
         "DUE_SOON": {
-          "subject": "Something you owe is due soon ({code})",
+          "subject": "Something you owe is due soon: {yup}",
           "body": "At least one of your contributions is due soon and has not been marked as delivered. Open the agreement to see which and when. Once you have delivered it, mark it as delivered there."
         },
         "OVERDUE_TO_DELIVER": {
-          "subject": "Something you owe is overdue ({code})",
+          "subject": "Something you owe is overdue: {yup}",
           "body": "At least one of your contributions is past its due date and has not been marked as delivered. Open the agreement to see which. If you have delivered it, mark it as delivered there; if the date no longer works, you can propose a change to the agreement. The other party has been told as well."
         },
         "OVERDUE_TO_RECEIVE": {
-          "subject": "Something owed to you is overdue ({code})",
+          "subject": "Something owed to you is overdue: {yup}",
           "body": "At least one of the other party’s contributions is past its due date and has not been marked as delivered. Open the agreement to see which. If you have already received it, you can confirm it there. The other party has been reminded as well."
         },
         "CLOSED_WITHDRAWN": {
-          "subject": "The offer was withdrawn ({code})",
+          "subject": "The offer was withdrawn: {yup}",
           "body": "The other party has withdrawn their offer, so the proposal is closed. Nothing was agreed."
         },
         "CLOSED_DECLINED": {
-          "subject": "Your offer was declined ({code})",
+          "subject": "Your offer was declined: {yup}",
           "body": "The other party has declined your offer, so the proposal is closed. Nothing was agreed."
         },
         "CLOSED_EXPIRED": {
-          "subject": "The offer expired ({code})",
+          "subject": "The offer expired: {yup}",
           "body": "The offer expired before it was accepted, so the proposal is closed. Nothing was agreed."
         },
         "CLOSED_COMPLETED": {
-          "subject": "Your agreement is complete ({code})",
+          "subject": "Your agreement is complete: {yup}",
           "body": "Every required contribution has been accepted or waived. The agreement is complete and closed."
         },
         "CLOSED_ENDED_BY_AGREEMENT": {
-          "subject": "You both agreed to end your agreement ({code})",
+          "subject": "You both agreed to end your agreement: {yup}",
           "body": "The other party has agreed to end the agreement. It is closed, and everything still outstanding has been released."
         },
         "CLOSED_UNRESOLVED": {
-          "subject": "Your agreement was closed unresolved ({code})",
+          "subject": "Your agreement was closed unresolved: {yup}",
           "body": "The time to respond to the request to close has passed. The agreement is closed as unresolved, and each contribution keeps the status it had."
         },
         "CLOSED_INACTIVE": {
-          "subject": "Your agreement was closed for inactivity ({code})",
+          "subject": "Your agreement was closed for inactivity: {yup}",
           "body": "Nothing happened in this agreement for a long time, so it has been closed as unresolved. Each contribution keeps the status it had."
         },
         "REVISION_SENT_UNCONFIRMED": {
-          "subject": "The terms you were sent have changed ({code})",
+          "subject": "The terms you were sent have changed: {yup}",
           "body": "The other party has changed the terms they sent you. Review them, then accept them if you agree. Until they confirm that you are the person they invited, you can’t decline them or send your own; you can leave the yup instead."
         }
-      }
+      },
+      "yup": "your yup with {name} ({code})",
+      "yupUnnamed": "your yup ({code})",
+      "intro": "About {yup}."
     },
     "oneTimeCode": {
       "signIn": {
@@ -185,7 +188,30 @@
     "body": "Your yup has an update."
   },
   "sms": {
-    "update": "Yuppers.app: an agreement you turned on updates for has changed. See it: {link}. Reply STOP to opt out.",
+    "update": "Yuppers.app: your yup {code} has an update. See it: {link}. Reply STOP to opt out.",
+    "detailed": "Yuppers.app: {sentence}. See it: {link}. Reply STOP to opt out.",
+    "sentence": "{what} ({code})",
+    "someone": "Someone",
+    "notices": {
+      "ACCEPTANCE_WAITING": "{name} signed your yup",
+      "REVISION_SENT": "{name} sent new terms",
+      "REVISION_SENT_UNCONFIRMED": "{name} sent new terms",
+      "AMENDMENT_PROPOSED": "{name} proposed a change",
+      "AGREEMENT_IN_FORCE": "Signed with {name}",
+      "AMENDMENT_IN_FORCE": "Change signed with {name}",
+      "DELIVERY_CLAIMED": "{name} marked a delivery",
+      "DELIVERY_CONFIRMED": "{name} confirmed a delivery",
+      "DISPUTE_OPENED": "{name} disputed a delivery",
+      "CONTRIBUTION_WAIVED": "{name} waived a delivery",
+      "CLOSE_REQUESTED": "{name} asked to close",
+      "CLOSED_WITHDRAWN": "{name} withdrew the offer",
+      "CLOSED_DECLINED": "{name} declined the offer",
+      "CLOSED_EXPIRED": "Offer to {name} expired",
+      "CLOSED_COMPLETED": "Yup with {name} is complete",
+      "CLOSED_ENDED_BY_AGREEMENT": "Yup with {name} ended",
+      "CLOSED_UNRESOLVED": "Closed unresolved: {name}",
+      "CLOSED_INACTIVE": "Closed for inactivity: {name}"
+    },
     "optInConfirmation": "Yuppers.app: You're signed up for text updates about this agreement, one text per status change. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
   },
   "common": {

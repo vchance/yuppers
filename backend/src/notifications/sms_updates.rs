@@ -792,8 +792,8 @@ async fn prepare(
 
     // Read now, not when it was queued: the person may have turned updates
     // off, changed their number or replied STOP since.
-    let found: Option<(Vec<u8>, String, bool)> = sqlx::query_as(
-        "SELECT a.phone_encrypted, a.language,
+    let found: Option<(Vec<u8>, String, bool, bool)> = sqlx::query_as(
+        "SELECT a.phone_encrypted, a.language, a.notification_detail,
                 EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone_index = a.phone_index)
          FROM account a
          JOIN sms_update u
@@ -804,7 +804,7 @@ async fn prepare(
     .bind(exchange)
     .fetch_optional(&mut *conn)
     .await?;
-    let Some((sealed, language, opted_out)) = found else {
+    let Some((sealed, language, detailed, opted_out)) = found else {
         return Ok(Err(Attempt::Dropped(
             "not sent: text updates are no longer on for this number",
         )));
@@ -832,7 +832,25 @@ async fn prepare(
     let text = match kind {
         Some(UPDATE) => {
             let link = format!("{}/exchanges/{exchange}", delivery.web_origin);
-            delivery.wording.update_sms(&language, &link)
+            let Some((code, other_party)) = super::yup_of(conn, exchange, Some(recipient)).await?
+            else {
+                return Ok(Err(Attempt::Failed("no such exchange".to_owned())));
+            };
+            // The notice was checked above to be one that is texted.
+            let notice = payload["notice"].as_str().and_then(Notice::parse);
+            let detailed = detailed
+                .then_some(notice)
+                .flatten()
+                .and_then(|notice| {
+                    delivery.wording.detailed_update_sms(
+                        &language,
+                        notice,
+                        &other_party,
+                        &code,
+                        &link,
+                    )
+                });
+            detailed.unwrap_or_else(|| delivery.wording.update_sms(&language, &code, &link))
         }
         _ => delivery.wording.opt_in_sms(&language),
     };
@@ -937,27 +955,28 @@ mod tests {
     /// update's link is.
     const LINK: &str = "https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e";
 
+    /// A display code: four letters or digits, a dash, four more.
+    const CODE: &str = "ABCD-1234";
+
     #[test]
     fn the_texts_read_as_written_name_nothing_agreed_and_are_sent_as_expected() {
         let wording = Wording::embedded().unwrap();
         let cases = [
             (
-                wording.update_sms("en", LINK),
+                wording.update_sms("en", CODE, LINK),
                 format!(
-                    "Yuppers.app: an agreement you turned on updates for has changed. \
+                    "Yuppers.app: your yup {CODE} has an update. \
                      See it: {LINK}. Reply STOP to opt out."
                 ),
-                // Three characters over one segment with the live origin:
-                // the wording the owner chose, kept as written (README).
-                Encoding::Gsm7 { septets: 163 },
+                Encoding::Gsm7 { septets: 145 },
             ),
             (
-                wording.update_sms("es", LINK),
+                wording.update_sms("es", CODE, LINK),
                 format!(
-                    "Yuppers.app: hubo un cambio en un acuerdo que sigues. \
+                    "Yuppers.app: tu yup {CODE} tiene novedades. \
                      Velo: {LINK}. Responde STOP para cancelar."
                 ),
-                Encoding::Gsm7 { septets: 156 },
+                Encoding::Gsm7 { septets: 149 },
             ),
             (
                 wording.opt_in_sms("en"),
@@ -986,7 +1005,7 @@ mod tests {
     fn every_language_writes_both_texts_in_the_gsm_alphabet_with_stop() {
         let wording = Wording::embedded().unwrap();
         for language in languages::supported() {
-            let update = wording.update_sms(language, LINK);
+            let update = wording.update_sms(language, CODE, LINK);
             let confirmation = wording.opt_in_sms(language);
             for text in [&update, &confirmation] {
                 // GSM, so a segment holds 160 characters (153 when split),
@@ -1000,7 +1019,9 @@ mod tests {
                 assert!(text.contains("STOP"), "{text:?}");
                 assert!(!text.contains('{') && !text.contains('}'), "{text:?}");
             }
-            assert!(update.contains(LINK), "{update:?}");
+            assert!(update.contains(LINK) && update.contains(CODE), "{update:?}");
+            // One segment, with the longest link.
+            assert!(encoding(&update).fits_one_segment(), "{language}: {update:?}");
             assert!(confirmation.contains("HELP"), "{confirmation:?}");
         }
     }

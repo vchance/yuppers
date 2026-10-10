@@ -554,14 +554,14 @@ async fn each_status_change_queues_one_text_that_names_nothing_agreed() {
             (
                 phone.clone(),
                 format!(
-                    "Yuppers.app: an agreement you turned on updates for has changed. See it: \
+                    "Yuppers.app: your yup {display_code} has an update. See it: \
                      {link}. Reply STOP to opt out."
                 )
             ),
             (
                 phone.clone(),
                 format!(
-                    "Yuppers.app: an agreement you turned on updates for has changed. See it: \
+                    "Yuppers.app: your yup {display_code} has an update. See it: \
                      {link}. Reply STOP to opt out."
                 )
             ),
@@ -569,6 +569,52 @@ async fn each_status_change_queues_one_text_that_names_nothing_agreed() {
     );
     // Counted under the hourly cap, with codes.
     assert_eq!(sent_this_hour(&app).await, 3);
+}
+
+#[tokio::test]
+async fn someone_who_opted_in_to_detail_is_told_who_and_what_step_and_no_more() {
+    let Texting { _turn, app, .. } = start().await;
+    let deal = app.active().await;
+    give_phone(&app, &deal.ben).await;
+    turn_on(&app, &deal.ben, &deal).await;
+
+    // Off until Ben turns it on on his account, and that is all it takes.
+    let me = app.get(&deal.ben, "/v1/me").await.ok();
+    assert_eq!(me["notification_detail"], false);
+    let me = app
+        .call(
+            Some(&deal.ben),
+            Method::PATCH,
+            "/v1/me",
+            Some(json!({ "notification_detail": true })),
+            &[],
+        )
+        .await
+        .ok();
+    assert_eq!(me["notification_detail"], true);
+
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    let display_code: String =
+        sqlx::query_scalar("SELECT display_code FROM exchange WHERE id = $1")
+            .bind(exchange_uuid(&deal))
+            .fetch_one(&app.db)
+            .await
+            .unwrap();
+    let phone_out = Arc::new(Phone::default());
+    deliver(&app, &delivery(&phone_out, rules())).await;
+    let link = format!("https://app.test/exchanges/{}", deal.exchange);
+    let sent = phone_out.sent();
+    // The confirmation is unchanged; the update names Ana, the step and the
+    // code.
+    assert_eq!(
+        sent[1].1,
+        format!(
+            "Yuppers.app: Ana marked a delivery ({display_code}). See it: {link}. \
+             Reply STOP to opt out."
+        )
+    );
 }
 
 async fn sent_this_hour(app: &App) -> i64 {

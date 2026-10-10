@@ -78,7 +78,7 @@ impl Encoding {
 }
 
 /// The GSM 03.38 basic character set.
-const GSM7_BASIC: &str = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?\
+pub(super) const GSM7_BASIC: &str = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?\
     ¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
 /// Its extension table, each character sent as an escape and itself.
 const GSM7_EXTENSION: &str = "^{}\\[~]|€\u{c}";

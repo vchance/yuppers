@@ -576,11 +576,13 @@ async fn the_push_payload_is_generic_in_the_recipients_language_and_opens_the_ex
         PushMessage {
             to: ben_token.clone(),
             body: "Tu yup tiene novedades.".to_owned(),
+            title: None,
             data: PushData { url: url.clone() },
         },
         PushMessage {
             to: ana_token.clone(),
             body: "Your yup has an update.".to_owned(),
+            title: None,
             data: PushData { url: url.clone() },
         },
     ];

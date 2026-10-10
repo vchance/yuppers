@@ -837,7 +837,7 @@
         "tags": [
           "exchanges"
         ],
-        "summary": "Records that the initiator opened a way to pass the invitation link on:\nthe share sheet, a text message, an email, WhatsApp, a copy or its QR\ncode. Yuppers never sends the link itself, so this is all the service can\nknow about whether it went anywhere, and it says only that the sender\nopened a way to send it, not that it arrived. Shown back as\n`invitation_shared_at` on the exchange and in the list. Harmless to\nrepeat: the latest time is kept.",
+        "summary": "Records that the initiator opened a way to pass the invitation link on:\nthe share sheet, a text message, an email, WhatsApp, a copy or its QR\ncode. Yuppers never sends the link itself, so this is all the service can\nknow about whether it went anywhere, and it says only that the sender\nopened a way to send it, not that it arrived. Shown back as\n`invitation_shared_at` on the exchange and in the list. Harmless to\nrepeat: the latest time is kept. A claim counts as a share when none was\nrecorded, so a claimed link always has a time.",
         "operationId": "invitation_shared",
         "parameters": [
           {

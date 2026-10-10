@@ -268,7 +268,8 @@ export interface paths {
          *     know about whether it went anywhere, and it says only that the sender
          *     opened a way to send it, not that it arrived. Shown back as
          *     `invitation_shared_at` on the exchange and in the list. Harmless to
-         *     repeat: the latest time is kept.
+         *     repeat: the latest time is kept. A claim counts as a share when none was
+         *     recorded, so a claimed link always has a time.
          */
         post: operations["invitation_shared"];
         delete?: never;

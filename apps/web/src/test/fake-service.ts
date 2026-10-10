@@ -567,6 +567,10 @@ export interface FakeService {
   waitingSharedAt: string | null
   /** The list of exchanges as someone new sees it: empty. */
   noExchanges: boolean
+  /** The body of the request that made a draft, if one was made. */
+  created: unknown
+  /** The working copy last saved into the draft that was made, if any. */
+  saved: unknown
   /** A refusal for every request for a code from now on, such as a limit. */
   refuseCodes: ErrorCode | null
   /** Whether the service texts agreement updates (`sms_updates` in its meta). */
@@ -631,6 +635,8 @@ export function fakeService(account: Account | null): FakeService {
     sharedAt: null,
     waitingSharedAt: null,
     noExchanges: false,
+    created: null,
+    saved: null,
     refuseCodes: null,
     texting: true,
     textUpdates: new Set(),
@@ -988,6 +994,20 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (service.proposed && call === `GET /v1/exchanges/${DRAFT}`) {
     return [200, sentExchange(service)]
+  }
+  // Starting a yup: the draft that is made starts empty, and is read back
+  // with whatever working copy was saved into it.
+  if (call === 'POST /v1/exchanges') {
+    service.created = body
+    service.saved = null
+    return [200, { ...draftExchange(), draft: undefined }]
+  }
+  if (service.created && call === `GET /v1/exchanges/${DRAFT}`) {
+    return [200, { ...draftExchange(), draft: service.saved ?? undefined }]
+  }
+  if (service.created && call === `PUT /v1/exchanges/${DRAFT}/draft`) {
+    service.saved = (body as { body: unknown }).body
+    return [204, null]
   }
   // The initiator opened a way to send the link: the latest time is kept.
   if (call === `POST /v1/exchanges/${DRAFT}/invitation/shared`) {

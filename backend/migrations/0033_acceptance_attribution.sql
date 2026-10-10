@@ -21,8 +21,9 @@ ALTER TABLE acceptance
     ADD COLUMN signer_identifier_kind text CHECK (signer_identifier_kind IN ('email', 'phone')),
     ADD COLUMN session_verified_at timestamptz,
     ADD COLUMN session_id uuid,
+    -- The hash is cleared when the signer's account is deleted; the kind stays.
     ADD CONSTRAINT acceptance_signer_identifier_whole
-        CHECK ((signer_identifier_hash IS NULL) = (signer_identifier_kind IS NULL));
+        CHECK (signer_identifier_hash IS NULL OR signer_identifier_kind IS NOT NULL);
 
 -- The chain over the history: SHA-256 of the previous row's hash in the same
 -- exchange and this row's stable fields (`crate::chain`). Null on history
@@ -76,3 +77,52 @@ $$;
 CREATE TRIGGER exchange_event_chain_only
     BEFORE UPDATE ON exchange_event
     FOR EACH ROW EXECUTE FUNCTION exchange_event_chain_only();
+
+-- A deleted account must not stay linkable through the signatures it made:
+-- deletion sets `signer_identifier_hash` to null on its acceptances (and on
+-- those of accounts combined into it), keeping the kind and
+-- `session_verified_at`. The signature, the content hash and everything else
+-- stay as they were. The table stays append-only for every role, with this one
+-- exception: that column may go from a value to null, and nothing else may
+-- change. Deletion says so for its own transaction
+-- (`yuppers.account_deletion`); the application role can update that column
+-- and no other.
+CREATE FUNCTION forbid_acceptance_change() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
+BEGIN
+    IF TG_OP = 'UPDATE' AND current_setting('yuppers.account_deletion', true) = 'on' THEN
+        RETURN NULL;
+    END IF;
+    RAISE EXCEPTION '% is append-only: % is not allowed', TG_TABLE_NAME, TG_OP
+        USING ERRCODE = 'insufficient_privilege';
+END;
+$$;
+
+DROP TRIGGER acceptance_append_only ON acceptance;
+CREATE TRIGGER acceptance_append_only
+    BEFORE UPDATE OR DELETE OR TRUNCATE ON acceptance
+    FOR EACH STATEMENT EXECUTE FUNCTION forbid_acceptance_change();
+
+CREATE FUNCTION acceptance_deletion_only() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
+BEGIN
+    IF current_setting('yuppers.account_deletion', true) = 'on' THEN
+        IF OLD.signer_identifier_hash IS NOT NULL
+           AND NEW.signer_identifier_hash IS NULL
+           AND (to_jsonb(OLD) - 'signer_identifier_hash') = (to_jsonb(NEW) - 'signer_identifier_hash') THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'acceptance is append-only: only signer_identifier_hash may be cleared'
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER acceptance_deletion_only
+    BEFORE UPDATE ON acceptance
+    FOR EACH ROW EXECUTE FUNCTION acceptance_deletion_only();
+
+GRANT UPDATE (signer_identifier_hash) ON acceptance TO exchange_app;

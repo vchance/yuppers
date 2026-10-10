@@ -4,6 +4,7 @@
 # migration on. LINE is as scripts/restore-inventory.sql prints it.
 # backend/tests/inventory.rs checks this file after every migration, and
 # prints it as it should be when it is not.
+0033 grant column acceptance.signer_identifier_hash UPDATE
 0028 grant function holding_void_since EXECUTE
 0019 grant function replay_lift_suspension EXECUTE
 0018 grant function restore_replay_done EXECUTE
@@ -158,6 +159,7 @@
 0001 grant relation wallet_pass UPDATE
 0001 grant schema public USAGE
 0001 trigger acceptance acceptance_append_only O
+0033 trigger acceptance acceptance_deletion_only O
 0006 trigger acceptance acceptance_holding O
 0028 trigger account account_identifier_added O
 0028 trigger account account_merged_for_good O

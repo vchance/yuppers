@@ -178,4 +178,56 @@ async fn the_history_is_chained_backfilled_verified_and_anchored() {
     );
     // The other exchange is unharmed.
     assert!(report.mismatched.iter().all(|(id, _)| *id == exchange));
+
+    // The backfill takes the exchange row's lock, as a live insert does: with
+    // it held, the backfill waits, and finishes once it is released.
+    let mut hold = app.owner.begin().await.unwrap();
+    sqlx::query("SELECT 1 FROM exchange WHERE id = $1 FOR UPDATE")
+        .bind(other_exchange)
+        .execute(&mut *hold)
+        .await
+        .unwrap();
+    let owner = app.owner.clone();
+    let mut running = tokio::spawn(async move { chain::backfill(&owner).await });
+    let waited = tokio::time::timeout(std::time::Duration::from_millis(500), &mut running).await;
+    assert!(waited.is_err(), "the backfill did not wait for the lock");
+    hold.commit().await.unwrap();
+    running.await.unwrap().unwrap();
+
+    // Deletions: the last event of an exchange removed, and all the events
+    // of another. The walk starts from the exchanges, so both show as a gap.
+    let (_, last): (Uuid, i64) = sqlx::query_as(
+        "SELECT id, last_event_seq FROM exchange WHERE id = $1",
+    )
+    .bind(other_exchange)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    with_guards_lifted(
+        &app,
+        "DELETE FROM exchange_event WHERE exchange_id = $1 AND sequence = $2",
+        other_exchange,
+        Some(last),
+    )
+    .await;
+    let report = chain::verify(&app.owner).await.unwrap();
+    assert!(!report.intact());
+    assert_eq!(report.gaps, [(other_exchange, last)], "{report:?}");
+    let (ok, output) = staff(&app, "verify-chain");
+    assert!(!ok, "{output}");
+
+    let emptied = app.active().await;
+    let emptied_exchange: Uuid = emptied.exchange.parse().unwrap();
+    with_guards_lifted(
+        &app,
+        "DELETE FROM exchange_event WHERE exchange_id = $1 AND $2::bigint IS NULL",
+        emptied_exchange,
+        None,
+    )
+    .await;
+    let report = chain::verify(&app.owner).await.unwrap();
+    assert!(
+        report.gaps.iter().any(|(id, _)| *id == emptied_exchange),
+        "{report:?}"
+    );
 }

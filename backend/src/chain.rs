@@ -24,7 +24,7 @@
 //! 7. `revision_id` (16 bytes, may be absent)
 //! 8. `note` (UTF-8, may be absent)
 //! 9. `evidence_attachment_id` (16 bytes, may be absent)
-//! 10. `data` (canonical JSON: object keys sorted, no spaces)
+//! 10. `data` (serialised deterministically by this code: object keys sorted, no spaces, numbers and strings as serde_json writes them)
 //! 11. `occurred_at` (Unix microseconds, 8 bytes, big-endian)
 //!
 //! This is the only place the hash is computed: the service when it inserts
@@ -219,10 +219,27 @@ impl Verification {
     }
 }
 
-/// Recomputes every hash and reports the rows that do not match. Read-only.
+/// Whether a stored hash is what the row and the one before it give. After a
+/// row without a hash nothing can be recomputed, and a hash is not expected:
+/// the backfill chains whole exchanges, so a hash after an unchained row means
+/// the history was changed.
+fn links(previous: Option<[u8; 32]>, stored: Option<[u8; 32]>, fields: &EventFields) -> bool {
+    match (previous, stored) {
+        (_, None) | (None, Some(_)) => false,
+        (Some(previous), Some(hash)) => link(&previous, fields) == hash,
+    }
+}
+
+/// Recomputes every hash and reports the rows that do not match, and the
+/// exchanges whose history is shorter than the exchange says it is (a deleted
+/// last row, or all of them). Read-only.
 pub async fn verify(db: &PgPool) -> Result<Verification, sqlx::Error> {
     let mut report = Verification::default();
-    for exchange in exchanges(db).await? {
+    let all: Vec<(Uuid, i64)> =
+        sqlx::query_as("SELECT id, last_event_seq FROM exchange ORDER BY id")
+            .fetch_all(db)
+            .await?;
+    for (exchange, last_event_seq) in all {
         report.exchanges += 1;
         let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
             "{SELECT} WHERE exchange_id = $1 ORDER BY sequence"
@@ -233,6 +250,7 @@ pub async fn verify(db: &PgPool) -> Result<Verification, sqlx::Error> {
         // None after a row without a hash: nothing to recompute from.
         let mut previous = Some(genesis());
         let mut expected_sequence = 1;
+        let mut highest = 0;
         for row in &rows {
             let event = stored(row)?;
             let sequence = event.fields.sequence;
@@ -241,21 +259,22 @@ pub async fn verify(db: &PgPool) -> Result<Verification, sqlx::Error> {
                 report.gaps.push((exchange, sequence));
             }
             expected_sequence = sequence + 1;
+            highest = sequence;
             let Some(bytes) = event.chain_hash else {
                 report.unchained += 1;
                 previous = None;
                 continue;
             };
             let hash = array(bytes);
-            let matches = match (previous, hash) {
-                (_, None) => false,
-                (None, Some(_)) => true,
-                (Some(previous), Some(hash)) => link(&previous, &event.fields) == hash,
-            };
-            if !matches {
+            if !links(previous, hash, &event.fields) {
                 report.mismatched.push((exchange, sequence));
             }
             previous = hash;
+        }
+        // The exchange knows how far its history went: the row with that
+        // sequence must be there, and be the last.
+        if highest != last_event_seq {
+            report.gaps.push((exchange, last_event_seq));
         }
     }
     Ok(report)
@@ -279,6 +298,13 @@ pub async fn backfill(db: &PgPool) -> Result<Backfill, sqlx::Error> {
     for exchange in exchanges(db).await? {
         report.exchanges += 1;
         let mut tx = db.begin().await?;
+        // The exchange row first, as an insert of an event takes it
+        // (`exchanges::repo`), so a live insert either finished before this
+        // or waits, and no row is added unchained behind the backfill.
+        sqlx::query("SELECT 1 FROM exchange WHERE id = $1 FOR UPDATE")
+            .bind(exchange)
+            .fetch_optional(&mut *tx)
+            .await?;
         sqlx::query("SELECT set_config('yuppers.chain_backfill', 'on', true)")
             .execute(&mut *tx)
             .await?;
@@ -398,6 +424,34 @@ mod tests {
         let mut changed = event();
         changed.data = serde_json::json!({ "a": [true, null], "b": 2 });
         assert_ne!(base, link(&genesis(), &changed));
+    }
+
+    #[test]
+    fn a_hash_after_an_unchained_row_does_not_link() {
+        let fields = event();
+        let good = link(&genesis(), &fields);
+        assert!(links(Some(genesis()), Some(good), &fields));
+        assert!(!links(Some(genesis()), Some([9; 32]), &fields));
+        assert!(!links(Some(genesis()), None, &fields));
+        assert!(!links(None, Some(good), &fields));
+        assert!(!links(None, None, &fields));
+    }
+
+    #[test]
+    fn a_value_hashes_the_same_as_read_back_from_jsonb_text() {
+        // As Postgres prints jsonb: shorter keys first, a space after each
+        // colon and comma.
+        let text = r#"{"f": 0.1, "id": 18446744073709551615, "zed": {"a": [2.5, {"y": 1, "x": 2}], "b": 1e3}}"#;
+        let read: Value = serde_json::from_str(text).unwrap();
+        let built = serde_json::json!({
+            "zed": { "b": 1e3, "a": [2.5, { "x": 2, "y": 1 }] },
+            "id": 18446744073709551615u64,
+            "f": 0.1,
+        });
+        let (mut one, mut two) = (event(), event());
+        one.data = built;
+        two.data = read;
+        assert_eq!(link(&genesis(), &one), link(&genesis(), &two));
     }
 
     #[test]

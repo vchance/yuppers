@@ -6,7 +6,7 @@ import {
   statusWording,
   type Language,
 } from '@yuppers/shared'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useI18n, useSession } from '../app/context'
 import { Link } from '../app/Link'
@@ -40,9 +40,11 @@ export default function ExamplePage({ language }: { language: string | null }) {
     if (language && !account && language !== i18n.language) setLanguage(language as Language)
   }, [language, account, i18n.language, setLanguage])
 
+  // Worked out from today, once, when the page is opened.
+  const [now] = useState(() => new Date())
   const sample = useMemo(
-    () => sampleYup(new Date(), deviceTimeZone() ?? 'UTC', w, i18n.language),
-    [w, i18n.language],
+    () => sampleYup(now, deviceTimeZone() ?? 'UTC', w, i18n.language),
+    [now, w, i18n.language],
   )
   useAnnouncement(w.banner)
 

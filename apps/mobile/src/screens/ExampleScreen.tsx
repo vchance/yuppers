@@ -1,7 +1,7 @@
 import type { components } from '@yuppers/api-client';
 import { moveWording, sampleYup, statusWording } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { EventList } from '../components/EventList';
 import { RecordSummary } from '../components/RecordSummary';
@@ -25,10 +25,9 @@ export function ExampleScreen() {
   const router = useRouter();
   const w = wording.sample;
 
-  const sample = useMemo(
-    () => sampleYup(new Date(), deviceTimezone(), w, language),
-    [w, language],
-  );
+  // Worked out from today, once, when the screen is opened.
+  const [now] = useState(() => new Date());
+  const sample = useMemo(() => sampleYup(now, deviceTimezone(), w, language), [now, w, language]);
 
   function actionsFor(item: Contribution) {
     const money = sample.money.has(item.id);

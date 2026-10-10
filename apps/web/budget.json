@@ -1,8 +1,8 @@
 {
   "invitation": {
-    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%; raised for the Tandem design (its stylesheet, the mark, the appearance switch) at 109,319 gzip and 95,327 brotli (Spanish) plus about 10%; nudged for the wording of the step that sends the invitation (sixteen more messages in the one wording file the page loads) at 120,428 gzip and 105,008 brotli (Spanish), to leave the same small headroom. `fonts` is the bytes, as stored, of the two fonts the page preloads (Instrument Sans 400 and Gabarito 900, subset), set at 33,072 plus about 10%; the other fonts load when used (font-display: swap) and are not counted. How and when to raise it: scripts/check-budget.mjs.",
-    "gzip": 122000,
-    "brotli": 107000,
+    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%; raised for the Tandem design (its stylesheet, the mark, the appearance switch) at 109,319 gzip and 95,327 brotli (Spanish) plus about 10%; nudged for the wording of the step that sends the invitation (sixteen more messages in the one wording file the page loads) at 120,428 gzip and 105,008 brotli (Spanish), to leave the same small headroom; nudged again for the wording of the starting points and the sample yup (DESIGN.md sections 4.3 and 4.4: the common agreements, copying, the example and its banner, in the one wording file the page loads) at 123,259 gzip and 107,461 brotli (Spanish), to leave the same small headroom. `fonts` is the bytes, as stored, of the two fonts the page preloads (Instrument Sans 400 and Gabarito 900, subset), set at 33,072 plus about 10%; the other fonts load when used (font-display: swap) and are not counted. How and when to raise it: scripts/check-budget.mjs.",
+    "gzip": 125000,
+    "brotli": 109000,
     "fonts": 36000
   }
 }

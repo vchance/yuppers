@@ -3,7 +3,7 @@
   "__requires": [],
   "title": "Yuppers: funnel and request health",
   "uid": "yuppers-funnel",
-  "description": "The product funnel and the service's health, from the metrics the api and the worker push over OTLP (docs/operations.md, \"Telemetry\" and \"Metrics\"). Expects the otel-lgtm stack's Prometheus data source (uid prometheus).",
+  "description": "The product funnel and the service's health, from the metrics the api and the worker push over OTLP (docs/operations.md, \"Telemetry\" and \"Metrics\"). Expects the otel-lgtm stack's Prometheus (uid prometheus) and Loki (uid loki) data sources.",
   "tags": ["yuppers"],
   "editable": true,
   "graphTooltip": 1,
@@ -500,6 +500,58 @@
           { "matcher": { "id": "byName", "options": "failed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
         ]
       }
+    },
+    {
+      "type": "row", "title": "Logs", "id": 103, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Log lines per minute, by level (without readiness probes)",
+      "description": "Every request writes one line at INFO; WARN and ERROR are the ones to read. Render's readiness probes are left out.",
+      "id": 23,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 53 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range", "legendFormat": "{{detected_level}}",
+          "expr": "sum by (detected_level) (count_over_time({service_namespace=\"yuppers\", deployment_environment=~\"$environment\"} | http_route != \"/readyz\" [1m]))" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "info" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "warn" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#fab219" } }] },
+          { "matcher": { "id": "byName", "options": "error" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Warnings and errors",
+      "description": "Every line at WARN or above, newest first. Click a line for its fields: request id, route, status, trace id.",
+      "id": 24,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range",
+          "expr": "{service_namespace=\"yuppers\", deployment_environment=~\"$environment\"} | severity_text=~\"WARN|ERROR|FATAL\"" }
+      ],
+      "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }
+    },
+    {
+      "type": "logs",
+      "title": "Latest lines (without readiness probes)",
+      "description": "Everything the api and the worker log, newest first, with the request's route, status and latency when there is one. Click a line for all its fields; the trace id opens the trace in Tempo.",
+      "id": 25,
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 61 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range",
+          "expr": "{service_namespace=\"yuppers\", deployment_environment=~\"$environment\"} | http_route != \"/readyz\" | line_format \"{{.service_name}} {{.severity_text}} {{__line__}}{{if .http_route}}  {{.method}} {{.http_route}} {{.status}} {{.latency_ms}} ms{{end}}\"" }
+      ],
+      "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }
     }
   ]
 }

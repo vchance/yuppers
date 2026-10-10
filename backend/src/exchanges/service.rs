@@ -1143,6 +1143,7 @@ pub async fn reissue_invitation(
 /// Yuppers never sends the link itself (DESIGN.md §8), so this is all the
 /// service can know of it, and it says only that, not that the link arrived.
 /// The latest time is kept, so sending it again after a while shows as such.
+/// A claim records the share too when none was recorded.
 /// Nothing to record once someone is in the invited party's place.
 pub async fn invitation_shared(db: &PgPool, session: &Session, id: Uuid) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
@@ -1566,18 +1567,34 @@ pub(crate) async fn claim_in(
         .bind(account)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE invitation SET claimed_by = $2, claimed_at = $3 WHERE id = $1")
-        .bind(found.id)
-        .bind(account)
-        .bind(at)
-        .execute(&mut *tx)
-        .await?;
+    // A link that was claimed was in someone's hands, so one never marked as
+    // shared counts as shared at the claim, and the funnel never shows more
+    // claims than shares. The row is locked, so this reads what it updates.
+    let unshared: bool =
+        sqlx::query_scalar("SELECT shared_at IS NULL FROM invitation WHERE id = $1")
+            .bind(found.id)
+            .fetch_one(&mut *tx)
+            .await?;
+    sqlx::query(
+        "UPDATE invitation
+         SET claimed_by = $2, claimed_at = $3, shared_at = COALESCE(shared_at, $3)
+         WHERE id = $1",
+    )
+    .bind(found.id)
+    .bind(account)
+    .bind(at)
+    .execute(&mut *tx)
+    .await?;
     // Stored with the slot now filled, so the claim event records who
     // claimed it. That fact then lives in the permanent history and not only
     // in a row that can change.
     let mut claimed = aggregate.clone();
     claimed.accounts[1] = Some(account);
     repo::persist(&mut *tx, &claimed, &decision, actor, None, at).await?;
+    if unshared {
+        // Counted where the claimed counter is, with the rest of the claim.
+        crate::funnel::funnel().invitation_shared();
+    }
 
     view(&mut *tx, rules, exchange, account).await
 }

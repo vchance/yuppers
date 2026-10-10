@@ -130,6 +130,7 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
             <input
               type="checkbox"
               role="switch"
+              aria-checked={detail}
               id="profile-detail"
               aria-describedby="profile-detail-hint"
               checked={detail}

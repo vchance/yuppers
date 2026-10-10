@@ -66,7 +66,7 @@ describe('the chooser', () => {
   })
 
   test('is the same in Spanish, with the warning and the line in Spanish', async () => {
-    const { wording } = await start('/new', ana, 'es')
+    const { wording } = await start('/new', { ...ana, language: 'es' }, 'es')
     const w = wording.templates
     await heading(w.chooserTitle)
     expect(document.body.textContent).toContain(w.notFor)

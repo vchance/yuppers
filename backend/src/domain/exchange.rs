@@ -191,6 +191,11 @@ pub enum Command {
     RequestClose,
     RetractClose,
     AddStatement,
+    /// The provider of a contribution that is under way notes how it is
+    /// going (DESIGN.md §7.2). Changes no status and asks for no answer.
+    NoteProgress {
+        id: ContributionId,
+    },
 
     // Timers, run by the system.
     ExpireRevision,
@@ -264,6 +269,12 @@ pub enum Event {
         by: Slot,
     },
     StatementAdded {
+        by: Slot,
+    },
+    /// A progress note on a contribution (DESIGN.md §7.2): the provider's
+    /// own statement, kept as such. It is not a claim and changes nothing.
+    ProgressNoted {
+        contribution: ContributionId,
         by: Slot,
     },
     InactivityPrompted,
@@ -377,6 +388,7 @@ pub fn decide(
                 Command::RequestClose => step.request_close(by)?,
                 Command::RetractClose => step.retract_close(by)?,
                 Command::AddStatement => step.add_statement(by)?,
+                Command::NoteProgress { id } => step.note_progress(by, id)?,
                 Command::ExpireRevision
                 | Command::LapseCloseRequest
                 | Command::PromptInactivity
@@ -429,7 +441,8 @@ fn open_to_unconfirmed_claimant(command: &Command) -> bool {
         | Command::CancelEnd
         | Command::RequestClose
         | Command::RetractClose
-        | Command::AddStatement => false,
+        | Command::AddStatement
+        | Command::NoteProgress { .. } => false,
     }
 }
 
@@ -742,6 +755,30 @@ impl Step<'_> {
             status,
         });
         self.complete_if_done();
+        Ok(())
+    }
+
+    /// A note on how a contribution is going. Only its provider may write
+    /// one, and only while it is `Pending` or `Claimed`: once it is
+    /// confirmed, disputed (that has its own note), waived or removed there
+    /// is nothing under way to report. No status or flag changes, and no
+    /// due date.
+    fn note_progress(&mut self, by: Slot, id: ContributionId) -> Result<(), Refusal> {
+        let in_force = self.active()?;
+        let terms = in_force
+            .revision
+            .contribution(id)
+            .ok_or(Refusal::UnknownContribution(id))?;
+        if terms.from != by {
+            return Err(Refusal::WrongActor);
+        }
+        if !matches!(self.exchange.statuses[&id], Status::Pending | Status::Claimed) {
+            return Err(Refusal::NotAllowed);
+        }
+        self.events.push(Event::ProgressNoted {
+            contribution: id,
+            by,
+        });
         Ok(())
     }
 

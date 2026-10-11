@@ -115,12 +115,16 @@ pub enum EventType {
     CloseRequestRetracted,
     /// A statement about a close request.
     StatementAdded,
+    /// The provider noted how an item is going. Their own statement, kept
+    /// as such: not a claim, and no status changed. The note is what they
+    /// wrote.
+    ProgressNoted,
     InactivityPrompted,
     ExchangeClosed,
 }
 
 impl EventType {
-    pub const ALL: [EventType; 23] = [
+    pub const ALL: [EventType; 24] = [
         EventType::CounterpartyClaimed,
         EventType::CounterpartyConfirmed,
         EventType::CounterpartyRejected,
@@ -142,6 +146,7 @@ impl EventType {
         EventType::CloseRequested,
         EventType::CloseRequestRetracted,
         EventType::StatementAdded,
+        EventType::ProgressNoted,
         EventType::InactivityPrompted,
         EventType::ExchangeClosed,
     ];
@@ -170,6 +175,7 @@ impl EventType {
             EventType::CloseRequested => "CLOSE_REQUESTED",
             EventType::CloseRequestRetracted => "CLOSE_REQUEST_RETRACTED",
             EventType::StatementAdded => "STATEMENT_ADDED",
+            EventType::ProgressNoted => "PROGRESS_NOTED",
             EventType::InactivityPrompted => "INACTIVITY_PROMPTED",
             EventType::ExchangeClosed => "EXCHANGE_CLOSED",
         }

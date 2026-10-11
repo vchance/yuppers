@@ -244,3 +244,7 @@ Acceptance of the Terms and the Privacy policy at sign-in (README, "Signing in";
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.
+
+## 0034_instalments_and_stages
+
+Instalments, stages and progress notes (`DESIGN.md` §7.1, §7.2). No new table or column: instalments and stages are ordinary contributions, and a progress note is an ordinary `PROGRESS_NOTED` event, so nothing in the record or its hash changes. Two partial indexes only: one on the outbox, for joining a burst of claims or confirmations into one waiting message and for the one progress-note message a person is told of per yup per day; one on the events, for counting the progress notes on a contribution.

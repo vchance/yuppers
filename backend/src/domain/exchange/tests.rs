@@ -1222,3 +1222,75 @@ fn a_refusal_changes_nothing() {
     scenario.refused(B, Command::Accept { revision: rev(9) }, day(1));
     assert_eq!(scenario.exchange, before);
 }
+
+// ---- Progress notes (DESIGN.md §7.2) --------------------------------------
+
+fn note_progress(n: u128) -> Command {
+    Command::NoteProgress { id: id(n) }
+}
+
+#[test]
+fn the_provider_can_note_progress_while_an_item_is_pending_or_claimed_and_nothing_changes() {
+    let mut scenario = Scenario::active();
+    let before = scenario.exchange.statuses.clone();
+
+    scenario.ok(A, note_progress(1), day(1));
+    assert_eq!(
+        scenario.events,
+        vec![Event::ProgressNoted {
+            contribution: id(1),
+            by: Slot::A
+        }]
+    );
+    assert_eq!(scenario.exchange.statuses, before, "no status moves");
+    assert_eq!(scenario.status(1), Status::Pending, "and it is not a claim");
+
+    scenario.ok(A, act(1, Action::Claim), day(2));
+    scenario.ok(A, note_progress(1), day(3));
+    assert_eq!(scenario.status(1), Status::Claimed);
+}
+
+#[test]
+fn a_progress_note_is_the_providers_alone_and_only_while_the_item_is_under_way() {
+    let mut scenario = Scenario::active();
+    assert_eq!(
+        scenario.refused(B, note_progress(1), day(1)),
+        Refusal::WrongActor,
+        "the recipient has no note to add"
+    );
+    assert_eq!(
+        scenario.refused(A, note_progress(9), day(1)),
+        Refusal::UnknownContribution(id(9))
+    );
+
+    scenario.ok(A, act(1, Action::Claim), day(1));
+    scenario.ok(B, act(1, Action::Dispute), day(2));
+    assert_eq!(
+        scenario.refused(A, note_progress(1), day(3)),
+        Refusal::NotAllowed,
+        "a dispute has its own note"
+    );
+    scenario.ok(A, act(1, Action::Claim), day(4));
+    scenario.ok(B, act(1, Action::Confirm), day(5));
+    assert_eq!(
+        scenario.refused(A, note_progress(1), day(6)),
+        Refusal::NotAllowed
+    );
+}
+
+#[test]
+fn a_progress_note_needs_an_agreement_in_force() {
+    let scenario = Scenario::negotiating();
+    assert_eq!(
+        scenario.refused(A, note_progress(1), day(1)),
+        Refusal::NotAllowed
+    );
+}
+
+#[test]
+fn a_progress_note_changes_nothing_in_the_exchange_but_counts_as_activity() {
+    let mut scenario = Scenario::active();
+    scenario.ok(A, note_progress(1), day(20));
+    assert_eq!(scenario.exchange.state, State::Active);
+    assert_eq!(scenario.exchange.last_activity_at, day(20));
+}

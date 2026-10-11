@@ -247,6 +247,22 @@ pub struct SendRevision {
     /// Required when this is the first revision, which also issues the
     /// invitation; ignored after.
     pub invitation: Option<InvitationOptions>,
+    /// How many times the composer's split sheets were completed while this
+    /// was written (DESIGN.md §7.1, §7.2, "Measures"). Counted and nothing
+    /// else: no amount, no description, no date. A client may leave it out.
+    #[serde(default)]
+    pub splits: Option<SplitsUsed>,
+}
+
+/// The split sheets completed while a revision was written.
+#[derive(Clone, Copy, Debug, Default, Deserialize, ToSchema)]
+pub struct SplitsUsed {
+    /// "Split into instalments" completed.
+    #[serde(default)]
+    pub instalments: u8,
+    /// "Split into stages" completed.
+    #[serde(default)]
+    pub stages: u8,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -289,6 +305,21 @@ pub enum CommandDto {
     },
     RetractClose,
     AddStatement {
+        note: String,
+    },
+    /// Mark several payments as paid at once ("Mark the rest as paid",
+    /// DESIGN.md §7.1): one claim for each, in the order given, each exactly
+    /// as if claimed on its own, and one message to the other party saying
+    /// how many. All or none. Money items you owe, each still pending.
+    ClaimRest {
+        contributions: Vec<Uuid>,
+    },
+    /// Note how an item you provide is going (DESIGN.md §7.2). A statement
+    /// of your own: it is not a claim, changes no status and asks nothing of
+    /// the other party. Only while the item is pending or claimed; a limited
+    /// number per item; no text update.
+    NoteProgress {
+        contribution: Uuid,
         note: String,
     },
 }

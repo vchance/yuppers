@@ -594,6 +594,9 @@ fn event_row(
         Event::CloseRequested { .. } => ("CLOSE_REQUESTED", None, None, none),
         Event::CloseRequestRetracted { .. } => ("CLOSE_REQUEST_RETRACTED", None, None, none),
         Event::StatementAdded { .. } => ("STATEMENT_ADDED", None, None, none),
+        Event::ProgressNoted { contribution, .. } => {
+            ("PROGRESS_NOTED", None, Some(contribution.0), none)
+        }
         Event::InactivityPrompted => ("INACTIVITY_PROMPTED", None, None, none),
         Event::Closed { outcome, waived } => {
             let (outcome, reason) = outcome_columns(State::Closed(*outcome));
@@ -786,10 +789,18 @@ async fn persist_in(
             if let Some(account) = before.account_of(slot) {
                 outbox::enqueue(
                     conn,
-                    before.id,
-                    event_sequence,
-                    account,
-                    notification.notice,
+                    outbox::Queued {
+                        exchange: before.id,
+                        event_sequence,
+                        recipient: account,
+                        notice: notification.notice,
+                        count: notification.count,
+                        // A burst is one actor's; the worker's events are not.
+                        actor: match actor {
+                            Actor::Party(slot) => Some(slot),
+                            Actor::System => None,
+                        },
+                    },
                 )
                 .await?;
             }

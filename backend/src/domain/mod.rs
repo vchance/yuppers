@@ -32,7 +32,7 @@ pub struct Rules {
     /// due date is a calendar date. A placeholder.
     pub due_soon_lead: Duration,
     /// Longest note, in characters: on a revision, a claim, a dispute, a close
-    /// request or a statement (§6).
+    /// request, a statement or a progress note (§6, §7.2).
     pub note_max_chars: usize,
     /// Total money in an agreement above which stronger verification is
     /// required, in minor units (§8).
@@ -61,6 +61,9 @@ pub struct Rules {
     /// within which a claim about unwanted texts can usually be brought in
     /// the US. A placeholder for counsel to confirm.
     pub sms_consent_retention: Duration,
+    /// Progress notes one contribution may carry (DESIGN.md §7.2). A
+    /// placeholder from the design.
+    pub progress_notes_per_contribution: i64,
     /// Size limits on what a revision may contain. Placeholders.
     pub limits: Limits,
 }
@@ -110,6 +113,7 @@ impl Default for Rules {
             due_date_horizon: Duration::days(3650),
             network_metadata_retention: Duration::days(90),
             sms_consent_retention: Duration::days(365 * 4),
+            progress_notes_per_contribution: 20,
             limits: Limits::default(),
         }
     }

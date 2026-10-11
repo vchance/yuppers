@@ -101,6 +101,21 @@ pub fn texts_per_person_per_day() -> i64 {
 
 // ---- Queuing ----------------------------------------------------------------
 
+/// What [`enqueue_update`] is told about the event.
+pub(crate) struct Update<'a> {
+    pub exchange: Uuid,
+    pub event_sequence: i64,
+    pub recipient: Uuid,
+    pub notice: Notice,
+    /// How many items a burst held, for the payload.
+    pub count: i64,
+    /// How long before the text may first be sent.
+    pub hold: Duration,
+    /// Channels a burst already joined (`outbox::enqueue`); `SMS` among them
+    /// means the text is already waiting and says it for this event too.
+    pub skip: &'a [String],
+}
+
 /// Queues the update text about `notice` for `recipient`, if it is a status
 /// change the terms name, updates are on for this agreement with the
 /// number the account still has, that number has not replied STOP, and the
@@ -108,16 +123,34 @@ pub fn texts_per_person_per_day() -> i64 {
 /// transaction that records the event.
 pub(crate) async fn enqueue_update(
     conn: &mut PgConnection,
-    exchange: Uuid,
-    event_sequence: i64,
-    recipient: Uuid,
-    notice: Notice,
+    update: Update<'_>,
 ) -> Result<(), sqlx::Error> {
-    if !texting() || !notice.texted_as_update() {
+    if !texting() || !update.notice.texted_as_update() {
         return Ok(());
     }
-    let payload = json!({ "sms": UPDATE, "notice": notice.as_str() });
-    queue(conn, exchange, Some(event_sequence), recipient, payload).await
+    let mut payload = json!({ "sms": UPDATE, "notice": update.notice.as_str() });
+    if update.count > 1 {
+        payload["count"] = json!(update.count);
+    }
+    let placing = Placing {
+        hold: update.hold,
+        skip: update.skip,
+    };
+    queue(
+        conn,
+        update.exchange,
+        Some(update.event_sequence),
+        update.recipient,
+        payload,
+        placing,
+    )
+    .await
+}
+
+/// When a text may first be sent, and whether it is already waiting.
+struct Placing<'a> {
+    hold: Duration,
+    skip: &'a [String],
 }
 
 async fn queue(
@@ -126,13 +159,16 @@ async fn queue(
     event_sequence: Option<i64>,
     recipient: Uuid,
     payload: Value,
+    placing: Placing<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO outbox (kind, recipient_account_id, exchange_id, event_sequence, payload)
-         SELECT 'SMS', a.id, $2, $3, $4 FROM account a
+        "INSERT INTO outbox
+            (kind, recipient_account_id, exchange_id, event_sequence, payload, available_at)
+         SELECT 'SMS', a.id, $2, $3, $4, now() + make_interval(secs => $6) FROM account a
          JOIN sms_update u
            ON u.account_id = a.id AND u.exchange_id = $2 AND u.phone_index = a.phone_index
          WHERE a.id = $1 AND a.status = 'ACTIVE'
+           AND NOT ('SMS' = ANY($7))
            AND NOT EXISTS (SELECT 1 FROM sms_opt_out o WHERE o.phone_index = a.phone_index)
            AND (SELECT count(*) FROM outbox q
                 WHERE q.kind = 'SMS' AND q.recipient_account_id = $1
@@ -143,6 +179,8 @@ async fn queue(
     .bind(event_sequence)
     .bind(payload)
     .bind(texts_per_person_per_day())
+    .bind(placing.hold.as_seconds_f64())
+    .bind(placing.skip)
     .execute(conn)
     .await?;
     Ok(())
@@ -323,6 +361,10 @@ pub async fn turn_on(
             None,
             account,
             json!({ "sms": OPT_IN_CONFIRMATION }),
+            Placing {
+                hold: Duration::ZERO,
+                skip: &[],
+            },
         )
         .await?;
     }

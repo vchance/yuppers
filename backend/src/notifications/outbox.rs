@@ -42,9 +42,11 @@ use super::wording::{Links, Wording};
 use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
 use crate::combine;
 use crate::contact::{self, Field};
-use crate::domain::notification::Notice;
+use crate::domain::notification::{
+    COALESCE_HOLD, COALESCE_WINDOW, Notice, PROGRESS_NOTICE_WINDOW,
+};
 use crate::domain::reminder;
-use crate::domain::revision::ContributionId;
+use crate::domain::revision::{ContributionId, Slot};
 use crate::error::Redacted;
 use crate::exchanges::reminders;
 use crate::funnel::EmailKind;
@@ -125,12 +127,28 @@ pub const NO_LONGER_A_PARTY: &str = "not sent: the recipient is no longer a part
 
 // ---- Writing ----------------------------------------------------------------
 
+/// One event's message to one person, as [`enqueue`] takes it.
+#[derive(Clone, Copy, Debug)]
+pub struct Queued {
+    pub exchange: Uuid,
+    pub event_sequence: i64,
+    pub recipient: Uuid,
+    pub notice: Notice,
+    /// How many items the message is about: more than one when a single
+    /// command claimed or confirmed several (`Notification::count`).
+    pub count: usize,
+    /// The party whose command caused it, if one did; the worker's timers
+    /// are nobody's burst.
+    pub actor: Option<Slot>,
+}
+
 /// Queues an email telling `recipient` about an event. Call it in the
 /// transaction that records the event, so the two are stored or lost together.
 ///
 /// Only the kind of message is stored. The address, the language and the
 /// text are read when it is sent, so a queued message holds nothing personal
-/// and nothing from the agreement.
+/// and nothing from the agreement. For a burst the payload also holds how
+/// many items it was about, a bare number.
 ///
 /// One row per channel the recipient can be reached on (DESIGN.md §12): an
 /// email for an account with an email address, a push notification for one
@@ -138,16 +156,129 @@ pub const NO_LONGER_A_PARTY: &str = "not sent: the recipient is no longer a part
 /// turned on text updates for this agreement, if the notice is a status
 /// change those are sent for (`super::sms_updates`). One that is suspended
 /// or deleted gets nothing.
-pub async fn enqueue(
+///
+/// **Bursts** (DESIGN.md §12, "Instalments, stages and progress notes"). A
+/// claim or confirmation joins the message still waiting about the same
+/// notice for the same person if the same party has done nothing but this on
+/// the yup since, within [`COALESCE_WINDOW`] of the message's first; that
+/// message then says how many items. Such a message waits
+/// [`COALESCE_HOLD`] for the next event before it may be sent. A message
+/// that has been sent is not recalled: a burst never makes more messages
+/// than its events would have.
+///
+/// **Progress notes** are told at most once per person per yup per
+/// [`PROGRESS_NOTICE_WINDOW`]; later notes are seen on the yup.
+pub async fn enqueue(conn: &mut PgConnection, queued: Queued) -> Result<(), sqlx::Error> {
+    let Queued {
+        exchange,
+        event_sequence,
+        recipient,
+        notice,
+        count,
+        actor,
+    } = queued;
+
+    if notice == Notice::ProgressNoted && progress_told_lately(conn, exchange, recipient).await? {
+        return Ok(());
+    }
+
+    let count = count.max(1) as i64;
+    let burst = notice.coalesces();
+    let merged = match actor {
+        Some(actor) if burst => join_burst(conn, queued, actor, count).await?,
+        _ => Vec::new(),
+    };
+
+    let mut payload = json!({ "notice": notice.as_str() });
+    if count > 1 {
+        payload["count"] = json!(count);
+    }
+    let hold = if burst { COALESCE_HOLD } else { Duration::ZERO };
+    insert(
+        conn,
+        exchange,
+        Some(event_sequence),
+        recipient,
+        payload,
+        Placing {
+            hold,
+            skip: &merged,
+        },
+    )
+    .await?;
+    super::sms_updates::enqueue_update(
+        conn,
+        super::sms_updates::Update {
+            exchange,
+            event_sequence,
+            recipient,
+            notice,
+            count,
+            hold,
+            skip: &merged,
+        },
+    )
+    .await
+}
+
+/// Whether `recipient` was queued a progress-note message about `exchange`
+/// within the window, whatever became of it.
+async fn progress_told_lately(
     conn: &mut PgConnection,
     exchange: Uuid,
-    event_sequence: i64,
     recipient: Uuid,
-    notice: Notice,
-) -> Result<(), sqlx::Error> {
-    let payload = json!({ "notice": notice.as_str() });
-    insert(conn, exchange, Some(event_sequence), recipient, payload).await?;
-    super::sms_updates::enqueue_update(conn, exchange, event_sequence, recipient, notice).await
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM outbox
+                        WHERE exchange_id = $1 AND recipient_account_id = $2
+                          AND event_sequence IS NOT NULL
+                          AND payload->>'notice' = $3
+                          AND created_at > now() - make_interval(secs => $4))",
+    )
+    .bind(exchange)
+    .bind(recipient)
+    .bind(Notice::ProgressNoted.as_str())
+    .bind(PROGRESS_NOTICE_WINDOW.as_seconds_f64())
+    .fetch_one(conn)
+    .await
+}
+
+/// Adds `count` items to the messages still waiting that the new event
+/// continues, and says which channels (`EMAIL`, `PUSH`, `SMS`) it did that
+/// on, so that no second message is queued on them.
+async fn join_burst(
+    conn: &mut PgConnection,
+    queued: Queued,
+    actor: Slot,
+    count: i64,
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "UPDATE outbox o
+         SET payload = jsonb_set(o.payload, '{count}',
+                                 to_jsonb(coalesce((o.payload->>'count')::bigint, 1) + $5)),
+             available_at = LEAST(now() + make_interval(secs => $6),
+                                  o.created_at + make_interval(secs => $7))
+         WHERE o.exchange_id = $1 AND o.recipient_account_id = $2
+           AND o.completed_at IS NULL AND o.attempts = 0
+           AND o.event_sequence IS NOT NULL
+           AND o.payload->>'notice' = $3
+           AND o.created_at > now() - make_interval(secs => $7)
+           AND NOT EXISTS (SELECT 1 FROM exchange_event e
+                           WHERE e.exchange_id = o.exchange_id
+                             AND e.sequence > o.event_sequence AND e.sequence < $4
+                             AND e.actor_slot IS DISTINCT FROM $8)
+         RETURNING o.kind",
+    )
+    .bind(queued.exchange)
+    .bind(queued.recipient)
+    .bind(queued.notice.as_str())
+    .bind(queued.event_sequence)
+    .bind(count)
+    .bind(COALESCE_HOLD.as_seconds_f64())
+    .bind(COALESCE_WINDOW.as_seconds_f64())
+    .bind(actor.as_str())
+    .fetch_all(conn)
+    .await
 }
 
 /// Queues an email reminding `recipient` of contributions that are due soon
@@ -169,7 +300,17 @@ pub async fn enqueue_reminder(
 ) -> Result<(), sqlx::Error> {
     let contributions: Vec<Uuid> = contributions.iter().map(|id| id.0).collect();
     let payload = json!({ "notice": notice.as_str(), "contributions": contributions });
-    insert(conn, exchange, None, recipient, payload).await
+    let placing = Placing {
+        hold: Duration::ZERO,
+        skip: &[],
+    };
+    insert(conn, exchange, None, recipient, payload, placing).await
+}
+
+/// When a message may first be sent, and the channels not to queue it on.
+struct Placing<'a> {
+    hold: Duration,
+    skip: &'a [String],
 }
 
 async fn insert(
@@ -178,17 +319,21 @@ async fn insert(
     event_sequence: Option<i64>,
     recipient: Uuid,
     payload: Value,
+    placing: Placing<'_>,
 ) -> Result<(), sqlx::Error> {
     // Whether there is a device is decided now and again when it is sent:
     // one registered later does not get what was queued before it, and one
     // signed out of meanwhile is not sent to.
     sqlx::query(
-        "INSERT INTO outbox (kind, recipient_account_id, exchange_id, event_sequence, payload)
-         SELECT 'EMAIL', id, $2, $3, $4 FROM account
+        "INSERT INTO outbox
+            (kind, recipient_account_id, exchange_id, event_sequence, payload, available_at)
+         SELECT 'EMAIL', id, $2, $3, $4, now() + make_interval(secs => $5) FROM account
          WHERE id = $1 AND status = 'ACTIVE' AND email_index IS NOT NULL
+           AND NOT ('EMAIL' = ANY($6))
          UNION ALL
-         SELECT 'PUSH', a.id, $2, $3, $4 FROM account a
+         SELECT 'PUSH', a.id, $2, $3, $4, now() + make_interval(secs => $5) FROM account a
          WHERE a.id = $1 AND a.status = 'ACTIVE'
+           AND NOT ('PUSH' = ANY($6))
            AND EXISTS (SELECT 1 FROM device d
                        JOIN account_session s ON s.id = d.session_id
                        WHERE d.account_id = a.id
@@ -198,6 +343,8 @@ async fn insert(
     .bind(exchange)
     .bind(event_sequence)
     .bind(payload)
+    .bind(placing.hold.as_seconds_f64())
+    .bind(placing.skip)
     .execute(conn)
     .await?;
     Ok(())
@@ -409,6 +556,11 @@ async fn deliver_next(
                     EmailKind::Notice
                 };
             crate::funnel::funnel().email_sent(kind);
+            // One message for several items (a burst of claims or
+            // confirmations, DESIGN.md §12).
+            if payload["count"].as_u64().is_some_and(|count| count > 1) {
+                crate::funnel::funnel().notice_coalesced();
+            }
         }
         Attempt::Failed(error) => {
             // Kept short: a provider's error can be a whole page.
@@ -623,7 +775,13 @@ async fn prepare(
         exchange: &link,
         record: &format!("{link}/record"),
     };
-    let rendered = delivery.wording.email(&language, notice, &code, links);
+    // A burst says how many items it was about.
+    let count = payload["count"]
+        .as_u64()
+        .map_or(1, |count| count.min(u64::from(u32::MAX)) as u32);
+    let rendered = delivery
+        .wording
+        .email_about(&language, notice, count, &code, links);
     Ok(Ok(Email {
         to,
         subject: rendered.subject,

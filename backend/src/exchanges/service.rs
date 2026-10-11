@@ -224,11 +224,23 @@ async fn record_signature(
     signature: Signature<'_>,
     at: OffsetDateTime,
 ) -> Result<(), sqlx::Error> {
+    // How this session signed in: the blind index and kind of the
+    // identifier its code proved (migration 0033), never the identifier.
+    // Null for a session from before it was kept.
+    let signed_in_with: Option<(Option<Vec<u8>>, Option<String>)> = sqlx::query_as(
+        "SELECT identifier_hash, identifier_kind FROM account_session WHERE id = $1",
+    )
+    .bind(session.id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let (identifier_hash, identifier_kind) = signed_in_with.unwrap_or_default();
+
     let acceptance: Uuid = sqlx::query_scalar(
         "INSERT INTO acceptance
             (exchange_id, revision_id, slot, account_id, content_hash, auth_method,
-             authenticated_at, consent_language, consent_version, accepted_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             authenticated_at, consent_language, consent_version, accepted_at,
+             signer_identifier_hash, signer_identifier_kind, session_verified_at, session_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $7, $13)
          RETURNING id",
     )
     .bind(signature.exchange)
@@ -241,6 +253,9 @@ async fn record_signature(
     .bind(signature.consent_language)
     .bind(signature.consent_version)
     .bind(at)
+    .bind(identifier_hash)
+    .bind(identifier_kind)
+    .bind(session.id)
     .fetch_one(&mut *conn)
     .await?;
 

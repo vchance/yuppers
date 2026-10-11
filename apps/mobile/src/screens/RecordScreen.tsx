@@ -266,6 +266,8 @@ function Record({ record, failure, reload }: RecordProps) {
         />
       )}
 
+      {record.history_chain ? <Hint>{record.history_chain}</Hint> : null}
+
       <Actions>
         <Button variant="link" label={w.back} onPress={back} />
       </Actions>
@@ -357,6 +359,7 @@ function Version({ revision, name, when }: VersionProps) {
               })}
             </Hint>
             <Hint>{fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}</Hint>
+            {signature.verification.attribution ? <Hint>{signature.verification.attribution}</Hint> : null}
             <Hint>
               {fmt(w.consentShown, {
                 version: signature.consent.version,

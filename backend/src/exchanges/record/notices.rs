@@ -39,6 +39,17 @@ pub struct Export {
     /// What stands in place of text a reviewer has hidden from the reader
     /// (`crate::review`).
     hidden: String,
+    /// How the signer signed in, by kind of identifier (`email`, `phone`),
+    /// with `{span}` for how long before signing. Left out of a document
+    /// when a language lacks it (the tests check that none does).
+    #[serde(default)]
+    attribution: HashMap<String, String>,
+    #[serde(default)]
+    span: HashMap<String, String>,
+    /// The footer about the chain of the history, with `{sequence}` and
+    /// `{hash}`.
+    #[serde(default)]
+    chain: String,
 }
 
 impl Export {
@@ -62,6 +73,39 @@ impl Export {
             .get(method.as_str())
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// One line under a signature: the kind of identifier the signer had
+    /// signed in with (never the identifier) and how long before signing,
+    /// rounded up so that "no more than" holds. `None` for a signature made
+    /// before this was kept, or in a language without the wording.
+    pub fn attribution(&self, kind: &str, seconds_before: i64) -> Option<String> {
+        let template = self.attribution.get(kind).filter(|text| !text.is_empty())?;
+        let seconds = seconds_before.max(0);
+        let (unit, count) = if seconds <= 3_600 {
+            ("minute", (seconds + 59) / 60)
+        } else if seconds <= 172_800 {
+            ("hour", (seconds + 3_599) / 3_600)
+        } else {
+            ("day", (seconds + 86_399) / 86_400)
+        };
+        let count = count.max(1);
+        let key = format!("{unit}{}", if count == 1 { "One" } else { "Other" });
+        let span = self
+            .span
+            .get(&key)
+            .filter(|text| !text.is_empty())?
+            .replace("{count}", &count.to_string());
+        Some(template.replace("{span}", &span))
+    }
+
+    /// The footer that says the history is chained, and its last hash.
+    pub fn chain(&self, sequence: i64, hash: &str) -> Option<String> {
+        (!self.chain.is_empty()).then(|| {
+            self.chain
+                .replace("{sequence}", &sequence.to_string())
+                .replace("{hash}", hash)
+        })
     }
 
     fn whole(&self) -> bool {
@@ -166,6 +210,62 @@ mod tests {
         let phone = export.verification(VerificationMethod::PhoneOtp);
         assert!(phone.contains("phone"), "{phone}");
         assert_ne!(email, phone);
+    }
+
+    #[test]
+    fn every_language_says_how_the_signer_signed_in_and_that_the_history_is_chained() {
+        for language in languages::supported() {
+            let (_, export) = wording(language);
+            for (kind, seconds) in [
+                ("email", 30),
+                ("phone", 90),
+                ("email", 7_200),
+                ("phone", 400_000),
+            ] {
+                let line = export.attribution(kind, seconds).expect(language);
+                assert!(!line.contains('{') && !line.contains('}'), "{line}");
+            }
+            let chain = export.chain(7, "abcd").expect(language);
+            assert!(chain.contains("abcd") && chain.contains('7'), "{chain}");
+            assert!(!chain.contains('{'), "{chain}");
+        }
+    }
+
+    #[test]
+    fn the_time_since_signing_in_is_rounded_up_in_the_unit_that_fits() {
+        let (_, export) = wording("en");
+        assert!(
+            export
+                .attribution("email", 0)
+                .unwrap()
+                .contains("1 minute ")
+        );
+        assert!(
+            export
+                .attribution("email", 61)
+                .unwrap()
+                .contains("2 minutes")
+        );
+        assert!(
+            export
+                .attribution("phone", 3_600)
+                .unwrap()
+                .contains("60 minutes")
+        );
+        assert!(
+            export
+                .attribution("phone", 3_601)
+                .unwrap()
+                .contains("2 hours")
+        );
+        assert!(
+            export
+                .attribution("phone", 259_300)
+                .unwrap()
+                .contains("4 days")
+        );
+        // Only the kind is ever said.
+        assert!(export.attribution("fax", 5).is_none());
     }
 
     #[test]

@@ -223,7 +223,7 @@ What remains, as of October 2026. Every package here is already at the newest ve
 - `worker` — background jobs: expiries and closures on their timers, and reminders that something is due soon or overdue, and delivering notifications from the outbox.
 - `migrate` — applies migrations as the schema owner. The API and worker never run them. With `MIGRATE_CREATE_APP_ROLE=true` it first creates the application role if it does not exist (`backend/src/app_role.rs`; README, "Deploying").
 - `openapi` — prints the API description that the TypeScript client is generated from.
-- `staff` — names who reviews abuse reports: `grant`, `revoke` and `list`, run by the owner with the schema owner's connection, never by the service ([docs/operations.md](docs/operations.md), "Reviewing reports").
+- `staff` — names who reviews abuse reports: `grant`, `revoke` and `list`, run by the owner with the schema owner's connection, never by the service ([docs/operations.md](docs/operations.md), "Reviewing reports"). Also `backfill-chain` and `verify-chain`, which chain and check the history of every exchange ([docs/operations.md](docs/operations.md), "Signature attribution and the history chain").
 - `replay-deletions` — after a restore, deletes again the accounts a deletion log names, through the service's own deletion ([docs/operations.md](docs/operations.md), "Replaying deletions").
 - `contact-data` — `status` says how many encrypted email addresses, phone numbers and payment options are under which key; `rotate` re-encrypts them under a new `CONTACT_DATA_KEY`. Run by the owner with the schema owner's connection ("Contact details at rest", below; [docs/operations.md](docs/operations.md), "Contact data key").
 

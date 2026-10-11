@@ -1547,6 +1547,23 @@ export interface Wording {
       verification: Record<Schemas['VerificationMethod'], string>
       /** What stands in place of text a reviewer has hidden from the reader. */
       hidden: string
+      /**
+       * Under each signature, the kind of identifier the signer had signed in
+       * with and how long before signing (LEGAL_MEMO.md §2.2). `{span}` is
+       * one of `span`, filled in by the service.
+       */
+      attribution: { email: string; phone: string }
+      /** A length of time, `{count}` filled in by the service. */
+      span: {
+        minuteOne: string
+        minuteOther: string
+        hourOne: string
+        hourOther: string
+        dayOne: string
+        dayOther: string
+      }
+      /** The footer: that the history is chained, with the last fingerprint. */
+      chain: string
     }
     /**
      * The plain summary at the top of the record (DESIGN.md §14.1): who,

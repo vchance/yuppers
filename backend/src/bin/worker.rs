@@ -33,7 +33,7 @@ use yuppers_backend::notifications::sms_updates::{self, SmsDelivery};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::otel::{self, MetricsSource, SpanExt};
 use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
-use yuppers_backend::{code_consent, combine, db, shutdown, sweep, telemetry};
+use yuppers_backend::{chain, code_consent, combine, db, shutdown, sweep, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
 
@@ -159,6 +159,7 @@ async fn main() -> anyhow::Result<()> {
         last_sweep: None,
         replay_checked: false,
         snapshot_day: None,
+        anchor_day: None,
     };
 
     loop {
@@ -201,6 +202,8 @@ struct Worker {
     replay_checked: bool,
     /// The UTC day on which the funnel's daily snapshot was last taken.
     snapshot_day: Option<Date>,
+    /// The UTC day on which the history anchor was last logged.
+    anchor_day: Option<Date>,
 }
 
 /// One job of a pass, in a span of its own within the pass's trace, so the
@@ -362,7 +365,25 @@ impl Worker {
                 Err(error) => tracing::error!(error = %Redacted(&error), "funnel snapshot failed"),
             }
         }
-        // After both, so what they just caused goes out in the same
+        // Once a day, the anchor of the exchanges' history chains: how many
+        // there are and the SHA-256 of their last hashes (`chain::anchor`).
+        // Nothing in it is personal; a copy kept outside the database is what
+        // lets a later rewrite of the history be seen.
+        if self.anchor_day != Some(today) {
+            match job(pass, "history anchor", chain::anchor(&db)).await {
+                Ok(anchor) => {
+                    self.anchor_day = Some(today);
+                    tracing::info!(
+                        event = "history_anchor",
+                        exchanges = anchor.exchanges,
+                        anchor = %chain::hex(&anchor.digest),
+                        "history anchor"
+                    );
+                }
+                Err(error) => tracing::error!(error = %Redacted(&error), "history anchor failed"),
+            }
+        }
+        // After all of them, so what they just caused goes out in the same
         // pass.
         let delivered = job(
             pass,

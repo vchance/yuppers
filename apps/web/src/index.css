@@ -1497,3 +1497,8 @@ button.choice {
   justify-content: center;
   gap: 0.5rem;
 }
+
+/* The record footer carries a 64-character hash with nothing to break on. */
+.record-chain {
+  overflow-wrap: anywhere;
+}

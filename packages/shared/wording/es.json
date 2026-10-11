@@ -1239,7 +1239,20 @@
         "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
         "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
       },
-      "hidden": "Oculto por revisión"
+      "hidden": "Oculto por revisión",
+      "attribution": {
+        "email": "Quien firmó había iniciado sesión con una dirección de correo electrónico no más de {span} antes de firmar.",
+        "phone": "Quien firmó había iniciado sesión con un número de teléfono no más de {span} antes de firmar."
+      },
+      "span": {
+        "minuteOne": "1 minuto",
+        "minuteOther": "{count} minutos",
+        "hourOne": "1 hora",
+        "hourOther": "{count} horas",
+        "dayOne": "1 día",
+        "dayOther": "{count} días"
+      },
+      "chain": "El historial de este registro está encadenado: la huella de cada entrada se calcula a partir de la entrada anterior, así que cambiar una entrada anterior cambiaría todas las posteriores. La huella de la entrada {sequence}, la última cuando se hizo esta copia, es {hash}."
     },
     "summary": {
       "heading": "En resumen",

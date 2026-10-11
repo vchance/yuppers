@@ -358,7 +358,7 @@ for (const [language, locale, w] of [
     await page.goto('/account')
     await shown(page.getByRole('button', { name: w.deletion.open, exact: true })).click()
     await expect(
-      shown(page.getByText(fill(w.deletion.codeIntro, { identifier: SAMPLE_PHONE }), { exact: true })),
+      shown(page.getByText(fill(w.deletion.codeIntro, { identifier: shownPhone(SAMPLE_PHONE) }), { exact: true })),
     ).toBeVisible()
     const deletionBox = shown(page.getByRole('checkbox', { name: w.smsCode.deleteAccount, exact: true }))
     const sendDeletion = shown(page.getByRole('button', { name: w.deletion.sendCode, exact: true }))

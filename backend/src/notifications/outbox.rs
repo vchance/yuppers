@@ -164,8 +164,9 @@ pub struct Queued {
 /// that has been sent is not recalled: a burst never makes more messages
 /// than its events would have.
 ///
-/// **Progress notes** are told at most once per person per yup per
-/// [`PROGRESS_NOTICE_WINDOW`]; later notes are seen on the yup.
+/// **Progress notes** are told at most once per person per yup in any
+/// [`PROGRESS_NOTICE_WINDOW`] (a rolling 24 hours, not a calendar day); later
+/// notes are seen on the yup.
 pub async fn enqueue(conn: &mut PgConnection, queued: Queued) -> Result<(), sqlx::Error> {
     let Queued {
         exchange,
@@ -254,21 +255,35 @@ async fn join_burst(
     actor: Slot,
     count: i64,
 ) -> Result<Vec<String>, sqlx::Error> {
+    // What the burst is made of: the same kind of event, and nothing else of
+    // this party's in between. A claim, a retraction and a claim again are not
+    // two claims in one burst.
+    let event_type = match queued.notice {
+        Notice::DeliveryClaimed => "CONTRIBUTION_CLAIMED",
+        _ => "CONTRIBUTION_CONFIRMED",
+    };
+    // The candidate rows are taken with SKIP LOCKED: a command never waits on
+    // a row the worker holds while it sends. One it holds is already going out
+    // and is not joined; the burst starts a message of its own.
     sqlx::query_scalar(
         "UPDATE outbox o
          SET payload = jsonb_set(o.payload, '{count}',
                                  to_jsonb(coalesce((o.payload->>'count')::bigint, 1) + $5)),
              available_at = LEAST(now() + make_interval(secs => $6),
                                   o.created_at + make_interval(secs => $7))
-         WHERE o.exchange_id = $1 AND o.recipient_account_id = $2
-           AND o.completed_at IS NULL AND o.attempts = 0
-           AND o.event_sequence IS NOT NULL
-           AND o.payload->>'notice' = $3
-           AND o.created_at > now() - make_interval(secs => $7)
-           AND NOT EXISTS (SELECT 1 FROM exchange_event e
-                           WHERE e.exchange_id = o.exchange_id
-                             AND e.sequence > o.event_sequence AND e.sequence < $4
-                             AND e.actor_slot IS DISTINCT FROM $8)
+         WHERE o.id IN (
+             SELECT c.id FROM outbox c
+             WHERE c.exchange_id = $1 AND c.recipient_account_id = $2
+               AND c.completed_at IS NULL AND c.attempts = 0
+               AND c.event_sequence IS NOT NULL
+               AND c.payload->>'notice' = $3
+               AND c.created_at > now() - make_interval(secs => $7)
+               AND NOT EXISTS (SELECT 1 FROM exchange_event e
+                               WHERE e.exchange_id = c.exchange_id
+                                 AND e.sequence > c.event_sequence AND e.sequence < $4
+                                 AND (e.actor_slot IS DISTINCT FROM $8 OR e.type <> $9))
+             FOR UPDATE SKIP LOCKED)
+           AND o.completed_at IS NULL
          RETURNING o.kind",
     )
     .bind(queued.exchange)
@@ -279,6 +294,7 @@ async fn join_burst(
     .bind(coalesce_hold().as_seconds_f64())
     .bind(COALESCE_WINDOW.as_seconds_f64())
     .bind(actor.as_str())
+    .bind(event_type)
     .fetch_all(conn)
     .await
 }

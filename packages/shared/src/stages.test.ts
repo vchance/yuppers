@@ -210,3 +210,33 @@ describe('splitting into stages', () => {
     expect(merged?.[0].due).toEqual({ kind: 'AFTER_CONTRIBUTION', contribution: 'job' })
   })
 })
+
+describe('what waits on a split job', () => {
+  const plan = {
+    stages: [
+      { name: 'Posts set', date: '' },
+      { name: 'Panels up', date: '' },
+      { name: 'Painted', date: '' },
+    ],
+    payments: [3333, 3333, 3334],
+  }
+  const waiter = (): DraftContribution => ({
+    ...newContribution('waiter', 'B'),
+    type: 'MONEY',
+    due: { kind: 'AFTER_CONTRIBUTION', contribution: 'job' },
+  })
+
+  it('waits on the last stage, not a payment and not the first stage', () => {
+    const { items } = splitIntoStages(
+      fence(),
+      plan,
+      { chain: false, payer: 'B' },
+      (stage) => stage,
+      newId,
+      2,
+    )
+    const list = replaceItem([fence(), waiter()], 'job', items)
+    const lastStage = items.filter((item) => item.type === 'SERVICE').at(-1)
+    expect(list.at(-1)?.due).toEqual({ kind: 'AFTER_CONTRIBUTION', contribution: lastStage?.id })
+  })
+})

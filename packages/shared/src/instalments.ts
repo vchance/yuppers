@@ -242,14 +242,34 @@ function replaceAt<T>(items: readonly T[], at: number, replacement: readonly T[]
   return [...items.slice(0, at), ...replacement, ...items.slice(at + 1)]
 }
 
-/** `items` with the one named by `id` replaced by `replacement`, which takes its place. */
+/**
+ * `items` with the one named by `id` replaced by `replacement`, which takes
+ * its place. An item that waited on the one replaced waits on the last of
+ * the parts of the same kind and provider instead (the last instalment, the
+ * last stage): the first part inherits the original's ID, and what waited on
+ * the whole job did not mean to wait on its first piece only.
+ */
 export function replaceItem(
   items: readonly DraftContribution[],
   id: string,
   replacement: readonly DraftContribution[],
 ): DraftContribution[] {
   const at = items.findIndex((item) => item.id === id)
-  return at < 0 ? [...items] : replaceAt(items, at, replacement)
+  if (at < 0) return [...items]
+  const original = items[at]
+  const last = [...replacement]
+    .reverse()
+    .find((part) => part.type === original.type && part.from === original.from)
+  const inside = new Set(replacement.map((part) => part.id))
+  const repointed = items.map((item) =>
+    last &&
+    !inside.has(item.id) &&
+    item.due.kind === 'AFTER_CONTRIBUTION' &&
+    item.due.contribution === id
+      ? { ...item, due: { kind: 'AFTER_CONTRIBUTION' as const, contribution: last.id } }
+      : item,
+  )
+  return replaceAt(repointed, at, replacement)
 }
 
 /**
@@ -276,9 +296,14 @@ export function mergeInstalments(
     amount: fromMinorUnits(sum, fractionDigits),
     due: first.due,
   }
-  return items.flatMap((item) => {
+  return items.flatMap((item): DraftContribution[] => {
     if (item.id === first.id) return [merged]
-    return group.ids.includes(item.id) ? [] : [item]
+    if (group.ids.includes(item.id)) return []
+    // Something that waited on a part now waits on the whole.
+    if (item.due.kind === 'AFTER_CONTRIBUTION' && group.ids.includes(item.due.contribution)) {
+      return [{ ...item, due: { kind: 'AFTER_CONTRIBUTION', contribution: first.id } }]
+    }
+    return [item]
   })
 }
 

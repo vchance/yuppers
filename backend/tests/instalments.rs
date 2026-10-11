@@ -647,3 +647,139 @@ async fn the_list_counts_a_series_by_what_is_confirmed_and_a_single_item_has_non
         .unwrap();
     assert!(entry.get("payments").is_none() && entry.get("stages").is_none());
 }
+
+#[tokio::test]
+async fn a_claim_racing_mark_the_rest_ends_with_one_claim_per_item_and_one_loser() {
+    let (app, _turn) = app().await;
+    let deal = series(&app).await;
+    let [first, ..] = deal.payments;
+    let version = app.view(&deal.ben, &deal.exchange).await["version"].clone();
+    let path = format!("/v1/exchanges/{}/commands", deal.exchange);
+
+    let one = app.post(
+        &deal.ben,
+        &path,
+        json!({ "expected_version": version, "command": {
+            "type": "CONTRIBUTION", "contribution": first, "action": "CLAIM" } }),
+    );
+    let rest = app.post(
+        &deal.ben,
+        &path,
+        json!({ "expected_version": version, "command": {
+            "type": "CLAIM_REST", "contributions": deal.payments } }),
+    );
+    let (one, rest) = tokio::join!(one, rest);
+
+    let (winner, loser) = if one.status.is_success() {
+        (&one, &rest)
+    } else {
+        (&rest, &one)
+    };
+    assert!(winner.status.is_success(), "{} {}", one.body, rest.body);
+    assert_eq!(loser.status, StatusCode::CONFLICT);
+    assert_eq!(loser.code(), "VERSION_CONFLICT");
+
+    let history = app
+        .get(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/history", deal.exchange),
+        )
+        .await
+        .ok();
+    let claimed: Vec<&Value> = history["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["type"] == "CONTRIBUTION_CLAIMED")
+        .collect();
+    let items: std::collections::BTreeSet<&str> = claimed
+        .iter()
+        .map(|event| event["contribution"]["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(claimed.len(), items.len(), "no item claimed twice");
+    assert!(
+        claimed.len() == 1 || claimed.len() == 3,
+        "{}",
+        claimed.len()
+    );
+}
+
+#[tokio::test]
+async fn a_claim_past_the_window_starts_a_new_message() {
+    let (app, _turn) = app().await;
+    let deal = series(&app).await;
+    let [first, second, _] = deal.payments;
+    app.act(&deal.ben, &deal.exchange, first, "CLAIM")
+        .await
+        .ok();
+    // The first message is older than the ten minutes a burst is gathered over.
+    sqlx::query("UPDATE outbox SET created_at = created_at - interval '11 minutes'")
+        .execute(&app.db)
+        .await
+        .unwrap();
+    app.act(&deal.ben, &deal.exchange, second, "CLAIM")
+        .await
+        .ok();
+    let counts: Vec<Option<i64>> = queued(&app, &deal.exchange)
+        .await
+        .into_iter()
+        .map(|(_, _, count)| count)
+        .collect();
+    assert_eq!(counts, [None, None]);
+}
+
+#[tokio::test]
+async fn a_claim_retracted_and_made_again_is_two_messages_not_two_items() {
+    let (app, _turn) = app().await;
+    let deal = series(&app).await;
+    let [first, ..] = deal.payments;
+    app.act(&deal.ben, &deal.exchange, first, "CLAIM")
+        .await
+        .ok();
+    app.act(&deal.ben, &deal.exchange, first, "RETRACT_CLAIM")
+        .await
+        .ok();
+    app.act(&deal.ben, &deal.exchange, first, "CLAIM")
+        .await
+        .ok();
+    let rows: Vec<(String, Option<i64>)> = queued(&app, &deal.exchange)
+        .await
+        .into_iter()
+        .map(|(_, notice, count)| (notice, count))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("DELIVERY_CLAIMED".to_owned(), None),
+            ("CLAIM_RETRACTED".to_owned(), None),
+            ("DELIVERY_CLAIMED".to_owned(), None),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_held_message_with_no_further_event_goes_out_after_the_hold() {
+    let (app, _turn) = app().await;
+    yuppers_backend::domain::notification::set_coalesce_hold(time::Duration::seconds(2));
+    let deal = series(&app).await;
+    app.act(&deal.ben, &deal.exchange, deal.payments[0], "CLAIM")
+        .await
+        .ok();
+
+    let provider = Arc::new(Provider::default());
+    let delivery = Delivery {
+        sender: provider.clone(),
+        wording: Wording::embedded().unwrap(),
+        web_origin: "https://app.test".to_owned(),
+        rules: DeliveryRules::default(),
+    };
+    let now = OffsetDateTime::now_utc();
+    // Not before the hold has passed...
+    deliver_due(&app.db, &delivery, now).await.unwrap();
+    assert!(provider.0.lock().unwrap().is_empty());
+    // ...and then on its own.
+    deliver_due(&app.db, &delivery, now + Duration::seconds(5))
+        .await
+        .unwrap();
+    assert_eq!(provider.0.lock().unwrap().len(), 1);
+}

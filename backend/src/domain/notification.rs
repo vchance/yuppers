@@ -232,7 +232,8 @@ static HOLD: AtomicI64 = AtomicI64::new(-1);
 
 /// How long after a progress-note notification a recipient is told of no
 /// further note on the same yup (DESIGN.md §7.2: at most one per recipient
-/// per yup per day). Later notes are seen on the yup. A placeholder from the
+/// per yup per day). Rolling: 24 hours from the last one told, not a
+/// calendar day. Later notes are seen on the yup. A placeholder from the
 /// design.
 pub const PROGRESS_NOTICE_WINDOW: Duration = Duration::days(1);
 

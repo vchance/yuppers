@@ -149,7 +149,7 @@ From both, the **funnel** (`backend/src/funnel.rs`): each step counted where it 
 | `yuppers_splits_used_total` | counter | `kind`: `instalments`, `stages`. Split sheets completed before a proposal was sent, as the client reports them with the proposal (at most 50 a time) |
 | `yuppers_mark_rest_used_total` | counter | "Mark the rest as paid" used |
 | `yuppers_notices_coalesced_total` | counter | Emails that told of several claims or confirmations at once (the worker) |
-| `yuppers_progress_notes_added_total` | counter | Progress notes added |
+| `yuppers_progress_notes_added_total` | counter | Progress notes added. The message to the other party about them is limited to one per recipient per yup in any rolling 24 hours (not a calendar day), by email and push only, never by text |
 | `yuppers_codes_sent_total` | counter | `channel`: `email`, `phone`. One-time codes handed to a provider (the api) |
 | `yuppers_texts_sent_total` | counter | Agreement updates sent by text (the worker) |
 | `yuppers_emails_sent_total` | counter | `kind`: `notice` (about an exchange, reminders included), `account` (a report to review, accounts combined). Emails the worker sent from the outbox; codes count under `yuppers_codes_sent_total` |

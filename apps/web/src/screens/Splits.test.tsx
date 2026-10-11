@@ -184,3 +184,30 @@ describe('splitting a job into stages', () => {
     )
   })
 })
+
+describe('what a split changes around it', () => {
+  test('an item that waited on the job waits on its last stage', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.composer.split.stages
+    await heading(wording.composer.titleFirst)
+    await press(button(w.link))
+    await type(field('Name of stage 1'), 'Posts set')
+    await type(field('Name of stage 2'), 'Panels up')
+    await type(field('Name of stage 3'), 'Painted')
+    await press(button(w.done))
+    await settle()
+    const after = document.querySelector<HTMLSelectElement>('select[id$="-after"]')!
+    expect(after.selectedOptions[0].textContent).toContain('Painted')
+  })
+
+  test('a part of a split is not split again, so putting the split back leaves nothing behind', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    const w = wording.composer.split.instalments
+    await heading(wording.composer.titleFirst)
+    await press(button(w.link))
+    await press(button(w.done))
+    await settle()
+    expect(() => button(w.link)).toThrow()
+    expect(button(w.undo)).toBeTruthy()
+  })
+})

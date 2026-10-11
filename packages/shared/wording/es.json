@@ -158,7 +158,7 @@
         },
         "PROGRESS_NOTED": {
           "subject": "Una nota sobre cómo va algo: {yup}",
-          "body": "La otra parte agregó una nota sobre un elemento en el que trabaja. Es su propia declaración. No se marca nada como entregado y no hay nada que debas confirmar. Inicia sesión para leerla. Se te avisa de una nota al día como máximo por cada yup; las demás están en el yup."
+          "body": "La otra parte agregó una nota sobre un elemento en el que trabaja. Es su propia declaración. No se marca nada como entregado y no hay nada que debas confirmar. Inicia sesión para leerla. Se te avisa de una nota como máximo cada 24 horas por cada yup; las demás están en el yup."
         }
       },
       "yup": "tu yup con {name} ({code})",
@@ -1058,7 +1058,7 @@
       "heading": "Cómo va",
       "label": "Tu nota",
       "hint": "Ambas partes pueden leerla y queda en el registro como declaración tuya. No marca nada como entregado, y {name} no tiene nada que confirmar.",
-      "told": "A {name} se le avisa por correo o notificación, como máximo una vez al día por cada yup. No hay mensaje de texto.",
+      "told": "A {name} se le avisa por correo o notificación como máximo una vez cada 24 horas por cada yup. No hay mensaje de texto.",
       "send": "Agregar la nota",
       "added": "Tu nota de avance se agregó.",
       "count": "{count, plural, one {# nota de avance} other {# notas de avance}}",

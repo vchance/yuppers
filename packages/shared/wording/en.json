@@ -158,7 +158,7 @@
         },
         "PROGRESS_NOTED": {
           "subject": "A note on how something is going: {yup}",
-          "body": "The other party has added a note on an item they are working on. It is their own statement. Nothing is marked delivered, and there is nothing for you to confirm. Sign in to read it. You are told about at most one note a day for each yup; later notes are on the yup."
+          "body": "The other party has added a note on an item they are working on. It is their own statement. Nothing is marked delivered, and there is nothing for you to confirm. Sign in to read it. You are told about at most one note in any 24 hours for each yup; later notes are on the yup."
         }
       },
       "yup": "your yup with {name} ({code})",
@@ -1058,7 +1058,7 @@
       "heading": "How it is going",
       "label": "Your note",
       "hint": "Both of you can read it, and it is kept in the record as your own statement. It doesn’t mark anything delivered, and {name} has nothing to confirm.",
-      "told": "{name} is told by email or notification, at most once a day for each yup. There is no text message.",
+      "told": "{name} is told by email or notification at most once in any 24 hours for each yup. There is no text message.",
       "send": "Add the note",
       "added": "Your progress note was added.",
       "count": "{count, plural, one {# progress note} other {# progress notes}}",

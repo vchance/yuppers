@@ -928,7 +928,10 @@ function SplitControls(props: {
     (candidate) =>
       candidate.ids.find((id) => props.contributions.some((other) => other.id === id)) === item.id,
   )
-  const split = kind && props.canSplit && props.open === null
+  // An item a split made is changed like any other, but not split again: putting
+  // the outer split back would leave the inner one's items behind.
+  const inSplit = props.groups.some((candidate) => candidate.ids.includes(item.id))
+  const split = kind && props.canSplit && props.open === null && !inSplit
   if (!split && !group) return null
   return (
     <div className="actions">

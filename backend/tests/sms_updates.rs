@@ -1337,3 +1337,132 @@ async fn a_party_removed_before_being_confirmed_gets_no_more_updates() {
         [("OPT_IN", "WEB"), ("OPT_OUT", "NO_LONGER_A_PARTY")]
     );
 }
+
+// ---- Bursts and progress notes (DESIGN.md §12) -------------------------------
+
+/// Ben owes Ana three payments and Ana owes Ben a job, in force. Only the
+/// fields the helpers here read are real.
+async fn series_deal(app: &App) -> (Deal, [Uuid; 3]) {
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let exchange = app.draft(&ana).await;
+    let payments = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+    let job = Uuid::new_v4();
+    let item = |id: Uuid, from: &str, kind: &str, amount: Option<i64>| {
+        json!({
+            "id": id, "from": from, "type": kind, "description": "Item",
+            "quantity": null, "due": { "kind": "ON_AGREEMENT" },
+            "completion_criteria": null, "required": true, "amount_minor": amount,
+        })
+    };
+    let terms = json!({
+        "party_a_name": "Ana Ruiz",
+        "party_b_name": "Ben Ortiz",
+        "terms": "Three payments.",
+        "contributions": [
+            item(payments[0], "B", "MONEY", Some(1000)),
+            item(payments[1], "B", "MONEY", Some(1000)),
+            item(payments[2], "B", "MONEY", Some(1000)),
+            item(job, "A", "SERVICE", None),
+        ],
+    });
+    let sent = app.send(&ana, &exchange, terms).await.ok();
+    let revision = sent["exchange"]["open_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let invitation = sent["invitation_token"].as_str().unwrap().to_owned();
+    app.post(
+        &ben,
+        "/v1/invitations/claim",
+        json!({ "token": invitation }),
+    )
+    .await
+    .ok();
+    app.command(&ana, &exchange, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+        .await
+        .ok();
+    app.command(&ben, &exchange, common::accept(&revision))
+        .await
+        .ok();
+    let deal = Deal {
+        ana,
+        ben,
+        exchange,
+        repair: job,
+        payment: payments[0],
+        revision,
+        invitation,
+    };
+    (deal, payments)
+}
+
+#[tokio::test]
+async fn a_burst_of_claims_by_one_party_queues_one_text_not_three() {
+    let t = start().await;
+    yuppers_backend::domain::notification::set_coalesce_hold(time::Duration::seconds(60));
+    let (deal, payments) = series_deal(&t.app).await;
+    give_phone(&t.app, &deal.ana).await;
+    turn_on(&t.app, &deal.ana, &deal).await;
+    sqlx::query(
+        "UPDATE outbox SET completed_at = now() WHERE kind = 'SMS' AND completed_at IS NULL",
+    )
+    .execute(&t.app.owner)
+    .await
+    .unwrap();
+
+    // Three claims, one command each.
+    for id in payments {
+        t.app.act(&deal.ben, &deal.exchange, id, "CLAIM").await.ok();
+    }
+    let texts: Vec<Value> = queued(&t.app.db, deal.ana.id)
+        .await
+        .into_iter()
+        .map(|(_, payload)| payload)
+        .filter(|payload| payload["notice"] == "DELIVERY_CLAIMED")
+        .collect();
+    assert_eq!(texts.len(), 1, "{texts:?}");
+    assert_eq!(texts[0]["count"], 3);
+}
+
+#[tokio::test]
+async fn a_progress_note_is_never_texted_even_to_someone_with_updates_on() {
+    let t = start().await;
+    let (deal, _) = series_deal(&t.app).await;
+    give_phone(&t.app, &deal.ben).await;
+    turn_on(&t.app, &deal.ben, &deal).await;
+    sqlx::query(
+        "UPDATE outbox SET completed_at = now() WHERE kind = 'SMS' AND completed_at IS NULL",
+    )
+    .execute(&t.app.owner)
+    .await
+    .unwrap();
+
+    t.app
+        .command(
+            &deal.ana,
+            &deal.exchange,
+            json!({ "type": "NOTE_PROGRESS", "contribution": deal.repair, "note": "Under way." }),
+        )
+        .await
+        .ok();
+    let texts = queued(&t.app.db, deal.ben.id).await;
+    assert!(
+        texts
+            .iter()
+            .all(|(_, payload)| payload["notice"] != "PROGRESS_NOTED"),
+        "{texts:?}"
+    );
+    // It was told by email, which is all a note is told by without a device.
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT kind FROM outbox
+         WHERE exchange_id = $1 AND recipient_account_id = $2
+           AND payload->>'notice' = 'PROGRESS_NOTED'",
+    )
+    .bind(exchange_uuid(&deal))
+    .bind(deal.ben.id)
+    .fetch_all(&t.app.owner)
+    .await
+    .unwrap();
+    assert_eq!(kinds, ["EMAIL"]);
+}

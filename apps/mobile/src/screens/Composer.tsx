@@ -642,6 +642,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                   item={item}
                   count={draft.contributions.length}
                   group={groups.find((candidate) => candidate.ids[0] === item.id) ?? null}
+                  inSplit={groups.some((candidate) => candidate.ids.includes(item.id))}
                   open={sheet?.id === item.id ? sheet.kind : null}
                   onOpen={(kind) => setSheet({ id: item.id, kind })}
                   onUndo={undo}
@@ -838,6 +839,7 @@ function SplitLinks({
   item,
   count,
   group,
+  inSplit,
   open,
   onOpen,
   onUndo,
@@ -845,6 +847,8 @@ function SplitLinks({
   item: DraftContribution;
   count: number;
   group: SplitGroup | null;
+  /** The item is one a split made: it is changed like any other, but not split again. */
+  inSplit: boolean;
   open: 'INSTALMENTS' | 'STAGES' | null;
   onOpen(kind: 'INSTALMENTS' | 'STAGES'): void;
   onUndo(group: SplitGroup): void;
@@ -854,7 +858,8 @@ function SplitLinks({
   const money = item.type === 'MONEY';
   const stages = item.type === 'SERVICE' || item.type === 'TASK';
   // Stages are offered with room for a payment each (DESIGN.md §7.2).
-  const offered = (money && splitRoom(count) >= 2) || (stages && splitRoom(count, 2) >= 2);
+  const offered =
+    !inSplit && ((money && splitRoom(count) >= 2) || (stages && splitRoom(count, 2) >= 2));
   if (!offered && !group) return null;
   return (
     <Actions>

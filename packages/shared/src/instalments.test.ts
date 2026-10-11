@@ -282,3 +282,30 @@ describe('what is kept with the working copy', () => {
     expect(swapped.splits?.[0].original.from).toBe('A')
   })
 })
+
+describe('what waits on a split item', () => {
+  const rows = [
+    { amountMinor: 5000, date: '2026-11-01' },
+    { amountMinor: 5000, date: '2026-12-01' },
+    { amountMinor: 5000, date: '2027-01-01' },
+  ]
+  const waiter = (): DraftContribution => ({
+    ...newContribution('waiter', 'A'),
+    due: { kind: 'AFTER_CONTRIBUTION', contribution: 'original' },
+  })
+
+  it('waits on the last instalment, not the first part that inherited the ID', () => {
+    const { items } = splitIntoInstalments(repayment(), rows, describe3, newId, 2)
+    const list = replaceItem([repayment(), waiter()], 'original', items)
+    expect(list.at(-1)?.due).toEqual({ kind: 'AFTER_CONTRIBUTION', contribution: items[2].id })
+    // The parts themselves are not pointed anywhere new.
+    expect(list.slice(0, 3).map((item) => item.due.kind)).toEqual(['DATE', 'DATE', 'DATE'])
+  })
+
+  it('goes back to the whole when the instalments are put back', () => {
+    const { items, group } = splitIntoInstalments(repayment(), rows, describe3, newId, 2)
+    const list = replaceItem([repayment(), waiter()], 'original', items)
+    const merged = mergeInstalments(list, group, 2)
+    expect(merged?.at(-1)?.due).toEqual({ kind: 'AFTER_CONTRIBUTION', contribution: 'original' })
+  })
+})

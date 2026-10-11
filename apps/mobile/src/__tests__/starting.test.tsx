@@ -1,5 +1,5 @@
 import { TEMPLATES, wordingFor } from '@yuppers/shared';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { forgetInvitation } from '../lib/invitation';
 import { DRAFT, TOKEN, ana, fakeService, type FakeService } from './fake-service';
@@ -7,8 +7,10 @@ import { DRAFT, TOKEN, ana, fakeService, type FakeService } from './fake-service
 /*
  * Starting a yup and the sample yup (DESIGN.md sections 4.3 and 4.4), run as
  * the app: New yup opens on the common agreements, the blank form and
- * copying an earlier yup, and choosing one makes the draft with what it
- * puts in; the example is a read-only record anyone can open.
+ * copying an earlier yup. A common agreement or the blank form opens the
+ * composer with nothing made on the service until something is changed;
+ * copying makes the draft at once. The example is a read-only record anyone
+ * can open.
  */
 
 const mockKeychain = new Map<string, string>();
@@ -93,26 +95,43 @@ describe('the chooser', () => {
     expect(screen.queryByText(/loan|lend money|lending money/i)).toBeNull();
   });
 
-  test('a common agreement makes the draft from it and opens it with examples in grey', async () => {
+  test('a common agreement opens with examples in grey, makes nothing until something is changed, then moves to the exchange', async () => {
     await open('/new');
     await screen.findByRole('header', { name: w.templates.chooserTitle });
     await fireEvent.press(
       screen.getByRole('button', { name: w.templates.entries['job-deposit-balance'].name }),
     );
     await screen.findByRole('header', { name: w.composer.titleFirst });
+    expect(screen.getPathname()).toBe('/new/job-deposit-balance');
 
-    const [created, saved] = startedBy();
-    // The service is told once what the draft was started from; the working
-    // copy has no trace of it.
-    expect(created.body).toMatchObject({ timezone: 'America/Chicago', started_from: 'job-deposit-balance@1' });
-    expect(JSON.stringify(saved.body)).not.toContain('job-deposit-balance');
-
+    // Nothing is on the service, and the band is there already.
     const entry = w.templates.entries['job-deposit-balance'];
     for (const item of entry.items) {
       expect(screen.getAllByPlaceholderText(item.description).length).toBeGreaterThanOrEqual(1);
     }
     screen.getByText(entry.hint);
     screen.getByText(w.templates.bandExamples);
+    screen.getByText(entry.warning!);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+    expect(startedBy()).toEqual([]);
+
+    // The first change makes the draft, tells the service once what it was
+    // started from, saves the copy (which has no trace of it) and moves on.
+    await fireEvent.changeText(screen.getByLabelText(w.composer.otherName), 'Ben');
+    await waitFor(() => expect(startedBy()).toHaveLength(2), { timeout: 5000 });
+    const [created, saved] = startedBy();
+    expect(created.body).toMatchObject({
+      timezone: 'America/Chicago',
+      started_from: 'job-deposit-balance@1',
+    });
+    expect(JSON.stringify(saved.body)).not.toContain('job-deposit-balance');
+    await waitFor(() => expect(screen.getPathname()).toBe(`/exchanges/${DRAFT}`), {
+      timeout: 5000,
+    });
+    await screen.findByRole('header', { name: w.composer.titleFirst });
+    // The warning is about the law, not the form: it stays.
     screen.getByText(entry.warning!);
   });
 
@@ -146,15 +165,26 @@ describe('the chooser', () => {
     await waitFor(() => expect(provided()).toEqual([w.party.other, w.party.you]));
   });
 
-  test('blank is the empty composer, and the service is told so', async () => {
+  test('blank is the empty composer: left alone it makes nothing, the first change makes the draft', async () => {
     await open('/new');
     await screen.findByRole('header', { name: w.templates.chooserTitle });
     await fireEvent.press(screen.getByRole('button', { name: w.templates.blank.name }));
     await screen.findByRole('header', { name: w.composer.titleFirst });
-    const [created, ...rest] = startedBy();
-    expect(created.body).toMatchObject({ started_from: 'blank' });
-    expect(rest.filter((request) => request.method === 'PUT')).toHaveLength(0);
+    expect(screen.getPathname()).toBe('/new/blank');
     expect(screen.queryByText(w.templates.bandExamples)).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+    expect(startedBy()).toEqual([]);
+
+    await fireEvent.changeText(screen.getByLabelText(w.composer.otherName), 'Ben');
+    await waitFor(() => expect(startedBy()).toHaveLength(2), { timeout: 5000 });
+    const [created, saved] = startedBy();
+    expect(created.body).toMatchObject({ started_from: 'blank' });
+    expect((saved.body as { body: { partyB: string } }).body.partyB).toBe('Ben');
+    await waitFor(() => expect(screen.getPathname()).toBe(`/exchanges/${DRAFT}`), {
+      timeout: 5000,
+    });
   });
 });
 
@@ -171,6 +201,7 @@ describe('copying a previous yup', () => {
     await fireEvent.press(screen.getByRole('button', { name: w.templates.copyStart }));
     await screen.findByRole('header', { name: w.composer.titleFirst });
 
+    // Copying carries what was chosen: the draft is made at once.
     const [created, saved] = startedBy();
     expect(created.body).toMatchObject({ started_from: 'copy' });
     const draft = (

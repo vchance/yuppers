@@ -1,6 +1,6 @@
 import { ApiPerson } from './support/api'
 import { expect, test, type Person } from './support/fixtures'
-import { button, exchangeIdOf, signUp, title, turnOn } from './support/flows'
+import { button, signUp, title, turnOn } from './support/flows'
 import { en, fill } from './support/wording'
 
 /*
@@ -42,7 +42,12 @@ async function proposeToDana(ben: Person): Promise<string> {
   await turnOn(page, en.consent.agree)
   await page.getByTestId('consent-sign').click()
   await expect(title(page, 'Send it to Dana')).toBeVisible()
-  return exchangeIdOf(page)
+  // The screen is still the fresh start's until the link is dealt with, so
+  // its address has no exchange in it: the service says which one it made.
+  const elsewhere = await ApiPerson.signUp('Ben', ben.email)
+  const listed = (await elsewhere.call('GET', '/v1/exchanges')) as { id: string }[]
+  expect(listed).toHaveLength(1)
+  return listed[0].id
 }
 
 test('named by phone: “Text the link” opens Messages with the number and the message, and the service records it', async ({

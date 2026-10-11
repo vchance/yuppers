@@ -41,6 +41,7 @@ jest.mock('expo-crypto', () => {
 });
 
 let service: FakeService = fakeService();
+let app: Awaited<ReturnType<typeof renderRouter>>;
 globalThis.fetch = ((...args: Parameters<typeof fetch>) => service.fetch(...args)) as typeof fetch;
 
 const w = wordingFor('en');
@@ -56,7 +57,7 @@ async function open(
     service.account = ana;
   }
   prepare?.(service);
-  await renderRouter('src/app', { initialUrl });
+  app = await renderRouter('src/app', { initialUrl });
 }
 
 afterEach(forgetInvitation);
@@ -102,7 +103,7 @@ describe('the chooser', () => {
       screen.getByRole('button', { name: w.templates.entries['job-deposit-balance'].name }),
     );
     await screen.findByRole('header', { name: w.composer.titleFirst });
-    expect(screen).toHavePathname('/new/job-deposit-balance');
+    expect(app.getPathnameWithParams()).toBe('/new/job-deposit-balance');
 
     // Nothing is on the service, and the band is there already.
     const entry = w.templates.entries['job-deposit-balance'];
@@ -170,7 +171,7 @@ describe('the chooser', () => {
     await screen.findByRole('header', { name: w.templates.chooserTitle });
     await fireEvent.press(screen.getByRole('button', { name: w.templates.blank.name }));
     await screen.findByRole('header', { name: w.composer.titleFirst });
-    expect(screen).toHavePathname('/new/blank');
+    expect(app.getPathnameWithParams()).toBe('/new/blank');
     expect(screen.queryByText(w.templates.bandExamples)).toBeNull();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));

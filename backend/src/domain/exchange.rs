@@ -772,7 +772,10 @@ impl Step<'_> {
         if terms.from != by {
             return Err(Refusal::WrongActor);
         }
-        if !matches!(self.exchange.statuses[&id], Status::Pending | Status::Claimed) {
+        if !matches!(
+            self.exchange.statuses[&id],
+            Status::Pending | Status::Claimed
+        ) {
             return Err(Refusal::NotAllowed);
         }
         self.events.push(Event::ProgressNoted {

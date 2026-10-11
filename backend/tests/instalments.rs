@@ -172,6 +172,21 @@ fn status_of(view: &Value, id: Uuid) -> String {
         .to_owned()
 }
 
+async fn note_progress(
+    app: &App,
+    user: &User,
+    exchange: &str,
+    item: Uuid,
+    text: &str,
+) -> common::Reply {
+    app.command(
+        user,
+        exchange,
+        json!({ "type": "NOTE_PROGRESS", "contribution": item, "note": text }),
+    )
+    .await
+}
+
 async fn claim_rest(app: &App, user: &User, exchange: &str, ids: &[Uuid]) -> common::Reply {
     app.command(
         user,
@@ -205,11 +220,18 @@ async fn marking_the_rest_as_paid_claims_each_payment_and_tells_the_payee_once()
     for id in deal.payments {
         assert_eq!(status_of(&view, id), "CLAIMED");
     }
-    assert_eq!(status_of(&view, deal.job), "PENDING", "the job is not a payment");
+    assert_eq!(
+        status_of(&view, deal.job),
+        "PENDING",
+        "the job is not a payment"
+    );
 
     // The record keeps one claim for each payment.
     let history = app
-        .get(&deal.ana, &format!("/v1/exchanges/{}/history", deal.exchange))
+        .get(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/history", deal.exchange),
+        )
         .await
         .ok();
     let claims = history["events"]
@@ -223,11 +245,7 @@ async fn marking_the_rest_as_paid_claims_each_payment_and_tells_the_payee_once()
     // One message to Ana, saying three, and none to Ben.
     assert_eq!(
         queued(&app, &deal.exchange).await,
-        [(
-            "EMAIL".to_owned(),
-            "DELIVERY_CLAIMED".to_owned(),
-            Some(3)
-        )]
+        [("EMAIL".to_owned(), "DELIVERY_CLAIMED".to_owned(), Some(3))]
     );
     let sent = deliver(&app).await;
     assert_eq!(sent.len(), 1);
@@ -261,7 +279,9 @@ async fn marking_the_rest_as_paid_is_all_or_none_and_only_for_payments_you_owe()
         .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
 
     // One already claimed spoils it for the rest, and nothing is changed.
-    app.act(&deal.ben, &deal.exchange, first, "CLAIM").await.ok();
+    app.act(&deal.ben, &deal.exchange, first, "CLAIM")
+        .await
+        .ok();
     claim_rest(&app, &deal.ben, &deal.exchange, &[first, second, third])
         .await
         .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
@@ -273,9 +293,16 @@ async fn marking_the_rest_as_paid_is_all_or_none_and_only_for_payments_you_owe()
     claim_rest(&app, &deal.ben, &deal.exchange, &[second, third])
         .await
         .ok();
-    let view = app.act(&deal.ana, &deal.exchange, second, "CONFIRM").await.ok();
+    let view = app
+        .act(&deal.ana, &deal.exchange, second, "CONFIRM")
+        .await
+        .ok();
     assert_eq!(status_of(&view, second), "ACCEPTED");
-    assert_eq!(status_of(&view, third), "CLAIMED", "a series is not one item");
+    assert_eq!(
+        status_of(&view, third),
+        "CLAIMED",
+        "a series is not one item"
+    );
 }
 
 #[tokio::test]
@@ -284,8 +311,12 @@ async fn claims_made_one_after_another_by_one_party_are_one_message_that_counts_
     let deal = series(&app).await;
     let [first, second, third] = deal.payments;
 
-    app.act(&deal.ben, &deal.exchange, first, "CLAIM").await.ok();
-    app.act(&deal.ben, &deal.exchange, second, "CLAIM").await.ok();
+    app.act(&deal.ben, &deal.exchange, first, "CLAIM")
+        .await
+        .ok();
+    app.act(&deal.ben, &deal.exchange, second, "CLAIM")
+        .await
+        .ok();
     assert_eq!(
         queued(&app, &deal.exchange).await,
         [("EMAIL".to_owned(), "DELIVERY_CLAIMED".to_owned(), Some(2))],
@@ -301,8 +332,12 @@ async fn claims_made_one_after_another_by_one_party_are_one_message_that_counts_
 
     // Something the other party did ends the burst: the next claim is news
     // of its own, and she is told of each in the order it happened.
-    app.act(&deal.ana, &deal.exchange, first, "CONFIRM").await.ok();
-    app.act(&deal.ben, &deal.exchange, third, "CLAIM").await.ok();
+    app.act(&deal.ana, &deal.exchange, first, "CONFIRM")
+        .await
+        .ok();
+    app.act(&deal.ben, &deal.exchange, third, "CLAIM")
+        .await
+        .ok();
     let rows = queued(&app, &deal.exchange).await;
     let notices: Vec<(&str, Option<i64>)> = rows
         .iter()
@@ -335,7 +370,9 @@ async fn claims_made_one_after_another_by_one_party_are_one_message_that_counts_
     app.act(&deal.ben, &deal.exchange, second, "RETRACT_CLAIM")
         .await
         .ok();
-    app.act(&deal.ben, &deal.exchange, second, "CLAIM").await.ok();
+    app.act(&deal.ben, &deal.exchange, second, "CLAIM")
+        .await
+        .ok();
     let waiting: Vec<(String, Option<i64>)> = sqlx::query_as(
         "SELECT payload->>'notice', (payload->>'count')::bigint FROM outbox
          WHERE exchange_id = $1 AND completed_at IS NULL ORDER BY id",
@@ -371,11 +408,7 @@ async fn confirmations_are_told_in_bursts_too() {
     }
     assert_eq!(
         queued(&app, &deal.exchange).await,
-        [(
-            "EMAIL".to_owned(),
-            "DELIVERY_CONFIRMED".to_owned(),
-            Some(3)
-        )]
+        [("EMAIL".to_owned(), "DELIVERY_CONFIRMED".to_owned(), Some(3))]
     );
     let sent = deliver(&app).await;
     assert_eq!(sent.len(), 1);
@@ -389,14 +422,15 @@ async fn a_progress_note_is_recorded_and_changes_nothing() {
     let before = funnel().counts();
     let version = app.view(&deal.ana, &deal.exchange).await["version"].clone();
 
-    let note = |who: &User, text: &str| {
-        app.command(
-            who,
-            &deal.exchange,
-            json!({ "type": "NOTE_PROGRESS", "contribution": deal.job, "note": text }),
-        )
-    };
-    let view = note(&deal.ana, "Posts set, panels Thursday.").await.ok();
+    let view = note_progress(
+        &app,
+        &deal.ana,
+        &deal.exchange,
+        deal.job,
+        "Posts set, panels Thursday.",
+    )
+    .await
+    .ok();
     assert_eq!(status_of(&view, deal.job), "PENDING", "not a claim");
     assert_ne!(view["version"], version, "but it is in the history");
 
@@ -421,27 +455,37 @@ async fn a_progress_note_is_recorded_and_changes_nothing() {
 
     // The recipient has nothing to add; a blank note says nothing; payments
     // are noted too (it is any item the actor provides).
-    note(&deal.ben, "Not mine to say")
+    note_progress(&app, &deal.ben, &deal.exchange, deal.job, "Not mine to say")
         .await
         .refused(StatusCode::FORBIDDEN, "WRONG_ACTOR");
-    note(&deal.ana, "   ")
+    note_progress(&app, &deal.ana, &deal.exchange, deal.job, "   ")
         .await
         .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
-    note(&deal.ana, &"x".repeat(1001))
+    note_progress(&app, &deal.ana, &deal.exchange, deal.job, &"x".repeat(1001))
         .await
         .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
 
     // A limited number per item (four in this test).
-    note(&deal.ana, "Two").await.ok();
-    note(&deal.ana, "Three").await.ok();
-    note(&deal.ana, "Four").await.ok();
-    note(&deal.ana, "Five")
+    note_progress(&app, &deal.ana, &deal.exchange, deal.job, "Two")
+        .await
+        .ok();
+    note_progress(&app, &deal.ana, &deal.exchange, deal.job, "Three")
+        .await
+        .ok();
+    note_progress(&app, &deal.ana, &deal.exchange, deal.job, "Four")
+        .await
+        .ok();
+    note_progress(&app, &deal.ana, &deal.exchange, deal.job, "Five")
         .await
         .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
 
     // Once it is delivered and confirmed there is nothing under way.
-    app.act(&deal.ana, &deal.exchange, deal.job, "CLAIM").await.ok();
-    app.act(&deal.ben, &deal.exchange, deal.job, "CONFIRM").await.ok();
+    app.act(&deal.ana, &deal.exchange, deal.job, "CLAIM")
+        .await
+        .ok();
+    app.act(&deal.ben, &deal.exchange, deal.job, "CONFIRM")
+        .await
+        .ok();
 
     let after = funnel().counts();
     assert_eq!(after.progress_notes_added, before.progress_notes_added + 4);

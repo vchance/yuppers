@@ -66,7 +66,9 @@
         },
         "DELIVERY_CLAIMED": {
           "subject": "Something was marked as delivered ({code})",
-          "body": "The other party has marked one of their contributions as delivered. Review it, then confirm it or dispute it."
+          "body": "The other party has marked one of their contributions as delivered. Review it, then confirm it or dispute it.",
+          "subjectMany": "{count} items were marked as delivered or paid ({code})",
+          "bodyMany": "The other party has marked {count} of their contributions as delivered or paid. Review them, then confirm each one or dispute it."
         },
         "CLAIM_RETRACTED": {
           "subject": "A delivery was unmarked ({code})",
@@ -74,7 +76,9 @@
         },
         "DELIVERY_CONFIRMED": {
           "subject": "A delivery was confirmed ({code})",
-          "body": "The other party has confirmed that they received one of your contributions."
+          "body": "The other party has confirmed that they received one of your contributions.",
+          "subjectMany": "{count} deliveries were confirmed ({code})",
+          "bodyMany": "The other party has confirmed that they received {count} of your contributions."
         },
         "DISPUTE_OPENED": {
           "subject": "A delivery was disputed ({code})",
@@ -151,6 +155,10 @@
         "REVISION_SENT_UNCONFIRMED": {
           "subject": "The terms you were sent have changed ({code})",
           "body": "The other party has changed the terms they sent you. Review them, then accept them if you agree. Until they confirm that you are the person they invited, you can’t decline them or send your own; you can leave the yup instead."
+        },
+        "PROGRESS_NOTED": {
+          "subject": "A note on how something is going ({code})",
+          "body": "The other party has added a note on an item they are working on. It is their own statement. Nothing is marked delivered, and there is nothing for you to confirm. Sign in to read it. You are told about at most one note a day for each yup; later notes are on the yup."
         }
       }
     },
@@ -542,7 +550,82 @@
       "LOCKED": "Confirmed, so it can’t be changed or removed. Put it back as it was, or add a new item instead.",
       "REUSED": "This item was removed earlier and can’t come back. Add it as a new item instead."
     },
-    "removedCount": "{count, plural, one {# item of the agreement is removed by this change.} other {# items of the agreement are removed by this change.}}"
+    "removedCount": "{count, plural, one {# item of the agreement is removed by this change.} other {# items of the agreement are removed by this change.}}",
+    "split": {
+      "ordinal": "{description} {number} of {count}",
+      "ordinalBlank": "Payment {number} of {count}",
+      "amounts": {
+        "howLegend": "How the amounts are worked out",
+        "howShare": "Share an amount out",
+        "howEach": "The same amount for each",
+        "shareLabel": "Amount to share out, in {currency}",
+        "eachLabel": "Amount of each, in {currency}",
+        "remainderHint": "Any remainder goes on the last payment."
+      },
+      "instalments": {
+        "link": "Split into instalments",
+        "title": "Split into instalments",
+        "intro": "This item becomes several payments, one after another. Each is an ordinary item you can change afterwards, and each is marked paid and confirmed on its own.",
+        "countLabel": "How many payments",
+        "countHint": "From 2 to {max}.",
+        "firstLabel": "First due date",
+        "everyLegend": "Then every",
+        "everyWeek": "week",
+        "everyTwoWeeks": "two weeks",
+        "everyMonth": "month",
+        "everyDays": "number of days",
+        "daysLabel": "Number of days",
+        "monthHint": "Where a month has no such day, the payment is due on that month’s last day.",
+        "previewHeading": "What will be added",
+        "previewLine": "{description}: {amount}, due {date}",
+        "plainHint": "Each payment is a plain amount with nothing else attached.",
+        "done": "Add these payments",
+        "added": "{count} payments added.",
+        "undo": "Make it one payment again",
+        "undone": "It is one payment again.",
+        "problems": {
+          "COUNT": "Enter a whole number from 2 to {max}.",
+          "AMOUNT": "Enter an amount, such as {example}.",
+          "TOO_SMALL": "That amount is too small to give every payment something.",
+          "DATE": "Choose the first due date.",
+          "DAYS": "Enter a whole number of days, at least 1."
+        }
+      },
+      "stages": {
+        "link": "Split into stages",
+        "title": "Split into stages",
+        "intro": "This item becomes one item for each stage, from the same provider. Each is marked done and confirmed on its own, and both of you can see which are confirmed.",
+        "countLabel": "How many stages",
+        "countHint": "From 2 to {max}.",
+        "nameLabel": "Name of stage {number}",
+        "exampleOne": "e.g. Posts set",
+        "exampleTwo": "e.g. Panels up",
+        "exampleThree": "e.g. Painted",
+        "dueLabel": "Due date of stage {number} (optional)",
+        "dueHint": "With no date, the stage is due when the agreement is signed.",
+        "chainLabel": "Each stage is due once the one before it is confirmed",
+        "chainHint": "Left unticked, stages can be marked done in any order. Ticked, the dates after the first stage are not used.",
+        "payLabel": "Add a payment for each stage",
+        "payHint": "One payment from the other person for each stage, each due once its stage is confirmed.",
+        "paymentDescription": "Payment for {stage}",
+        "previewHeading": "What will be added",
+        "previewStage": "Stage {number}: {name}, due {date}",
+        "previewStageOnSigning": "Stage {number}: {name}, due when the agreement is signed",
+        "previewStageChained": "Stage {number}: {name}, due once the stage before it is confirmed",
+        "previewPayment": "{description}: {amount}, due once stage {number} is confirmed",
+        "done": "Add these stages",
+        "added": "{count} items added.",
+        "undo": "Make it one job again",
+        "undone": "It is one job again.",
+        "problems": {
+          "COUNT": "Enter a whole number from 2 to {max}.",
+          "NAME": "Name every stage.",
+          "AMOUNT": "Enter an amount, such as {example}.",
+          "TOO_SMALL": "That amount is too small to give every payment something.",
+          "DATE": "Choose a date, or clear it."
+        }
+      }
+    }
   },
   "consent": {
     "heading": "Signing electronically",
@@ -935,7 +1018,27 @@
     "waitingLong": "{name} has not confirmed this since you marked it delivered on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as delivered but not confirmed.",
     "waitingLongMoney": "{name} has not confirmed receiving this since you recorded paying on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as paid but not confirmed.",
     "closeRequestLapses": "If nothing changes, it closes on {date}.",
-    "contentHidden": "Part of this yup has been hidden by review. You can still decline or withdraw a proposal, mark items and close the yup, but you can’t sign or change its terms."
+    "contentHidden": "Part of this yup has been hidden by review. You can still decline or withdraw a proposal, mark items and close the yup, but you can’t sign or change its terms.",
+    "markRest": {
+      "button": "Mark the rest as paid",
+      "text": "This records that you paid {name} {count} payments outside our service, one record for each. We move and hold no money. {name} confirms each payment on its own.",
+      "confirm": "Record {count} payments as paid",
+      "done": "{count} payments recorded as paid."
+    },
+    "progress": {
+      "add": "Add a progress note",
+      "heading": "How it is going",
+      "label": "Your note",
+      "hint": "Both of you can read it, and it is kept in the record as your own statement. It doesn’t mark anything delivered, and {name} has nothing to confirm.",
+      "told": "{name} is told by email or notification, at most once a day for each yup. There is no text message.",
+      "send": "Add the note",
+      "added": "Your progress note was added.",
+      "count": "{count, plural, one {# progress note} other {# progress notes}}",
+      "listLabel": "Progress notes",
+      "noteBy": "{name}, {date}",
+      "full": "This item has as many progress notes as it can hold.",
+      "required": "Write a few words first."
+    }
   },
   "wallet": {
     "intro": "Keep this agreement in your phone’s wallet. The pass shows how it stands and links back here; its terms stay in {productName}.",
@@ -1156,7 +1259,8 @@
       "message": "Message sent with it",
       "note": "Note",
       "reason": "Reason given",
-      "statement": "Statement"
+      "statement": "Statement",
+      "progress": "Progress note, in their own words"
     },
     "events": {
       "you": {
@@ -1176,7 +1280,8 @@
         "END_PROPOSAL_CANCELLED": "You set aside the proposal to end it by agreement.",
         "CLOSE_REQUESTED": "You asked to close it without agreement.",
         "CLOSE_REQUEST_RETRACTED": "You took back the request to close it.",
-        "STATEMENT_ADDED": "You added a statement."
+        "STATEMENT_ADDED": "You added a statement.",
+        "PROGRESS_NOTED": "You noted progress on this:"
       },
       "named": {
         "COUNTERPARTY_CLAIMED": "{name} opened the invitation and joined as the invited party.",
@@ -1195,7 +1300,8 @@
         "END_PROPOSAL_CANCELLED": "{name} set aside the proposal to end it by agreement.",
         "CLOSE_REQUESTED": "{name} asked to close it without agreement.",
         "CLOSE_REQUEST_RETRACTED": "{name} took back the request to close it.",
-        "STATEMENT_ADDED": "{name} added a statement."
+        "STATEMENT_ADDED": "{name} added a statement.",
+        "PROGRESS_NOTED": "{name} noted progress on this:"
       },
       "formerClaimant": {
         "COUNTERPARTY_CLAIMED": "Someone opened the invitation and joined as the invited party. They were later removed, or left, before being confirmed.",
@@ -1586,5 +1692,14 @@
     "repair": "Fence repair",
     "repairDone": "Both posts are solid and the gate closes without lifting",
     "balance": "Balance"
+  },
+  "series": {
+    "payments": "{name}: {confirmed} of {total} payments confirmed",
+    "paymentsDisputed": "{name}: {confirmed} of {total} payments confirmed, {disputed} disputed",
+    "stages": "{name}: {confirmed} of {total} stages confirmed",
+    "stagesDisputed": "{name}: {confirmed} of {total} stages confirmed, {disputed} disputed",
+    "chipPayments": "{confirmed} of {total} payments confirmed",
+    "chipStages": "{confirmed} of {total} stages confirmed",
+    "chipDisputed": "{disputed} disputed"
   }
 }

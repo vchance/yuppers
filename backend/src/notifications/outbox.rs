@@ -42,9 +42,7 @@ use super::wording::{Links, Wording};
 use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
 use crate::combine;
 use crate::contact::{self, Field};
-use crate::domain::notification::{
-    COALESCE_HOLD, COALESCE_WINDOW, Notice, PROGRESS_NOTICE_WINDOW,
-};
+use crate::domain::notification::{COALESCE_HOLD, COALESCE_WINDOW, Notice, PROGRESS_NOTICE_WINDOW};
 use crate::domain::reminder;
 use crate::domain::revision::{ContributionId, Slot};
 use crate::error::Redacted;

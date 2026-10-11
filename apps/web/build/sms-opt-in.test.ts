@@ -12,6 +12,7 @@ import {
   FORMS,
   PART_ANCHORS,
   SAMPLE_LINK,
+  SAMPLE_YUP_CODE,
   SAMPLE_PHONE,
   SAMPLE_PHONE_TO_ADD,
   SCREENSHOTS,
@@ -268,8 +269,18 @@ describe('the page on how people opt in to texts', () => {
       const page = parse(language)
       const wording = read(`sms-opt-in/${language}.json`) as SmsOptInWording
       const product = read(`${language}.json`)
-      // No text of the service's own carries a code any more.
-      expect(Object.keys(product.sms).sort()).toEqual(['optInConfirmation', 'update'])
+      // The two texts registered with Twilio are quoted below. The only
+      // other texts of the service's own are the detailed update and its
+      // pieces (sent only to someone who opts in on their account page), which
+      // the page does not quote.
+      expect(Object.keys(product.sms).sort()).toEqual([
+        'detailed',
+        'notices',
+        'optInConfirmation',
+        'sentence',
+        'someone',
+        'update',
+      ])
       for (const surface of SURFACES) {
         const after = (step: Screen) => quotedAt(page, step, surface)
         // Each "code sent" screen: what it says, then the message Twilio
@@ -311,7 +322,7 @@ describe('the page on how people opt in to texts', () => {
           wording.replies.help,
           'STOP',
           wording.replies.stop,
-          fill(product.sms.update, { link: SAMPLE_LINK }),
+          fill(product.sms.update, { code: SAMPLE_YUP_CODE, link: SAMPLE_LINK }),
         ])
       }
       // The sign-in form as it first appears, with its links.
@@ -473,9 +484,9 @@ describe('the page on how people opt in to texts', () => {
     const en = read('en.json').sms
     const es = read('es.json').sms
     for (const text of [
-      fill(en.update, { link: SAMPLE_LINK }),
+      fill(en.update, { code: SAMPLE_YUP_CODE, link: SAMPLE_LINK }),
       en.optInConfirmation,
-      fill(es.update, { link: SAMPLE_LINK }),
+      fill(es.update, { code: SAMPLE_YUP_CODE, link: SAMPLE_LINK }),
     ]) {
       expect(guide).toContain(text)
     }

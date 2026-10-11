@@ -17,150 +17,153 @@
       "layout": "{body}\n\nAbre el yup: {link}\n\nRecibes este correo porque eres parte del yup {code} en {productName}. Estos correos nunca incluyen los términos; inicia sesión para verlos.",
       "messages": {
         "INVITATION_CLAIMED": {
-          "subject": "La persona que invitaste se unió ({code})",
+          "subject": "La persona que invitaste se unió: {yup}",
           "body": "La persona que invitaste abrió tu invitación y se unió al yup. Ya puede revisar los términos que enviaste."
         },
         "INVITATION_CLAIMED_UNCONFIRMED": {
-          "subject": "Confirma quién se unió a tu yup ({code})",
+          "subject": "Confirma quién se unió a tu yup: {yup}",
           "body": "Alguien usó tu enlace de invitación para unirse al yup. Comprueba que sea la persona a la que querías invitar y confírmala. No se puede acordar nada hasta que lo hagas."
         },
         "COUNTERPARTY_CONFIRMED": {
-          "subject": "Te confirmaron ({code})",
+          "subject": "Te confirmaron: {yup}",
           "body": "La otra parte confirmó que eres la persona a la que invitó. Ya pueden llegar a un acuerdo."
         },
         "CLAIMANT_LEFT": {
-          "subject": "La persona que abrió tu invitación salió del yup ({code})",
+          "subject": "La persona que abrió tu invitación salió del yup: {yup}",
           "body": "La persona que usó tu enlace de invitación salió del yup antes de que la confirmaras. Nada de lo que firmó tiene efecto. Tu propuesta sigue abierta: crea un enlace de invitación nuevo para la persona a la que querías invitar."
         },
         "REVISION_SENT": {
-          "subject": "Hay nuevos términos para revisar ({code})",
+          "subject": "Hay nuevos términos para revisar: {yup}",
           "body": "La otra parte envió nuevos términos. Revísalos y luego acéptalos, recházalos o envía los tuyos."
         },
         "AMENDMENT_PROPOSED": {
-          "subject": "Se propone un cambio en tu acuerdo ({code})",
+          "subject": "Se propone un cambio en tu acuerdo: {yup}",
           "body": "La otra parte propuso un cambio en el acuerdo. El acuerdo sigue como está a menos que aceptes el cambio."
         },
         "ACCEPTANCE_WAITING": {
-          "subject": "Los términos fueron aceptados y esperan tu confirmación ({code})",
+          "subject": "Los términos fueron aceptados y esperan tu confirmación: {yup}",
           "body": "La otra parte aceptó los términos. Su aceptación tendrá efecto cuando confirmes que es la persona a la que querías invitar."
         },
         "AGREEMENT_IN_FORCE": {
-          "subject": "Tu acuerdo está firmado y registrado ({code})",
+          "subject": "Tu acuerdo está firmado y registrado: {yup}",
           "body": "Ambas partes firmaron los mismos términos, así que el acuerdo ya está en vigor y quedó registrado. Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {recordLink}\n\nDesde ahora puedes llevar el registro de lo que entrega cada parte."
         },
         "AMENDMENT_IN_FORCE": {
-          "subject": "El cambio en tu acuerdo está firmado y registrado ({code})",
+          "subject": "El cambio en tu acuerdo está firmado y registrado: {yup}",
           "body": "Ambas partes firmaron el cambio, así que ya forma parte del acuerdo, y el acuerdo tal como queda ahora quedó registrado. Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {recordLink}"
         },
         "AMENDMENT_DECLINED": {
-          "subject": "Se rechazó el cambio que propusiste ({code})",
+          "subject": "Se rechazó el cambio que propusiste: {yup}",
           "body": "La otra parte rechazó el cambio que propusiste. El acuerdo sigue como estaba."
         },
         "AMENDMENT_WITHDRAWN": {
-          "subject": "Se retiró un cambio propuesto ({code})",
+          "subject": "Se retiró un cambio propuesto: {yup}",
           "body": "La otra parte retiró el cambio que había propuesto. El acuerdo sigue como estaba."
         },
         "AMENDMENT_EXPIRED": {
-          "subject": "Venció un cambio propuesto ({code})",
+          "subject": "Venció un cambio propuesto: {yup}",
           "body": "Un cambio propuesto en tu acuerdo venció antes de ser aceptado. El acuerdo sigue como estaba."
         },
         "DELIVERY_CLAIMED": {
-          "subject": "Algo se marcó como entregado ({code})",
+          "subject": "Algo se marcó como entregado: {yup}",
           "body": "La otra parte marcó como entregada una de sus contribuciones. Revísala y luego confírmala o abre una disputa.",
-          "subjectMany": "Se marcaron {count} elementos como entregados o pagados ({code})",
+          "subjectMany": "Se marcaron {count} elementos como entregados o pagados: {yup}",
           "bodyMany": "La otra parte marcó como entregadas o pagadas {count} de sus contribuciones. Revísalas y luego confirma cada una o abre una disputa."
         },
         "CLAIM_RETRACTED": {
-          "subject": "Se desmarcó una entrega ({code})",
+          "subject": "Se desmarcó una entrega: {yup}",
           "body": "La otra parte retiró su aviso de que una contribución estaba entregada. Por ahora no tienes nada que revisar."
         },
         "DELIVERY_CONFIRMED": {
-          "subject": "Se confirmó una entrega ({code})",
+          "subject": "Se confirmó una entrega: {yup}",
           "body": "La otra parte confirmó que recibió una de tus contribuciones.",
-          "subjectMany": "Se confirmaron {count} entregas ({code})",
+          "subjectMany": "Se confirmaron {count} entregas: {yup}",
           "bodyMany": "La otra parte confirmó que recibió {count} de tus contribuciones."
         },
         "DISPUTE_OPENED": {
-          "subject": "Se disputó una entrega ({code})",
+          "subject": "Se disputó una entrega: {yup}",
           "body": "La otra parte disputó una contribución que marcaste como entregada. Lee su motivo en el acuerdo y responde."
         },
         "CONTRIBUTION_WAIVED": {
-          "subject": "Se dispensó una contribución ({code})",
+          "subject": "Se dispensó una contribución: {yup}",
           "body": "La otra parte te dispensó de entregar una de tus contribuciones. Ya no se espera que la entregues."
         },
         "END_PROPOSED": {
-          "subject": "Una propuesta para terminar tu acuerdo ({code})",
+          "subject": "Una propuesta para terminar tu acuerdo: {yup}",
           "body": "La otra parte propuso que terminen el acuerdo entre los dos. Si aceptas, todo lo que siga pendiente queda liberado."
         },
         "END_PROPOSAL_CANCELLED": {
-          "subject": "Se canceló la propuesta para terminar tu acuerdo ({code})",
+          "subject": "Se canceló la propuesta para terminar tu acuerdo: {yup}",
           "body": "Se canceló la propuesta de terminar el acuerdo entre los dos. El acuerdo continúa como antes."
         },
         "CLOSE_REQUESTED": {
-          "subject": "La otra parte pidió cerrar tu acuerdo ({code})",
+          "subject": "La otra parte pidió cerrar tu acuerdo: {yup}",
           "body": "La otra parte pidió cerrar el acuerdo con asuntos sin resolver. Tienes un tiempo limitado para responder: puedes agregar una declaración, resolver lo pendiente o aceptar terminarlo. Después, el acuerdo se cierra como no resuelto."
         },
         "CLOSE_REQUEST_RETRACTED": {
-          "subject": "Se retiró la solicitud de cerrar tu acuerdo ({code})",
+          "subject": "Se retiró la solicitud de cerrar tu acuerdo: {yup}",
           "body": "La otra parte retiró su solicitud de cerrar el acuerdo. Sigue abierto."
         },
         "STATEMENT_ADDED": {
-          "subject": "Se agregó una declaración a tu acuerdo ({code})",
+          "subject": "Se agregó una declaración a tu acuerdo: {yup}",
           "body": "La otra parte agregó una declaración sobre la solicitud de cerrar el acuerdo. Puedes leerla en el acuerdo."
         },
         "INACTIVITY_PROMPTED": {
-          "subject": "¿Tu acuerdo sigue en marcha? ({code})",
+          "subject": "Una consulta sobre tu acuerdo: {yup}",
           "body": "Hace tiempo que no pasa nada en este acuerdo. Si ninguna de las partes hace algo en él, se cerrará como no resuelto."
         },
         "DUE_SOON": {
-          "subject": "Algo que debes entregar vence pronto ({code})",
+          "subject": "Algo que debes entregar vence pronto: {yup}",
           "body": "Al menos una de tus contribuciones vence pronto y todavía no está marcada como entregada. Abre el acuerdo para ver cuál y cuándo. Cuando la hayas entregado, márcala allí como entregada."
         },
         "OVERDUE_TO_DELIVER": {
-          "subject": "Algo que debes entregar está atrasado ({code})",
+          "subject": "Algo que debes entregar está atrasado: {yup}",
           "body": "Al menos una de tus contribuciones ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el acuerdo para ver cuál. Si ya la entregaste, márcala allí como entregada; si la fecha ya no sirve, puedes proponer un cambio en el acuerdo. La otra parte también recibió un aviso."
         },
         "OVERDUE_TO_RECEIVE": {
-          "subject": "Algo que te deben está atrasado ({code})",
+          "subject": "Algo que te deben está atrasado: {yup}",
           "body": "Al menos una de las contribuciones de la otra parte ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el acuerdo para ver cuál. Si ya la recibiste, puedes confirmarla allí. La otra parte también recibió un recordatorio."
         },
         "CLOSED_WITHDRAWN": {
-          "subject": "Se retiró la oferta ({code})",
+          "subject": "Se retiró la oferta: {yup}",
           "body": "La otra parte retiró su oferta, así que la propuesta está cerrada. No se acordó nada."
         },
         "CLOSED_DECLINED": {
-          "subject": "Tu oferta fue rechazada ({code})",
+          "subject": "Tu oferta fue rechazada: {yup}",
           "body": "La otra parte rechazó tu oferta, así que la propuesta está cerrada. No se acordó nada."
         },
         "CLOSED_EXPIRED": {
-          "subject": "La oferta venció ({code})",
+          "subject": "La oferta venció: {yup}",
           "body": "La oferta venció antes de ser aceptada, así que la propuesta está cerrada. No se acordó nada."
         },
         "CLOSED_COMPLETED": {
-          "subject": "Tu acuerdo está completo ({code})",
+          "subject": "Tu acuerdo está completo: {yup}",
           "body": "Todas las contribuciones obligatorias fueron aceptadas o dispensadas. El acuerdo está completo y cerrado."
         },
         "CLOSED_ENDED_BY_AGREEMENT": {
-          "subject": "Ambos aceptaron terminar su acuerdo ({code})",
+          "subject": "Ambos aceptaron terminar su acuerdo: {yup}",
           "body": "La otra parte aceptó terminar el acuerdo. Está cerrado, y todo lo que seguía pendiente quedó liberado."
         },
         "CLOSED_UNRESOLVED": {
-          "subject": "Tu acuerdo se cerró sin resolver ({code})",
+          "subject": "Tu acuerdo se cerró sin resolver: {yup}",
           "body": "Pasó el plazo para responder a la solicitud de cierre. El acuerdo se cerró como no resuelto, y cada contribución conserva el estado que tenía."
         },
         "CLOSED_INACTIVE": {
-          "subject": "Tu acuerdo se cerró por inactividad ({code})",
+          "subject": "Tu acuerdo se cerró por inactividad: {yup}",
           "body": "No pasó nada en este acuerdo durante mucho tiempo, así que se cerró como no resuelto. Cada contribución conserva el estado que tenía."
         },
         "REVISION_SENT_UNCONFIRMED": {
-          "subject": "Cambiaron los términos que te enviaron ({code})",
+          "subject": "Cambiaron los términos que te enviaron: {yup}",
           "body": "La otra parte cambió los términos que te envió. Revísalos y luego acéptalos si estás de acuerdo. Hasta que confirme que eres la persona a la que invitó, no puedes rechazarlos ni enviar los tuyos; en cambio, puedes salir del yup."
         },
         "PROGRESS_NOTED": {
-          "subject": "Una nota sobre cómo va algo ({code})",
+          "subject": "Una nota sobre cómo va algo: {yup}",
           "body": "La otra parte agregó una nota sobre un elemento en el que trabaja. Es su propia declaración. No se marca nada como entregado y no hay nada que debas confirmar. Inicia sesión para leerla. Se te avisa de una nota al día como máximo por cada yup; las demás están en el yup."
         }
-      }
+      },
+      "yup": "tu yup con {name} ({code})",
+      "yupUnnamed": "tu yup ({code})",
+      "intro": "Sobre {yup}."
     },
     "oneTimeCode": {
       "signIn": {
@@ -193,7 +196,30 @@
     "body": "Tu yup tiene novedades."
   },
   "sms": {
-    "update": "Yuppers.app: hubo un cambio en un acuerdo que sigues. Velo: {link}. Responde STOP para cancelar.",
+    "update": "Yuppers.app: tu yup {code} tiene novedades. Velo: {link}. Responde STOP para cancelar.",
+    "detailed": "Yuppers.app: {sentence}. Velo: {link}. Responde STOP para cancelar.",
+    "sentence": "{what} ({code})",
+    "someone": "Alguien",
+    "notices": {
+      "ACCEPTANCE_WAITING": "{name} ha firmado tu yup",
+      "REVISION_SENT": "Nuevos términos de {name}",
+      "REVISION_SENT_UNCONFIRMED": "Nuevos términos de {name}",
+      "AMENDMENT_PROPOSED": "{name} propone un cambio",
+      "AGREEMENT_IN_FORCE": "Firmado con {name}",
+      "AMENDMENT_IN_FORCE": "Cambio firmado con {name}",
+      "DELIVERY_CLAIMED": "Entrega marcada por {name}",
+      "DELIVERY_CONFIRMED": "{name} confirma la entrega",
+      "DISPUTE_OPENED": "{name} abre una disputa",
+      "CONTRIBUTION_WAIVED": "{name} te dispensa",
+      "CLOSE_REQUESTED": "{name} pide cerrar",
+      "CLOSED_WITHDRAWN": "{name} retira su oferta",
+      "CLOSED_DECLINED": "{name} rechaza la oferta",
+      "CLOSED_EXPIRED": "Oferta vencida con {name}",
+      "CLOSED_COMPLETED": "Yup con {name} completo",
+      "CLOSED_ENDED_BY_AGREEMENT": "Yup con {name} terminado",
+      "CLOSED_UNRESOLVED": "Sin resolver: {name}",
+      "CLOSED_INACTIVE": "Sin actividad: {name}"
+    },
     "optInConfirmation": "Yuppers.app: Te suscribiste a las actualizaciones por mensaje de este acuerdo, un mensaje por cada cambio de estado. Frecuencia variable. Pueden aplicarse tarifas por mensajes y datos. Responde HELP para ayuda o STOP para cancelar."
   },
   "common": {
@@ -261,6 +287,8 @@
     "adultLabel": "Tengo 18 años o más",
     "adultConfirmed": "Confirmaste que tienes 18 años o más.",
     "adultRequired": "Tienes que tener 18 años o más para usar nuestro servicio.",
+    "detailLabel": "Decir con quién es y qué pasó en los mensajes de texto y las notificaciones del teléfono",
+    "detailHint": "Se ven en la pantalla de bloqueo, donde cualquiera que tenga tu teléfono puede leerlas.",
     "continue": "Continuar",
     "save": "Guardar",
     "saved": "Guardado.",
@@ -899,12 +927,12 @@
     "notifications": {
       "heading": "Notificaciones",
       "switch": "Notificaciones en este teléfono",
-      "switchHint": "Un aviso en este teléfono cuando pasa algo en uno de tus yups. Nunca muestra los términos, los nombres ni los montos.",
+      "switchHint": "Un aviso en este teléfono cuando pasa algo en uno de tus yups. Nunca muestra los términos ni los montos, y solo muestra nombres si lo activas en tu cuenta.",
       "blocked": "Las notificaciones de esta app están desactivadas en los ajustes de tu teléfono. Actívalas allí primero.",
       "openSettings": "Abrir ajustes",
       "failed": "No se pudieron cambiar las notificaciones. Inténtalo de nuevo.",
       "askHeading": "Entérate cuando pase algo",
-      "askBody": "Activa las notificaciones para saber en este teléfono cuando la otra persona responda o algo esté por vencer. Nunca muestran los términos, los nombres ni los montos.",
+      "askBody": "Activa las notificaciones para saber en este teléfono cuando la otra persona responda o algo esté por vencer. Nunca muestran los términos ni los montos, y solo muestran nombres si lo activas en tu cuenta.",
       "turnOn": "Activar notificaciones",
       "notNow": "Ahora no",
       "channel": "Novedades de tus yups",
@@ -1174,7 +1202,7 @@
   },
   "smsUpdates": {
     "heading": "Actualizaciones por mensaje",
-    "intro": "Recibe un mensaje de texto cada vez que cambie el estado de este acuerdo. Los mensajes solo dicen que algo cambió, con un enlace para verlo.",
+    "intro": "Recibe un mensaje de texto cada vez que cambie el estado de este acuerdo. A menos que actives el detalle en la página de tu cuenta, los mensajes solo dicen que algo cambió, con un enlace para verlo.",
     "addPhoneIntro": "Primero agrega a tu cuenta tu número de celular de EE. UU. Le enviaremos un código de un solo uso para comprobar que es tuyo.",
     "phoneLabel": "Número de celular",
     "phoneHint": "Un número de EE. UU., como (555) 123-4567.",
@@ -1345,7 +1373,20 @@
         "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
         "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
       },
-      "hidden": "Oculto por revisión"
+      "hidden": "Oculto por revisión",
+      "attribution": {
+        "email": "Quien firmó había iniciado sesión con una dirección de correo electrónico no más de {span} antes de firmar.",
+        "phone": "Quien firmó había iniciado sesión con un número de teléfono no más de {span} antes de firmar."
+      },
+      "span": {
+        "minuteOne": "1 minuto",
+        "minuteOther": "{count} minutos",
+        "hourOne": "1 hora",
+        "hourOther": "{count} horas",
+        "dayOne": "1 día",
+        "dayOther": "{count} días"
+      },
+      "chain": "El historial de este registro está encadenado: la huella de cada entrada se calcula a partir de la entrada anterior, así que cambiar una entrada anterior cambiaría todas las posteriores. La huella de la entrada {sequence}, la última cuando se hizo esta copia, es {hash}."
     },
     "summary": {
       "heading": "En resumen",

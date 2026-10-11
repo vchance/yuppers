@@ -252,6 +252,13 @@ async fn marking_the_rest_as_paid_claims_each_payment_and_tells_the_payee_once()
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].to, deal.ana.email);
     assert!(sent[0].subject.contains('3'), "{}", sent[0].subject);
+    // A burst names the yup like any other message.
+    assert!(
+        sent[0].subject.contains("your yup with"),
+        "{}",
+        sent[0].subject
+    );
+    assert!(sent[0].body.contains("Ben"), "{}", sent[0].body);
     assert!(sent[0].body.contains('3'), "{}", sent[0].body);
 
     let after = funnel().counts();

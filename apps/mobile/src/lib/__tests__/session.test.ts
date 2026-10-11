@@ -82,7 +82,7 @@ test('the browser stand-in refuses to load on a device', () => {
 });
 
 test('signing in asks for a token, and the token kept goes out as a bearer token', async () => {
-  const account = { id: 'a', display_name: 'Ana', adult_confirmed: true, language: 'en' };
+  const account = { id: 'a', display_name: 'Ana', adult_confirmed: true, notification_detail: false, language: 'en' };
   let sent = serviceAnswering({ account, token: 'issued-token' });
   const created = await api.signIn('ana@example.test', '123456', 'es');
   expect(sent[0].url).toMatch(/\/v1\/auth\/sessions$/);

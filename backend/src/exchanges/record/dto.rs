@@ -330,6 +330,11 @@ pub struct Verification {
     pub verified_at: String,
     /// The same, in words, in the document's language.
     pub description: String,
+    /// The kind of identifier the signer had signed in with, and how long
+    /// before signing, in the document's language. Never the address or
+    /// number. Left out for a signature made before this was kept.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution: Option<String>,
 }
 
 /// Which consent wording the signer was shown before signing.
@@ -575,6 +580,12 @@ pub struct RecordDocument {
     /// matches what is shown. The record itself is unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_hidden: Option<bool>,
+    /// That the history is chained, and the fingerprint of its last entry,
+    /// in the document's language: a printed copy anchors the history with
+    /// it (`crate::chain`). Left out while the history has entries from
+    /// before the chain that have not been chained yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_chain: Option<String>,
 }
 
 /// The record of an exchange as a reviewer reads it while a report about

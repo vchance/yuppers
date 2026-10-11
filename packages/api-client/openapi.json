@@ -3468,7 +3468,8 @@
           "id",
           "display_name",
           "language",
-          "adult_confirmed"
+          "adult_confirmed",
+          "notification_detail"
         ],
         "properties": {
           "adult_confirmed": {
@@ -3502,6 +3503,10 @@
                 "type": "null"
               }
             ]
+          },
+          "notification_detail": {
+            "type": "boolean",
+            "description": "The holder wants texts and phone notifications to say who a yup is\nwith and what step happened, with its code. Off until they turn it\non; never carries terms, amounts, dates or free text."
           },
           "phone": {
             "type": [
@@ -5647,6 +5652,13 @@
             "type": "string",
             "description": "RFC 3339, UTC."
           },
+          "history_chain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That the history is chained, and the fingerprint of its last entry,\nin the document's language: a printed copy anchors the history with\nit (`crate::chain`). Left out while the history has entries from\nbefore the chain that have not been chained yet."
+          },
           "language": {
             "type": "string",
             "description": "The language `notices` and the descriptions are written in. What the\nparties wrote is never translated."
@@ -7129,6 +7141,13 @@
               "null"
             ],
             "description": "A language tag. A regional tag falls back to its base language; an\nunsupported language is refused."
+          },
+          "notification_detail": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Turns the detail of texts and phone notifications on or off."
           }
         }
       },
@@ -7141,6 +7160,13 @@
           "description"
         ],
         "properties": {
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The kind of identifier the signer had signed in with, and how long\nbefore signing, in the document's language. Never the address or\nnumber. Left out for a signature made before this was kept."
+          },
           "description": {
             "type": "string",
             "description": "The same, in words, in the document's language."

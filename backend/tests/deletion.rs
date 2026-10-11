@@ -201,8 +201,8 @@ async fn history(app: &App, exchange: &str) -> History {
         "SELECT row_to_json(t)::text FROM revision t WHERE exchange_id = $1 ORDER BY sequence",
         "SELECT row_to_json(t)::text FROM contribution_snapshot t WHERE exchange_id = $1
          ORDER BY revision_id, position",
-        "SELECT row_to_json(t)::text FROM acceptance t WHERE exchange_id = $1
-         ORDER BY accepted_at, id",
+        "SELECT (row_to_json(t)::jsonb - 'signer_identifier_hash')::text FROM acceptance t
+         WHERE exchange_id = $1 ORDER BY accepted_at, id",
     ] {
         let rows: Vec<String> = sqlx::query_scalar(query)
             .bind(id(exchange))
@@ -2520,4 +2520,101 @@ async fn a_deletion_code_by_text_needs_the_box_ticked_and_is_recorded_with_it() 
             .await
             .unwrap();
     assert_eq!(kept, 1);
+}
+
+// ---- Signatures: the identifier they were made with --------------------------
+
+/// Runs one statement (taking the exchange as `$1`) in a transaction of its
+/// own as the owner, with the deletion allowance on or off, and says whether
+/// the append-only guard refused it. Nothing is kept.
+async fn refused_for_owner(app: &App, allowance: bool, statement: &str, exchange: Uuid) -> bool {
+    let mut tx = app.owner.begin().await.unwrap();
+    if allowance {
+        sqlx::query("SELECT set_config('yuppers.account_deletion', 'on', true)")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    let result = sqlx::query(sqlx::AssertSqlSafe(statement.to_owned()))
+        .bind(exchange)
+        .execute(&mut *tx)
+        .await;
+    tx.rollback().await.ok();
+    match result {
+        Ok(_) => false,
+        Err(error) => {
+            assert!(error.to_string().contains("append-only"), "{error}");
+            true
+        }
+    }
+}
+
+type Attribution = (Option<Vec<u8>>, Option<String>, Option<OffsetDateTime>);
+
+async fn attribution(app: &App, exchange: Uuid, slot: &str) -> Attribution {
+    sqlx::query_as(
+        "SELECT signer_identifier_hash, signer_identifier_kind, session_verified_at
+         FROM acceptance WHERE exchange_id = $1 AND slot = $2",
+    )
+    .bind(exchange)
+    .bind(slot)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn deleting_an_account_unlinks_its_signatures_from_its_identifier_and_nothing_else() {
+    let test = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let exchange = id(&deal.exchange);
+
+    let ana_before = attribution(app, exchange, "A").await;
+    let ben_before = attribution(app, exchange, "B").await;
+    assert!(ana_before.0.is_some() && ben_before.0.is_some());
+    assert!(ben_before.1.is_some() && ben_before.2.is_some());
+
+    // Ben leaves: his signature keeps its kind and its time, and loses the
+    // blind index. Ana's is as it was.
+    test.leave(&deal.ben, &[&deal.exchange]).await;
+    let ben_after = attribution(app, exchange, "B").await;
+    assert_eq!(ben_after.0, None);
+    assert_eq!((&ben_after.1, ben_after.2), (&ben_before.1, ben_before.2));
+    assert_eq!(attribution(app, exchange, "A").await, ana_before);
+
+    // The table is otherwise as append-only as before, for the owner too.
+    let clear = "UPDATE acceptance SET signer_identifier_hash = NULL
+         WHERE exchange_id = $1 AND signer_identifier_hash IS NOT NULL";
+    assert!(refused_for_owner(app, false, clear, exchange).await);
+    for statement in [
+        "UPDATE acceptance SET consent_version = 'x' WHERE exchange_id = $1",
+        "UPDATE acceptance SET signer_identifier_hash = NULL, session_verified_at = NULL
+         WHERE exchange_id = $1",
+        // A value to another value, and null to a value.
+        "UPDATE acceptance SET signer_identifier_hash = decode(repeat('07', 32), 'hex')
+         WHERE exchange_id = $1",
+        "DELETE FROM acceptance WHERE exchange_id = $1",
+    ] {
+        assert!(
+            refused_for_owner(app, true, statement, exchange).await,
+            "{statement}"
+        );
+    }
+    // What the allowance does permit: a value to null, on the row that has one.
+    assert!(!refused_for_owner(app, true, clear, exchange).await);
+
+    // The service has that one column and no other.
+    let other = sqlx::query("UPDATE acceptance SET consent_version = 'x' WHERE exchange_id = $1")
+        .bind(exchange)
+        .execute(&app.db)
+        .await
+        .unwrap_err();
+    assert!(other.to_string().contains("permission denied"), "{other}");
+    let alone = sqlx::query(sqlx::AssertSqlSafe(clear.to_owned()))
+        .bind(exchange)
+        .execute(&app.db)
+        .await
+        .unwrap_err();
+    assert!(alone.to_string().contains("append-only"), "{alone}");
 }

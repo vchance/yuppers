@@ -1083,6 +1083,12 @@ export interface components {
             /** @description A supported language tag, such as `en` or `es`. */
             language: string;
             notice?: components["schemas"]["AccountNotice"] | null;
+            /**
+             * @description The holder wants texts and phone notifications to say who a yup is
+             *     with and what step happened, with its code. Off until they turn it
+             *     on; never carries terms, amounts, dates or free text.
+             */
+            notification_detail: boolean;
             phone?: string | null;
             /** @description When it was accepted, as RFC 3339. */
             terms_accepted_at?: string | null;
@@ -2020,6 +2026,13 @@ export interface components {
             /** @description RFC 3339, UTC. */
             generated_at: string;
             /**
+             * @description That the history is chained, and the fingerprint of its last entry,
+             *     in the document's language: a printed copy anchors the history with
+             *     it (`crate::chain`). Left out while the history has entries from
+             *     before the chain that have not been chained yet.
+             */
+            history_chain?: string | null;
+            /**
              * @description The language `notices` and the descriptions are written in. What the
              *     parties wrote is never translated.
              */
@@ -2588,12 +2601,20 @@ export interface components {
              *     unsupported language is refused.
              */
             language?: string | null;
+            /** @description Turns the detail of texts and phone notifications on or off. */
+            notification_detail?: boolean | null;
         };
         /**
          * @description The evidence behind a signature: how the signer had shown the service who
          *     they are. It is all the evidence there is.
          */
         Verification: {
+            /**
+             * @description The kind of identifier the signer had signed in with, and how long
+             *     before signing, in the document's language. Never the address or
+             *     number. Left out for a signature made before this was kept.
+             */
+            attribution?: string | null;
             /** @description The same, in words, in the document's language. */
             description: string;
             method: components["schemas"]["VerificationMethod"];

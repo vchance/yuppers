@@ -84,6 +84,9 @@ export const VERIFY_SAMPLE = `Your ${VERIFY_SERVICE_NAME} verification code is: 
 /** The same, from the service for deleting an account. */
 export const VERIFY_DELETION_SAMPLE = `Your ${VERIFY_DELETION_SERVICE_NAME} verification code is: ${SAMPLE_CODE}`
 
+/** A yup's display code as an update names it, made up for the page. */
+export const SAMPLE_YUP_CODE = 'ABCD-1234'
+
 /** An exchange's address as an update links to it, with an ID made up for the page. */
 export const SAMPLE_LINK = 'https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e'
 
@@ -526,7 +529,7 @@ export function renderSmsOptInMarkup(
     bubble('STOP', page.messageTo, true),
     bubble(page.replies.stop, page.messageFrom),
   ].join('')
-  const update = text(page.updateText, fill(product.sms.update, { link: SAMPLE_LINK }))
+  const update = text(page.updateText, fill(product.sms.update, { code: SAMPLE_YUP_CODE, link: SAMPLE_LINK }))
 
   /**
    * One form in a part, under a heading of `level` of its own that the

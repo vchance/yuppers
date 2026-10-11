@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use super::html;
+use super::sms::GSM7_BASIC;
 use crate::auth::Purpose;
 use crate::combine::NoticeKind;
 use crate::domain::notification::Notice;
@@ -44,8 +45,21 @@ struct PushWording {
 #[derive(Deserialize)]
 struct SmsWording {
     /// An agreement update ("Yuppers.app agreement updates"): only that
-    /// something changed, and the link. No terms, names, amounts or code.
+    /// something changed, the yup's code and the link. No terms, names or
+    /// amounts.
     update: String,
+    /// The update for someone who chose to have detail in texts
+    /// (`notification_detail`): `{sentence}` says who and what step.
+    detailed: String,
+    /// `{what}` and `{code}` as the first sentence of a detailed update, and
+    /// of a detailed push notification's title.
+    sentence: String,
+    /// What to call the other party when there is no name to give.
+    someone: String,
+    /// What happened, with `{name}`, keyed by `Notice::as_str`, for each
+    /// notice that is texted ([`Notice::texted_as_update`]). Never a term,
+    /// an amount, a date or anything written in a yup (DESIGN.md §12).
+    notices: HashMap<String, String>,
     /// The confirmation texted when someone turns updates on.
     #[serde(rename = "optInConfirmation")]
     opt_in_confirmation: String,
@@ -98,6 +112,14 @@ struct EmailWording {
     layout: String,
     /// Keyed by `Notice::as_str`.
     messages: HashMap<String, Message>,
+    /// How a message names the yup it is about, with the other party's name
+    /// (`{name}`, `{code}`).
+    yup: String,
+    /// The same when there is no name: the code alone.
+    #[serde(rename = "yupUnnamed")]
+    yup_unnamed: String,
+    /// The first line of every message (`{yup}`).
+    intro: String,
 }
 
 #[derive(Deserialize)]
@@ -196,6 +218,14 @@ impl Wording {
                 });
             }
         }
+        for notice in Notice::ALL {
+            if notice.texted_as_update() && !file.sms.notices.contains_key(notice.as_str()) {
+                return Err(WordingError::Missing {
+                    language: default.to_owned(),
+                    notice: notice.as_str(),
+                });
+            }
+        }
         // Any other language whose file is missing or broken is left out, and
         // its readers get the default language. The wording check in the
         // TypeScript build is what refuses to ship one like that.
@@ -211,11 +241,20 @@ impl Wording {
     /// The email for a notice, in `language` (an account's preference) where
     /// that language has it and in the default language otherwise.
     ///
-    /// `code` is the exchange's display code and `links` lead into it.
-    /// Nothing else about the exchange can be put in: a message never carries
-    /// what the parties agreed or wrote (DESIGN.md §12).
-    pub fn email(&self, language: &str, notice: Notice, code: &str, links: Links<'_>) -> Rendered {
-        self.email_about(language, notice, 1, code, links)
+    /// `code` is the exchange's display code, `other_party` the other
+    /// party's name as the reader sees it (empty when there is none, and the
+    /// message then names the code alone) and `links` lead into it. Nothing
+    /// else about the exchange can be put in: a message never carries what
+    /// the parties agreed or wrote (DESIGN.md §12).
+    pub fn email(
+        &self,
+        language: &str,
+        notice: Notice,
+        code: &str,
+        other_party: &str,
+        links: Links<'_>,
+    ) -> Rendered {
+        self.email_about(language, notice, 1, code, other_party, links)
     }
 
     /// [`Wording::email`] for a message about `count` items: a burst of
@@ -228,6 +267,7 @@ impl Wording {
         notice: Notice,
         count: u32,
         code: &str,
+        other_party: &str,
         links: Links<'_>,
     ) -> Rendered {
         let message_in = |language: &str| {
@@ -250,15 +290,25 @@ impl Wording {
             _ => (message.subject.as_str(), message.body.as_str()),
         };
         let count_text = count.to_string();
+        let wording = &file.notifications.email;
+        let name = email_name(other_party);
+        let yup = if name.is_empty() {
+            fill(&wording.yup_unnamed, &[("code", code)])
+        } else {
+            fill(&wording.yup, &[("name", &name), ("code", code)])
+        };
+        // The first line names the yup, then the message.
+        let message_body = format!("{}\n\n{}", wording.intro, body_template);
         let values = [
             ("productName", file.product_name.as_str()),
             ("code", code),
+            ("yup", yup.as_str()),
             ("link", links.exchange),
             ("recordLink", links.record),
             ("count", count_text.as_str()),
         ];
         let layout = &file.notifications.email.layout;
-        let text = fill(body_template, &values);
+        let text = fill(&message_body, &values);
         let mut with_text = values.to_vec();
         with_text.push(("body", &text));
         let subject = fill(subject_template, &values);
@@ -271,6 +321,7 @@ impl Wording {
         let markup = [
             ("productName", Value::Text(&file.product_name)),
             ("code", Value::Text(code)),
+            ("yup", Value::Text(&yup)),
             ("link", Value::Link(links.exchange)),
             ("recordLink", Value::Link(links.record)),
             ("count", Value::Text(&count_text)),
@@ -279,7 +330,7 @@ impl Wording {
         let (mut main, mut small_print, mut past_link) = (String::new(), String::new(), false);
         for part in layout.split("\n\n") {
             if part.trim() == "{body}" {
-                for paragraph in body_template.split("\n\n") {
+                for paragraph in message_body.split("\n\n") {
                     main.push_str(&html::paragraph(&fill_html(paragraph, &markup)));
                 }
                 continue;
@@ -342,14 +393,51 @@ impl Wording {
         )
     }
 
+    /// The title of a push notification for someone who chose to have detail
+    /// (`notification_detail`): who it is with and what step, with the yup's
+    /// code, as the first sentence of the detailed text message. `None` for a
+    /// notice that is not texted, which has no such sentence; the
+    /// notification is then the generic one.
+    pub fn push_title(
+        &self,
+        language: &str,
+        notice: Notice,
+        other_party: &str,
+        code: &str,
+    ) -> Option<String> {
+        let file = self.file_for(language);
+        sentence(file, notice, &push_name(other_party), code)
+    }
+
     /// The text message telling someone who turned on text updates for an
     /// agreement that its status changed, with `link` to the exchange
     /// (`crate::notifications::sms_updates`). The same for every change and
-    /// every agreement: it names no term, amount, person or code, as the
-    /// terms promise.
-    pub fn update_sms(&self, language: &str, link: &str) -> String {
+    /// every agreement but for its code: it names no term, amount or person,
+    /// as the terms promise.
+    pub fn update_sms(&self, language: &str, code: &str, link: &str) -> String {
         let file = self.file_for(language);
-        fill(&file.sms.update, &[("link", link)])
+        fill(&file.sms.update, &[("code", code), ("link", link)])
+    }
+
+    /// The same update for someone who chose to have detail
+    /// (`notification_detail`): who it is with and what step happened, and
+    /// the code. The name is shortened and kept to the GSM alphabet so that
+    /// the text stays one segment. `None` for a notice that is not texted.
+    pub fn detailed_update_sms(
+        &self,
+        language: &str,
+        notice: Notice,
+        other_party: &str,
+        code: &str,
+        link: &str,
+    ) -> Option<String> {
+        let file = self.file_for(language);
+        let name = sms_name(other_party);
+        let sentence = sentence(file, notice, &name, code)?;
+        Some(fill(
+            &file.sms.detailed,
+            &[("sentence", &sentence), ("link", link)],
+        ))
     }
 
     /// The text message confirming that text updates were turned on for an
@@ -491,6 +579,84 @@ impl Wording {
     }
 }
 
+/// What happened, to whom and in which yup, as one sentence (`name` already
+/// shortened); with no name it is `sms.someone`.
+fn sentence(file: &File, notice: Notice, name: &str, code: &str) -> Option<String> {
+    let phrase = file.sms.notices.get(notice.as_str())?;
+    let name = if name.is_empty() {
+        file.sms.someone.as_str()
+    } else {
+        name
+    };
+    let what = fill(phrase, &[("name", name)]);
+    Some(fill(&file.sms.sentence, &[("what", &what), ("code", code)]))
+}
+
+/// The longest a name is in a text message: every detailed text must be one
+/// segment (160 GSM characters) with the longest link.
+const SMS_NAME_LIMIT: usize = 10;
+/// The longest a name is in a push notification's title.
+const PUSH_NAME_LIMIT: usize = 24;
+/// The longest a name is in an email.
+const EMAIL_NAME_LIMIT: usize = 40;
+
+/// A name on one line: any run of white space or control characters is one
+/// space.
+fn one_line(name: &str) -> String {
+    name.split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `name` cut to `limit` characters, the last being `ellipsis` if it was cut.
+fn shortened(name: &str, limit: usize, ellipsis: &str) -> String {
+    if name.chars().count() <= limit {
+        return name.to_owned();
+    }
+    let keep = limit.saturating_sub(ellipsis.chars().count());
+    let head: String = name.chars().take(keep).collect();
+    format!("{}{ellipsis}", head.trim_end())
+}
+
+fn email_name(name: &str) -> String {
+    shortened(&one_line(name), EMAIL_NAME_LIMIT, "\u{2026}")
+}
+
+fn push_name(name: &str) -> String {
+    shortened(&one_line(name), PUSH_NAME_LIMIT, "\u{2026}")
+}
+
+/// A name for a text message: only characters of the GSM alphabet, since
+/// one outside it sends the whole text as UCS-2 at 70 characters a segment,
+/// accents folded where they can be (`ó` is not in it) and the rest left
+/// out, and cut short with three dots.
+fn sms_name(name: &str) -> String {
+    let folded: String = one_line(name)
+        .chars()
+        .filter_map(|c| {
+            let c = match c {
+                'á' | 'â' | 'ã' => 'a',
+                'Á' | 'Â' | 'Ã' | 'À' => 'A',
+                'ç' => 'c',
+                'ê' | 'ë' => 'e',
+                'Ê' | 'Ë' | 'È' => 'E',
+                'í' | 'î' | 'ï' => 'i',
+                'Í' | 'Î' | 'Ï' | 'Ì' => 'I',
+                'ó' | 'ô' | 'õ' => 'o',
+                'Ó' | 'Ô' | 'Õ' => 'O',
+                'ú' | 'û' => 'u',
+                'Ú' | 'Û' | 'Ù' => 'U',
+                'ý' | 'ÿ' => 'y',
+                'Ý' => 'Y',
+                c => c,
+            };
+            (GSM7_BASIC.contains(c) && !c.is_control()).then_some(c)
+        })
+        .collect();
+    shortened(folded.trim(), SMS_NAME_LIMIT, "...")
+}
+
 /// A piece of a template: text as written, or a variable that has a value.
 enum Piece<'t, V> {
     Text(&'t str),
@@ -566,6 +732,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use super::*;
+    use crate::notifications::sms::{Encoding, encoding};
 
     const CODE: &str = "AB12-CD34";
     const LINK: &str = "https://app.test/exchanges/7";
@@ -592,7 +759,7 @@ mod tests {
                     "{language} has no wording for {}",
                     notice.as_str()
                 );
-                let email = wording.email(language, notice, CODE, LINKS);
+                let email = wording.email(language, notice, CODE, "Sam", LINKS);
                 for text in [&email.subject, &email.body] {
                     assert!(
                         !text.contains('{') && !text.contains('}'),
@@ -623,13 +790,13 @@ mod tests {
     #[test]
     fn a_message_is_in_the_language_asked_for() {
         let wording = Wording::embedded().unwrap();
-        let english = wording.email("en", Notice::DeliveryClaimed, CODE, LINKS);
-        let spanish = wording.email("es", Notice::DeliveryClaimed, CODE, LINKS);
+        let english = wording.email("en", Notice::DeliveryClaimed, CODE, "Sam", LINKS);
+        let spanish = wording.email("es", Notice::DeliveryClaimed, CODE, "Sam", LINKS);
         assert_ne!(english, spanish);
         assert!(english.subject.contains(CODE));
         // A regional tag gets its base language.
         assert_eq!(
-            wording.email("es-MX", Notice::DeliveryClaimed, CODE, LINKS),
+            wording.email("es-MX", Notice::DeliveryClaimed, CODE, "Sam", LINKS),
             spanish
         );
     }
@@ -637,13 +804,19 @@ mod tests {
     #[test]
     fn a_language_without_wording_falls_back_to_the_default() {
         let wording = Wording::embedded().unwrap();
-        let default = wording.email(languages::default(), Notice::DisputeOpened, CODE, LINKS);
+        let default = wording.email(
+            languages::default(),
+            Notice::DisputeOpened,
+            CODE,
+            "Sam",
+            LINKS,
+        );
         assert_eq!(
-            wording.email("tlh", Notice::DisputeOpened, CODE, LINKS),
+            wording.email("tlh", Notice::DisputeOpened, CODE, "Sam", LINKS),
             default
         );
         assert_eq!(
-            wording.email("", Notice::DisputeOpened, CODE, LINKS),
+            wording.email("", Notice::DisputeOpened, CODE, "Sam", LINKS),
             default
         );
     }
@@ -690,11 +863,27 @@ mod tests {
                 (notice.as_str().to_owned(), message)
             })
             .collect();
+        let notices: serde_json::Map<String, serde_json::Value> = Notice::ALL
+            .iter()
+            .filter(|notice| notice.texted_as_update())
+            .map(|notice| {
+                (
+                    notice.as_str().to_owned(),
+                    format!("{{name}} {}", notice.as_str()).into(),
+                )
+            })
+            .collect();
         let code = |what: &str| serde_json::json!({ "subject": format!("{product} {what} {{code}}"), "body": "{code}" });
         serde_json::json!({
             "productName": product,
             "notifications": {
-                "email": { "layout": "{body} {link}", "messages": messages },
+                "email": {
+                    "layout": "{body} {link}",
+                    "messages": messages,
+                    "yup": "{name} ({code})",
+                    "yupUnnamed": "({code})",
+                    "intro": "About {yup}.",
+                },
                 "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
                 "staffAlert": { "subject": format!("{product} review"), "body": "Waiting.\n\nOpen: {link}" },
                 "accountsCombined": { "subject": format!("{product} combined"), "body": "Combined.\n\nOpen: {link}" },
@@ -706,7 +895,11 @@ mod tests {
                 "signIn": "{code} in",
                 "deleteAccount": "{code} out",
                 "verifyNumber": "{code} added",
-                "update": "changed: {link}",
+                "update": "changed {code}: {link}",
+                "detailed": "{sentence}: {link}",
+                "sentence": "{what} ({code})",
+                "someone": "Someone",
+                "notices": notices,
                 "optInConfirmation": "on",
             },
         })
@@ -723,13 +916,13 @@ mod tests {
         let wording =
             Wording::from_files(&THREE, "en", &[("en", &english), ("fr", &french)]).unwrap();
 
-        let email = wording.email("fr", Notice::EndProposed, CODE, LINKS);
+        let email = wording.email("fr", Notice::EndProposed, CODE, "Sam", LINKS);
         assert_eq!(email.subject, format!("Échange END_PROPOSED {CODE}"));
-        assert_eq!(email.body, format!("Text. {LINK}"));
+        assert_eq!(email.body, format!("About Sam ({CODE}).\n\nText. {LINK}"));
         // Listed, but with no file yet.
         assert_eq!(
             wording
-                .email("de", Notice::EndProposed, CODE, LINKS)
+                .email("de", Notice::EndProposed, CODE, "Sam", LINKS)
                 .subject,
             format!("Yuppers END_PROPOSED {CODE}")
         );
@@ -744,7 +937,7 @@ mod tests {
 
         assert_eq!(
             wording
-                .email("fr", Notice::CloseRequested, CODE, LINKS)
+                .email("fr", Notice::CloseRequested, CODE, "Sam", LINKS)
                 .subject,
             format!("Yuppers CLOSE_REQUESTED {CODE}"),
             "the product name is the default language's too, not a mixture"
@@ -910,7 +1103,7 @@ mod tests {
         let wording = Wording::embedded().unwrap();
         for language in languages::supported() {
             for notice in Notice::ALL {
-                let email = wording.email(language, notice, CODE, LINKS);
+                let email = wording.email(language, notice, CODE, "Sam", LINKS);
                 check_html(language, notice.as_str(), &email);
                 // The way in is a button, with the address beneath it.
                 assert!(
@@ -996,8 +1189,8 @@ mod tests {
     #[test]
     fn the_button_is_labelled_by_the_layout_in_the_readers_language() {
         let wording = Wording::embedded().unwrap();
-        let english = wording.email("en", Notice::RevisionSent, CODE, LINKS);
-        let spanish = wording.email("es", Notice::RevisionSent, CODE, LINKS);
+        let english = wording.email("en", Notice::RevisionSent, CODE, "Sam", LINKS);
+        let spanish = wording.email("es", Notice::RevisionSent, CODE, "Sam", LINKS);
         assert!(
             english.html.contains(">Open the yup</a>"),
             "{}",
@@ -1015,10 +1208,11 @@ mod tests {
         let wording = Wording::embedded().unwrap();
         assert_eq!(
             wording
-                .email("en", Notice::DeliveryClaimed, CODE, LINKS)
+                .email("en", Notice::DeliveryClaimed, CODE, "Sam", LINKS)
                 .body,
             format!(
-                "The other party has marked one of their contributions as delivered. \
+                "About your yup with Sam ({CODE}).\n\n\
+                 The other party has marked one of their contributions as delivered. \
                  Review it, then confirm it or dispute it.\n\n\
                  Open the yup: {LINK}\n\n\
                  You’re getting this email because you’re part of yup {CODE} on Yuppers. \
@@ -1046,7 +1240,9 @@ mod tests {
         };
         for language in languages::supported() {
             for notice in Notice::ALL {
-                let html = wording.email(language, notice, hostile, links).html;
+                let html = wording
+                    .email(language, notice, hostile, hostile, links)
+                    .html;
                 assert!(!html.contains("<script"), "{html}");
                 assert!(html.contains(escaped), "{html}");
                 assert!(
@@ -1077,8 +1273,11 @@ mod tests {
             )],
         )
         .unwrap();
-        let email = wording.email("en", Notice::EndProposed, CODE, LINKS);
-        assert_eq!(email.body, format!("Text.\n\nGo to {LINK} now."));
+        let email = wording.email("en", Notice::EndProposed, CODE, "Sam", LINKS);
+        assert_eq!(
+            email.body,
+            format!("About Sam ({CODE}).\n\nText.\n\nGo to {LINK} now.")
+        );
         assert!(
             email.html.contains("Go to <a class=\"y-link\""),
             "{}",
@@ -1089,5 +1288,202 @@ mod tests {
                 .html
                 .contains("display:inline-block;padding:12px 24px")
         );
+    }
+
+    /// The longest link an update has: the live origin and a random ID.
+    const LONGEST_LINK: &str = "https://yuppers.app/exchanges/0f8fad5b-d9cb-469f-a165-70867728950e";
+
+    #[test]
+    fn an_email_names_the_yup_it_is_about_in_its_subject_and_first_line() {
+        let wording = Wording::embedded().unwrap();
+        let named = wording.email("en", Notice::RevisionSent, CODE, "Sam", LINKS);
+        assert_eq!(
+            named.subject,
+            format!("New terms to review: your yup with Sam ({CODE})")
+        );
+        assert!(
+            named
+                .body
+                .starts_with(&format!("About your yup with Sam ({CODE}).\n\n")),
+            "{}",
+            named.body
+        );
+        assert!(named.html.contains("your yup with Sam"), "{}", named.html);
+        let spanish = wording.email("es", Notice::RevisionSent, CODE, "Sam", LINKS);
+        assert_eq!(
+            spanish.subject,
+            format!("Hay nuevos términos para revisar: tu yup con Sam ({CODE})")
+        );
+        assert!(
+            spanish
+                .body
+                .starts_with(&format!("Sobre tu yup con Sam ({CODE})."))
+        );
+
+        // With no name, the code alone, as before.
+        let unnamed = wording.email("en", Notice::RevisionSent, CODE, "  ", LINKS);
+        assert_eq!(
+            unnamed.subject,
+            format!("New terms to review: your yup ({CODE})")
+        );
+        assert!(
+            unnamed
+                .body
+                .starts_with(&format!("About your yup ({CODE})."))
+        );
+        // The footer stays.
+        assert!(named.body.contains("These emails never include the terms"));
+    }
+
+    #[test]
+    fn a_name_in_an_email_is_one_line_and_not_too_long() {
+        let wording = Wording::embedded().unwrap();
+        let email = wording.email(
+            "en",
+            Notice::RevisionSent,
+            CODE,
+            &format!("Sam\r\nBcc: x@example.test {}", "x".repeat(100)),
+            LINKS,
+        );
+        assert!(!email.subject.contains(['\r', '\n']), "{:?}", email.subject);
+        assert!(email.subject.chars().count() < 120, "{:?}", email.subject);
+        assert!(email.subject.contains('\u{2026}'));
+    }
+
+    #[test]
+    fn a_name_in_a_text_is_short_and_in_the_gsm_alphabet() {
+        assert_eq!(sms_name("Ana"), "Ana");
+        assert_eq!(sms_name("  Ana \n Ruiz "), "Ana Ruiz");
+        assert_eq!(sms_name("Mar\u{ed}a Jos\u{e9}"), "Maria Jos\u{e9}");
+        assert_eq!(sms_name("Jo\u{e3}o"), "Joao");
+        assert_eq!(sms_name("Wolfgang Amadeus"), "Wolfgan...");
+        // What the alphabet lacks is left out, an emoji and an extension
+        // character (two septets) included.
+        assert_eq!(sms_name("Sam \u{1f600}[x]"), "Sam x");
+        assert_eq!(sms_name("\u{1f600}"), "");
+        assert_eq!(sms_name(""), "");
+        for name in [
+            "Wolfgang Amadeus",
+            "\u{d1}and\u{fa} \u{c1}lvarez",
+            "\u{4f50}\u{85}",
+        ] {
+            assert!(matches!(encoding(&sms_name(name)), Encoding::Gsm7 { .. }));
+            assert!(sms_name(name).chars().count() <= SMS_NAME_LIMIT);
+        }
+    }
+
+    #[test]
+    fn every_detailed_text_is_one_segment_in_every_language_with_the_worst_name() {
+        let wording = Wording::embedded().unwrap();
+        // The widest letters, the longest name, an accented one cut short, a
+        // name the alphabet cannot write, and none.
+        let names = [
+            "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+            "\u{d1}\u{fa}\u{f1}ez de la Pe\u{f1}a Mart\u{ed}nez",
+            "\u{4f50}\u{85}\u{1f600}",
+            "",
+        ];
+        for language in languages::supported() {
+            let mut longest = 0;
+            for notice in Notice::ALL.into_iter().filter(|n| n.texted_as_update()) {
+                for name in names {
+                    let text = wording
+                        .detailed_update_sms(language, notice, name, "ABCD-1234", LONGEST_LINK)
+                        .unwrap_or_else(|| panic!("{language} {}: no text", notice.as_str()));
+                    let Encoding::Gsm7 { septets } = encoding(&text) else {
+                        panic!("{language} {}: {text:?} is not GSM-7", notice.as_str());
+                    };
+                    assert!(
+                        septets <= 160,
+                        "{language} {}: {septets}: {text:?}",
+                        notice.as_str()
+                    );
+                    longest = longest.max(septets);
+                    assert!(text.starts_with("Yuppers.app: "), "{text:?}");
+                    assert!(text.contains("ABCD-1234") && text.contains(LONGEST_LINK));
+                    assert!(text.contains("STOP"), "{text:?}");
+                    assert!(!text.contains('{') && !text.contains('}'), "{text:?}");
+                }
+            }
+            println!("{language}: the longest detailed text is {longest} septets");
+        }
+    }
+
+    #[test]
+    fn a_detailed_text_says_who_what_step_and_which_code() {
+        let wording = Wording::embedded().unwrap();
+        assert_eq!(
+            wording
+                .detailed_update_sms("en", Notice::AcceptanceWaiting, "Sam", "ABCD-1234", LINK)
+                .unwrap(),
+            format!(
+                "Yuppers.app: Sam signed your yup (ABCD-1234). See it: {LINK}. \
+                 Reply STOP to opt out."
+            )
+        );
+        assert_eq!(
+            wording
+                .detailed_update_sms("es", Notice::AcceptanceWaiting, "Sam", "ABCD-1234", LINK)
+                .unwrap(),
+            format!(
+                "Yuppers.app: Sam ha firmado tu yup (ABCD-1234). Velo: {LINK}. \
+                 Responde STOP para cancelar."
+            )
+        );
+        assert!(
+            wording
+                .detailed_update_sms("en", Notice::AcceptanceWaiting, "", "ABCD-1234", LINK)
+                .unwrap()
+                .starts_with("Yuppers.app: Someone signed your yup")
+        );
+        // Not a notice that is texted.
+        assert_eq!(
+            wording.detailed_update_sms("en", Notice::DueSoon, "Sam", "ABCD-1234", LINK),
+            None
+        );
+        assert_eq!(
+            wording.update_sms("en", "ABCD-1234", LINK),
+            format!(
+                "Yuppers.app: your yup ABCD-1234 has an update. See it: {LINK}. Reply STOP to opt out."
+            )
+        );
+    }
+
+    #[test]
+    fn a_push_title_is_the_first_sentence_of_the_detailed_text() {
+        let wording = Wording::embedded().unwrap();
+        assert_eq!(
+            wording
+                .push_title("en", Notice::DeliveryClaimed, "Sam", "ABCD-1234")
+                .unwrap(),
+            "Sam marked a delivery (ABCD-1234)"
+        );
+        let long = wording
+            .push_title("es", Notice::DeliveryClaimed, &"Z".repeat(60), "ABCD-1234")
+            .unwrap();
+        assert!(
+            long.contains('\u{2026}') && long.contains("ABCD-1234"),
+            "{long}"
+        );
+        assert_eq!(
+            wording.push_title("en", Notice::DueSoon, "Sam", "ABCD-1234"),
+            None
+        );
+    }
+
+    #[test]
+    fn every_language_words_every_texted_notice_and_no_other() {
+        let wording = Wording::embedded().unwrap();
+        for language in languages::supported() {
+            let file = &wording.languages[language.as_str()];
+            for notice in Notice::ALL {
+                assert_eq!(
+                    file.sms.notices.contains_key(notice.as_str()),
+                    notice.texted_as_update(),
+                    "{language} {}",
+                    notice.as_str()
+                );
+            }
+        }
     }
 }

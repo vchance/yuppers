@@ -489,11 +489,13 @@ impl App {
         let token = generate_token();
         sqlx::query(
             "INSERT INTO account_session
-                (account_id, token_hash, auth_method, authenticated_at, expires_at)
-             VALUES ($1, $2, 'EMAIL_OTP', now(), now() + interval '1 day')",
+                (account_id, token_hash, auth_method, authenticated_at, expires_at,
+                 identifier_hash, identifier_kind)
+             VALUES ($1, $2, 'EMAIL_OTP', now(), now() + interval '1 day', $3, 'email')",
         )
         .bind(id)
         .bind(token_hash(&token).as_slice())
+        .bind(address.index.as_slice())
         .execute(&self.db)
         .await
         .unwrap();

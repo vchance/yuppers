@@ -241,6 +241,15 @@ Combining two accounts and removing an email address or phone number (`backend/s
 
 Acceptance of the Terms and the Privacy policy at sign-in (README, "Signing in"; `backend/src/terms.rs`). `terms_acceptance` is append-only: one row for each completed sign-in, with the version the client showed, its language, the time and the session it made. `account.terms_version` and `terms_accepted_at` hold the latest for cheap reads (`GET /v1/me`), both set or both empty. The application role may read the table and add to it, and remove rows only because deleting an account does (`crate::deletion`). Nothing is backfilled: an account gets its first row at its next sign-in. `backend/tests/auth.rs` and `backend/tests/deletion.rs` check the records and their removal through the API.
 
+## 0033_acceptance_attribution
+
+Who a signature is attributed to, and a hash chain over each exchange's history (`backend/src/chain.rs`; `docs/operations.md`, "Signature attribution and the history chain"). Additive: nothing existing changes, including the content hash and what is signed.
+
+- **`account_session.identifier_hash`, `identifier_kind`**: the blind index and kind (`email`, `phone`) of the identifier the session's code proved, set when the session is made. Null on sessions from before; both or neither.
+- **`acceptance.signer_identifier_hash`, `signer_identifier_kind`, `session_verified_at`, `session_id`**: copied from the session when the signature is made. Null on signatures from before. `session_id` is not a foreign key: sessions are swept, signatures are permanent.
+- **`exchange_event.chain_hash`**: SHA-256 over the previous row's hash and the row's fields. Nullable, with a partial index on the rows still without one; filled for history from before by `staff backfill-chain`, never by the migration.
+- **The append-only trigger on `exchange_event`** now has one exception: an `UPDATE` that sets `chain_hash` from null and changes nothing else, in a transaction that says `yuppers.chain_backfill = on` (the backfill). `exchange_event_append_only` keeps its name and still refuses every other update, every delete and truncate; `exchange_event_chain_only` is the row-level check on the exception. The application role has no `UPDATE` on the table.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

@@ -143,7 +143,7 @@
             "How you opt in: by ticking a box on that agreement, which shows this text: “Receive text updates from yuppers.app about this agreement, one text per status change. Message frequency varies; there is no fixed maximum. Msg & data rates may apply. Reply HELP for help or STOP to opt out. Terms: https://yuppers.app/terms. Privacy Policy: https://yuppers.app/privacy.” Until the box is ticked and saved, no update is sent.",
             "Before the box, if your account has no phone number, you add one, a US number that we check with a one-time code (see “One-time codes by text” below).",
             "Message frequency: Message frequency varies; there is no fixed maximum. One text per status change of an agreement you turned updates on for.",
-            "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t.",
+            "What an update says: only that something changed, with a link to sign in and see it. It never includes the terms, amounts or names of goods, just as our emails and app notifications don’t. If you turn on detail on your account page, a text or phone notification also says who the yup is with and which step happened; it never carries the terms.",
             "Turning text updates off for an agreement stops them for that agreement only.",
             "Message and data rates may apply.",
             "**Reply HELP for help.** **Reply STOP to stop receiving texts.** STOP stops all texts from Yuppers.app to your number, agreement updates and one-time codes alike, until you reply START. You can still sign in with an email address, if your account has one.",

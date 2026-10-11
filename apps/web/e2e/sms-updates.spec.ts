@@ -114,12 +114,18 @@ test('a party adds a number, turns on text updates, and is texted when the agree
   })
   try {
     const link = `http://127.0.0.1:${port}/exchanges/${id}`
-    const update = `Yuppers.app: an agreement you turned on updates for has changed. See it: ${link}. Reply STOP to opt out.`
+    // The wording's own text, with the exchange's display code (four and
+    // four letters or digits) where it goes.
+    const [before, after] = fill(en.sms.update, { code: '@', link }).split('@')
+    const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const update = new RegExp(`^${escaped(before)}[A-Z0-9]{4}-[A-Z0-9]{4}${escaped(after)}$`)
     const texts = await waitFor(() => {
       const found = textsTo(phone, workerLog)
-      return found.includes(update) ? found : undefined
+      return found.some((text) => update.test(text)) ? found : undefined
     }, `the update text in ${workerLog}`)
-    expect(texts).toEqual([en.sms.optInConfirmation, update])
+    expect(texts).toHaveLength(2)
+    expect(texts[0]).toBe(en.sms.optInConfirmation)
+    expect(texts[1]).toMatch(update)
   } finally {
     worker.kill('SIGTERM')
     closeSync(output)

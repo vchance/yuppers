@@ -290,7 +290,11 @@ async fn each_party_is_told_what_the_other_did_and_never_their_own_action() {
         // letters and digits, and may spell anything.
         let text = format!("{}\n{}", email.subject, email.body)
             .replace(&link, "")
-            .to_lowercase();
+            .to_lowercase()
+            // The other party's name is what the subject and first line say
+            // now; nothing else of either name may appear.
+            .replace("ana ruiz", "")
+            .replace("ben ortiz", "");
         for private in ["fence", "ruiz", "ortiz", "400", "payment", "gate", "fixed"] {
             assert!(!text.contains(private), "{private:?} leaked into {text}");
         }
@@ -489,12 +493,15 @@ async fn a_message_is_written_in_its_recipients_language() {
     assert_eq!(to_ben.to, deal.ben.email);
     assert_eq!(
         to_ben.subject,
-        format!("Algo se marcó como entregado ({code})")
+        format!("Algo se marcó como entregado: tu yup con Ana Ruiz ({code})")
     );
     assert!(to_ben.body.contains(&format!("Abre el yup: {link}")));
 
     assert_eq!(to_ana.to, deal.ana.email);
-    assert_eq!(to_ana.subject, format!("A delivery was confirmed ({code})"));
+    assert_eq!(
+        to_ana.subject,
+        format!("A delivery was confirmed: your yup with Ben Ortiz ({code})")
+    );
     assert!(to_ana.body.contains(&format!("Open the yup: {link}")));
 }
 
@@ -544,7 +551,7 @@ async fn each_signer_is_told_where_their_signed_agreement_is_kept() {
     assert_eq!(to_ana.to, deal.ana.email);
     assert_eq!(
         to_ana.subject,
-        format!("Your agreement is signed and on record ({code})")
+        format!("Your agreement is signed and on record: your yup with Ben Ortiz ({code})")
     );
     assert!(to_ana.body.contains(&format!(
         "Sign in to read, print or download your copy at any time: {record}\n"
@@ -554,7 +561,7 @@ async fn each_signer_is_told_where_their_signed_agreement_is_kept() {
     assert_eq!(to_ben.to, deal.ben.email);
     assert_eq!(
         to_ben.subject,
-        format!("Tu acuerdo está firmado y registrado ({code})")
+        format!("Tu acuerdo está firmado y registrado: tu yup con Ana Ruiz ({code})")
     );
     assert!(to_ben.body.contains(&format!(
         "Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {record}\n"
@@ -567,7 +574,11 @@ async fn each_signer_is_told_where_their_signed_agreement_is_kept() {
     for email in &emails {
         let text = format!("{}\n{}", email.subject, email.body)
             .replace(&link, "")
-            .to_lowercase();
+            .to_lowercase()
+            // The other party's name is what the subject and first line say
+            // now; nothing else of either name may appear.
+            .replace("ana ruiz", "")
+            .replace("ben ortiz", "");
         for private in ["fence", "ruiz", "ortiz", "400", "payment"] {
             assert!(!text.contains(private), "{private:?} leaked into {text}");
         }
@@ -604,11 +615,17 @@ async fn an_amendment_coming_into_force_sends_each_signer_their_copy_again() {
     let (_, emails) = deliver(&app).await;
     let code = display_code(&app, &deal.ana, &deal.exchange).await;
     let record = format!("https://app.test/exchanges/{}/record", deal.exchange);
-    for (email, to) in emails[1..].iter().zip([&deal.ana, &deal.ben]) {
+    for (email, (to, other)) in emails[1..]
+        .iter()
+        .zip([(&deal.ana, "Ben Ortiz"), (&deal.ben, "Ana Ruiz")])
+    {
         assert_eq!(email.to, to.email);
         assert_eq!(
             email.subject,
-            format!("The change to your agreement is signed and on record ({code})")
+            format!(
+                "The change to your agreement is signed and on record: \
+                 your yup with {other} ({code})"
+            )
         );
         assert!(email.body.contains(&record), "{}", email.body);
         assert!(!email.body.to_lowercase().contains("gate"));

@@ -29,6 +29,7 @@ const account: Account = {
   id: 'a0000000-0000-4000-8000-000000000001',
   display_name: 'Ana Ruiz',
   adult_confirmed: true,
+  notification_detail: false,
   language: 'en',
   email: 'ana@example.test',
 };

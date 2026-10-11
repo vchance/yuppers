@@ -28,6 +28,7 @@ export const ana: Account = {
   id: 'a0000000-0000-4000-8000-000000000001',
   display_name: 'Ana Ruiz',
   adult_confirmed: true,
+  notification_detail: false,
   language: 'en',
   email: 'ana@example.test',
 };
@@ -422,11 +423,17 @@ function respond(
     return [404, { code: 'INVITATION_UNAVAILABLE' }];
   }
   if (call === 'PATCH /v1/me') {
-    const update = body as { display_name?: string; adult_confirmed?: boolean; language?: string };
+    const update = body as {
+      display_name?: string;
+      adult_confirmed?: boolean;
+      notification_detail?: boolean;
+      language?: string;
+    };
     service.account = {
       ...service.account,
       display_name: update.display_name ?? service.account.display_name,
       adult_confirmed: update.adult_confirmed ?? service.account.adult_confirmed,
+      notification_detail: update.notification_detail ?? service.account.notification_detail,
       language: update.language ?? service.account.language,
     };
     return [200, service.account];

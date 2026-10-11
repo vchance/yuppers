@@ -30,6 +30,7 @@ use self::dto::{
 };
 use super::dto::{ContributionStatus, CounterpartyDto, OutcomeDto, rfc3339, state_dto};
 use super::repo::{self, Aggregate};
+use crate::chain;
 use crate::domain::canonical::canonical_document;
 use crate::domain::contribution::Status;
 use crate::domain::exchange::Counterparty;
@@ -462,6 +463,7 @@ async fn signatures(
     let rows = sqlx::query(
         "SELECT a.revision_id, a.slot, a.content_hash, a.auth_method, a.authenticated_at,
                 a.consent_language, a.consent_version, a.accepted_at,
+                a.signer_identifier_kind, a.session_verified_at,
                 holding_void_since(a.exchange_id, a.slot, a.holding) AS void_since
          FROM acceptance a
          WHERE a.exchange_id = $1 AND a.revision_id = ANY($2)
@@ -483,10 +485,21 @@ async fn signatures(
         };
         let signed_at = rfc3339(row.get("accepted_at"));
         let content_hash = hex(&row.get::<Vec<u8>, _>("content_hash"));
+        // How long the signer had been signed in when they signed, from the
+        // session's own record of its code (migration 0033). Only the kind of
+        // identifier is said.
+        let attribution = row
+            .get::<Option<String>, _>("signer_identifier_kind")
+            .zip(row.get::<Option<OffsetDateTime>, _>("session_verified_at"))
+            .and_then(|(kind, verified)| {
+                let signed: OffsetDateTime = row.get("accepted_at");
+                wording.attribution(&kind, (signed - verified).whole_seconds())
+            });
         let verification = Verification {
             method,
             verified_at: rfc3339(row.get("authenticated_at")),
             description: wording.verification(method),
+            attribution,
         };
         let consent = ConsentShown {
             language: row.get("consent_language"),
@@ -766,6 +779,15 @@ pub async fn record(
         }
     }
 
+    // The last entry's fingerprint, whatever part of the record this
+    // document holds, read in the same snapshot as the rest.
+    let history_chain = match chain::last_hash(&mut tx, exchange).await? {
+        Some((sequence, hash)) if sequence == aggregate.last_event_seq => {
+            wording.chain(sequence, &chain::hex(&hash))
+        }
+        _ => None,
+    };
+
     Ok(RecordDocument {
         format: FORMAT.to_owned(),
         format_version: FORMAT_VERSION,
@@ -784,6 +806,7 @@ pub async fn record(
             next,
         },
         content_hidden: hidden.is_some().then_some(true),
+        history_chain,
     })
 }
 

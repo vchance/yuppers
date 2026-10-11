@@ -5,6 +5,7 @@
 pub mod app_role;
 pub mod auth;
 pub mod build_info;
+pub mod chain;
 pub mod client_version;
 pub mod code_consent;
 pub mod combine;

@@ -126,3 +126,30 @@ impl EmailSender for LogEmailSender {
         })
     }
 }
+
+/// The yup a message is about, as its recipient sees it: the exchange's
+/// display code and the name of the other party (empty when they have none,
+/// or the recipient is not a party). The name is what the home list shows as
+/// "with {name}". `None` when there is no such exchange.
+///
+/// A message that carries them goes to a party to the exchange and to no one
+/// else; neither is ever logged.
+pub(crate) async fn yup_of(
+    conn: &mut sqlx::PgConnection,
+    exchange: uuid::Uuid,
+    recipient: Option<uuid::Uuid>,
+) -> Result<Option<(String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT e.display_code, coalesce(other.display_name, '')
+         FROM exchange e
+         LEFT JOIN participant mine
+           ON mine.exchange_id = e.id AND mine.account_id = $2
+         LEFT JOIN participant other
+           ON other.exchange_id = e.id AND other.slot <> mine.slot
+         WHERE e.id = $1",
+    )
+    .bind(exchange)
+    .bind(recipient)
+    .fetch_optional(&mut *conn)
+    .await
+}

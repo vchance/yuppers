@@ -41,7 +41,7 @@ jest.mock('expo-crypto', () => {
 });
 
 let service: FakeService = fakeService();
-let app: Awaited<ReturnType<typeof renderRouter>>;
+let app: ReturnType<typeof renderRouter>;
 globalThis.fetch = ((...args: Parameters<typeof fetch>) => service.fetch(...args)) as typeof fetch;
 
 const w = wordingFor('en');
@@ -57,7 +57,8 @@ async function open(
     service.account = ana;
   }
   prepare?.(service);
-  app = await renderRouter('src/app', { initialUrl });
+  app = renderRouter('src/app', { initialUrl });
+  await app;
 }
 
 afterEach(forgetInvitation);
@@ -128,7 +129,7 @@ describe('the chooser', () => {
       started_from: 'job-deposit-balance@1',
     });
     expect(JSON.stringify(saved.body)).not.toContain('job-deposit-balance');
-    await waitFor(() => expect(screen).toHavePathname(`/exchanges/${DRAFT}`), {
+    await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${DRAFT}`), {
       timeout: 5000,
     });
     await screen.findByRole('header', { name: w.composer.titleFirst });
@@ -183,7 +184,7 @@ describe('the chooser', () => {
     const [created, saved] = startedBy();
     expect(created.body).toMatchObject({ started_from: 'blank' });
     expect((saved.body as { body: { partyB: string } }).body.partyB).toBe('Ben');
-    await waitFor(() => expect(screen).toHavePathname(`/exchanges/${DRAFT}`), {
+    await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${DRAFT}`), {
       timeout: 5000,
     });
   });

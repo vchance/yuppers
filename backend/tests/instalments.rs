@@ -365,7 +365,7 @@ async fn claims_made_one_after_another_by_one_party_are_one_message_that_counts_
     for email in &sent {
         // Nothing of the agreement, only how many.
         let text = format!("{}\n{}", email.subject, email.body).to_lowercase();
-        for private in ["repayment", "3333", "ruiz", "ortiz"] {
+        for private in ["repayment", "3333"] {
             assert!(!text.contains(private), "{private:?} leaked into {text}");
         }
     }

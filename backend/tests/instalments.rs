@@ -72,8 +72,7 @@ async fn deliver(app: &App) -> Vec<Email> {
     )
     .await
     .unwrap();
-    let sent = provider.0.lock().unwrap().clone();
-    sent
+    provider.0.lock().unwrap().clone()
 }
 
 fn payment(id: Uuid, from: &str, description: &str, amount: i64) -> Value {

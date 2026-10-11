@@ -80,7 +80,7 @@ export function ExchangeScreen({ id, pending }: { id: string | null; pending?: P
   const router = useRouter();
   const { exchange, setExchange, failure, reload } = useExchange(id, pending);
   // Whether the first proposal has been sent from a fresh start: the screen
-  // then stays as it is until its link has been dealt with.
+  // then stays, as it holds the invitation link that is shown only once.
   const sentFromFresh = useRef(false);
   // The invitation token, held only while this screen stays open: it is shown
   // once and cannot be fetched again.
@@ -98,12 +98,6 @@ export function ExchangeScreen({ id, pending }: { id: string | null; pending?: P
     setExchange((current) => current && { ...current, invitation_shared_at: at });
     api.markInvitationShared(exchange?.id ?? id ?? '').catch(() => {});
   }, [id, exchange?.id, setExchange]);
-
-  // The link is dealt with: a fresh start moves to the exchange's own screen.
-  function finishSending() {
-    setSending(false);
-    if (pending && exchange) router.replace(`/exchanges/${exchange.id}`);
-  }
 
   if (!exchange) return <Unavailable failure={failure} />;
 
@@ -138,8 +132,8 @@ export function ExchangeScreen({ id, pending }: { id: string | null; pending?: P
         exchange={exchange}
         issued={issued}
         onShared={shared}
-        onDone={finishSending}
-        onLater={finishSending}
+        onDone={() => setSending(false)}
+        onLater={() => setSending(false)}
       />
     );
   }

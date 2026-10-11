@@ -1,6 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client'
 import {
-  applyTemplate,
   beginYup,
   deviceTimeZone,
   draftFromCopy,
@@ -12,7 +11,7 @@ import {
 } from '@yuppers/shared'
 import { useEffect, useState } from 'react'
 
-import { useI18n, useSession } from '../app/context'
+import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
@@ -21,22 +20,21 @@ import { api, failureCode } from '../lib/api'
 
 /**
  * The first step of a new yup (DESIGN.md §4.4): a short list of common
- * agreements, then the blank form and copying an earlier yup. Choosing makes
- * the draft and opens it in the composer; nothing else is asked here. Names,
- * who it is for and sending come after, as they always did.
+ * agreements, then the blank form and copying an earlier yup. A common
+ * agreement or the blank form opens the composer with nothing made on the
+ * service; copying makes the draft at once. Nothing else is asked here.
+ * Names, who it is for and sending come after, as they always did.
  */
 export default function StartPage() {
   const { wording } = useI18n()
   const w = wording.templates
-  const { account } = useSession()
-  const author = account?.display_name ?? ''
 
   const [mode, setMode] = useState<'choose' | 'copy'>('choose')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [tooMany, setTooMany] = useState(false)
 
-  /** Makes the draft with the working copy a choice starts, and opens it. */
+  /** Makes the draft with the copy of an earlier yup, and opens it. */
   async function begin(choice: StartChoice, draft: Parameters<typeof beginYup>[3]) {
     setBusy(true)
     setFailure(null)
@@ -45,7 +43,7 @@ export default function StartPage() {
       // Due dates are read in the timezone of whoever starts the exchange.
       const timezone = deviceTimeZone() ?? 'UTC'
       const exchange = await beginYup(api, timezone, choice, draft)
-      navigate(paths.exchange(exchange.id))
+      navigate(paths.exchange(exchange.id), { replace: true })
     } catch (error) {
       const code = failureCode(error)
       // Here the limit is on exchanges started today, not on codes.
@@ -55,12 +53,11 @@ export default function StartPage() {
     }
   }
 
+  // A template or the blank form opens the composer with a working copy of
+  // its own and no exchange on the service: that is made when something is
+  // first changed.
   function startFrom(template: Template) {
-    const words = wording.templates.entries[template.id]
-    void begin(
-      { kind: 'template', template },
-      applyTemplate(template, words, author, () => crypto.randomUUID()),
-    )
+    navigate(paths.newDraft(template.id))
   }
 
   return (
@@ -110,7 +107,7 @@ export default function StartPage() {
                     className="choice"
                     disabled={busy}
                     aria-describedby="blank-summary"
-                    onClick={() => void begin({ kind: 'blank' }, null)}
+                    onClick={() => navigate(paths.newDraft('blank'))}
                   >
                     {w.blank.name}
                   </button>

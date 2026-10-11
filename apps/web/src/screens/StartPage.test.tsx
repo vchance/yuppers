@@ -18,8 +18,9 @@ import {
 
 /*
  * Starting a yup (DESIGN.md §4.4): New yup opens on the common agreements, the
- * blank form and copying an earlier yup; choosing makes the draft, with what
- * the choice puts in it, and opens the composer.
+ * blank form and copying an earlier yup. A common agreement or the blank form
+ * opens the composer with nothing made on the service until something is
+ * changed; copying makes the draft at once, with what it copies.
  */
 
 afterEach(stop)
@@ -75,18 +76,32 @@ describe('the chooser', () => {
     expect(await violations()).toEqual([])
   })
 
-  test('a common agreement makes the draft from it and opens it with examples in grey', async () => {
+  test('a common agreement opens with examples in grey and makes nothing until something is changed', async () => {
     const { wording, service } = await start('/new', ana)
     const w = wording.templates
     await heading(w.chooserTitle)
     await press(button(w.entries['job-deposit-balance'].name))
     await heading(wording.composer.titleFirst)
+    // The composer has an address of its own, with no exchange in it.
+    expect(window.location.pathname).toBe('/new/job-deposit-balance')
+    await settle(900)
+    expect(startedBy(service.sent)).toEqual([])
+    expect(window.location.pathname).toBe('/new/job-deposit-balance')
 
+    // The first change makes the draft, tells the service how it began, saves
+    // the whole copy, and moves the address to the exchange, replacing the old one.
+    const before = window.history.length
+    await type(field(wording.composer.termsLabel), 'Two posts and a panel.')
+    await until(() => startedBy(service.sent).length === 2, 'the draft being made and saved')
     const [created, saved] = startedBy(service.sent)
-    // The service is told once what the draft was started from; the working
-    // copy has no trace of it.
     expect(created.body).toMatchObject({ started_from: 'job-deposit-balance@1' })
     expect(JSON.stringify(saved.body)).not.toContain('job-deposit-balance')
+    await until(() => window.location.pathname === `/exchanges/${DRAFT}`, 'the address moving')
+    expect(window.history.length).toBe(before)
+    expect(document.body.textContent).toContain(w.entries['job-deposit-balance'].warning)
+    expect((field(wording.composer.termsLabel) as HTMLTextAreaElement).value).toBe(
+      'Two posts and a panel.',
+    )
     const draft = (saved.body as { body: { contributions: Record<string, unknown>[] } }).body
     expect(draft.contributions.map((item) => [item.from, item.type, item.description])).toEqual([
       ['B', 'MONEY', ''],
@@ -103,7 +118,6 @@ describe('the chooser', () => {
       w.entries['job-deposit-balance'].items.map((item) => item.description),
     )
     // The hint, the grey-text note and the warning are above the items.
-    expect(document.body.textContent).toContain(w.entries['job-deposit-balance'].hint)
     expect(document.body.textContent).toContain(w.bandExamples)
     expect(document.body.textContent).toContain(w.entries['job-deposit-balance'].warning)
     expect(await violations()).toEqual([])
@@ -163,17 +177,42 @@ describe('the chooser', () => {
     expect(await violations()).toEqual([])
   })
 
-  test('blank is the empty composer, and the service is told so', async () => {
+  test('blank is the empty composer: backing out makes nothing, the first edit makes the draft', async () => {
     const { wording, service } = await start('/new', ana)
     await heading(wording.templates.chooserTitle)
     await press(button(wording.templates.blank.name))
     await heading(wording.composer.titleFirst)
-
-    const [created, ...rest] = startedBy(service.sent)
-    expect(created.body).toMatchObject({ started_from: 'blank' })
-    expect(rest.filter((request) => request.call.startsWith('PUT'))).toHaveLength(0)
+    expect(window.location.pathname).toBe('/new/blank')
     // No band: nothing was chosen to say anything about.
     expect(document.body.textContent).not.toContain(wording.templates.bandExamples)
+
+    // Backing out of it, untouched, leaves nothing on the service.
+    window.history.back()
+    await heading(wording.templates.chooserTitle)
+    await settle(900)
+    expect(service.sent.filter((request) => request.call === 'POST /v1/exchanges')).toEqual([])
+    expect(service.sent.filter((request) => request.call.startsWith('PUT'))).toEqual([])
+
+    // Writing something does.
+    await press(button(wording.templates.blank.name))
+    await heading(wording.composer.titleFirst)
+    await type(field(wording.composer.otherName), 'Ben')
+    await until(() => startedBy(service.sent).length === 2, 'the draft being made and saved')
+    const [created, saved] = startedBy(service.sent)
+    expect(created.body).toMatchObject({ started_from: 'blank' })
+    expect((saved.body as { body: { partyB: string } }).body.partyB).toBe('Ben')
+    await until(() => window.location.pathname === `/exchanges/${DRAFT}`, 'the address moving')
+  })
+
+  test('a copy that is as it started is not saved, and one typed over and put back makes nothing', async () => {
+    const { wording, service } = await start('/new', ana)
+    await heading(wording.templates.chooserTitle)
+    await press(button(wording.templates.blank.name))
+    await heading(wording.composer.titleFirst)
+    await type(field(wording.composer.termsLabel), 'x')
+    await type(field(wording.composer.termsLabel), '')
+    await settle(1000)
+    expect(service.sent.filter((request) => request.call === 'POST /v1/exchanges')).toEqual([])
   })
 })
 
@@ -203,6 +242,7 @@ describe('copying a previous yup', () => {
     await press(button(w.copyStart))
     await heading(wording.composer.titleFirst)
 
+    // Copying carries what was chosen: the draft is made at once.
     const [created, saved] = startedBy(service.sent)
     expect(created.body).toMatchObject({ started_from: 'copy' })
     const draft = (

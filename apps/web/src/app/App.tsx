@@ -34,6 +34,7 @@ import {
   useSession,
   type Session,
 } from './context'
+import { FRESH, fresh } from './fresh'
 import { Link } from './Link'
 import { loadedLegalPage, loadLegalPage } from './legal-page'
 import { usePathname } from './router'
@@ -242,7 +243,19 @@ function Shell({ outdated }: { outdated: boolean }) {
     case 'revise':
       page = (
         <Gate>
-          <ExchangePage key={route.id} id={route.id} revising={route.name === 'revise'} />
+          {/* One that has just been made keeps the page it was started on. */}
+          <ExchangePage
+            key={route.id === fresh.id ? FRESH : route.id}
+            id={route.id}
+            revising={route.name === 'revise'}
+          />
+        </Gate>
+      )
+      break
+    case 'newDraft':
+      page = (
+        <Gate>
+          <ExchangePage key={FRESH} id={null} revising={false} from={route.from} />
         </Gate>
       )
       break

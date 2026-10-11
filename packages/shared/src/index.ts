@@ -413,7 +413,8 @@ export {
   type TemplateItem,
   type TemplateWords,
 } from './templates'
-export { beginYup, templateStartedFrom } from './start'
+export { beginYup, draftChanged, pendingStart, templateStartedFrom } from './start'
+export type { PendingStart } from './start'
 export {
   SAMPLE_CURRENCY,
   SAMPLE_DUE_IN_DAYS,

@@ -5,6 +5,7 @@ import {
   invitationPath,
   legalPath,
   legalPathOf,
+  templateById,
   type LegalDocument,
 } from '@yuppers/shared'
 
@@ -32,6 +33,12 @@ export type Route =
   /** `language` is the sender's: it chose which entry page the link previews with, nothing more. */
   | { name: 'invitation'; language: string }
   | { name: 'exchange'; id: string }
+  /**
+   * A fresh start, written before the service has an exchange for it: a
+   * template's id, or `blank`. It moves to `/exchanges/{id}` (replacing this
+   * address) the first time something is changed.
+   */
+  | { name: 'newDraft'; from: string }
   /** Writing a counteroffer or an amendment. */
   | { name: 'revise'; id: string }
   /** The whole record of an exchange, laid out for reading and printing. */
@@ -49,6 +56,7 @@ export type Route =
 const UUID = '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
 const LANGUAGE_TAG = '[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*'
 
+const NEW_DRAFT = /^\/new\/([a-z][a-z0-9-]{0,39})$/
 const EXCHANGE = new RegExp(`^/exchanges/(${UUID})$`)
 const REVISE = new RegExp(`^/exchanges/(${UUID})/revise$`)
 const RECORD = new RegExp(`^/exchanges/(${UUID})/record$`)
@@ -63,6 +71,10 @@ export function matchRoute(pathname: string): Route {
   if (path === '/' || path === '') return { name: 'home' }
   if (path === '/account') return { name: 'account' }
   if (path === '/new') return { name: 'start' }
+  const newDraft = NEW_DRAFT.exec(path)
+  if (newDraft && (newDraft[1] === 'blank' || templateById(newDraft[1]))) {
+    return { name: 'newDraft', from: newDraft[1] }
+  }
   const example = EXAMPLE.exec(path)
   if (example) {
     const wanted = example[1]?.toLowerCase()
@@ -95,6 +107,8 @@ export const paths = {
   home: '/',
   account: '/account',
   start: '/new',
+  /** A fresh start's composer: a template's id, or `blank`. */
+  newDraft: (from: string) => `/new/${from}`,
   /** The sample yup: `/example` in the default language, `/{language}/example` in the others. */
   example: (language: string = defaultLanguage) =>
     language === defaultLanguage ? '/example' : `/${language}/example`,

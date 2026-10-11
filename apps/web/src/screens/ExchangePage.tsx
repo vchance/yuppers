@@ -1,8 +1,16 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
-import type { IssuedInvitation } from '@yuppers/shared'
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import {
+  applyTemplate,
+  deviceTimeZone,
+  pendingStart,
+  templateById,
+  type IssuedInvitation,
+  type PendingStart,
+} from '@yuppers/shared'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 
-import { useI18n } from '../app/context'
+import { useI18n, useSession } from '../app/context'
+import { fresh } from '../app/fresh'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
@@ -20,9 +28,37 @@ const Composer = lazy(() => import('./Composer'))
  * further along is the exchange view. `/exchanges/{id}/revise` is the
  * composer again, for a counteroffer or an amendment.
  */
-export default function ExchangePage({ id, revising }: { id: string; revising: boolean }) {
+export default function ExchangePage({
+  id,
+  revising,
+  from,
+}: {
+  /** Null for a fresh start, which has no exchange until the person changes something. */
+  id: string | null
+  revising: boolean
+  /** A fresh start's choice: a template's id, or `blank`. */
+  from?: string
+}) {
   const { wording } = useI18n()
-  const [exchange, setExchange] = useState<Exchange | null>(null)
+  const { account } = useSession()
+  // A fresh start is a local working copy; the exchange is made on the first
+  // change, and the address then moves to it (DESIGN.md §4.4).
+  const [pending] = useState<PendingStart | undefined>(() => {
+    if (!from) return undefined
+    const timezone = deviceTimeZone() ?? 'UTC'
+    const template = from === 'blank' ? undefined : templateById(from)
+    if (!template) return pendingStart(api, timezone, { kind: 'blank' }, null)
+    const draft = applyTemplate(
+      template,
+      wording.templates.entries[template.id],
+      account?.display_name ?? '',
+      () => crypto.randomUUID(),
+    )
+    return pendingStart(api, timezone, { kind: 'template', template }, draft)
+  })
+  const [exchange, setExchange] = useState<Exchange | null>(pending?.exchange ?? null)
+  const held = useRef(exchange)
+  held.current = exchange
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   // The invitation token, held only while this page stays open: it is shown
   // once and cannot be fetched again.
@@ -33,8 +69,10 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
   const [sending, setSending] = useState(false)
 
   const reload = useCallback(async () => {
+    const at = pending?.created()?.id ?? id
+    if (!at) return null
     try {
-      const latest = await api.getExchange(id)
+      const latest = await api.getExchange(at)
       setExchange(latest)
       setFailure(null)
       return latest
@@ -42,9 +80,11 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
       setFailure(failureCode(error))
       return null
     }
-  }, [id])
+  }, [id, pending])
 
   useEffect(() => {
+    // A fresh start has nothing to read; one just made is already in hand.
+    if (!id || held.current?.id === id) return
     let cancelled = false
     api.getExchange(id).then(
       (found) => {
@@ -65,8 +105,8 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
   const shared = useCallback(() => {
     const at = new Date().toISOString()
     setExchange((current) => current && { ...current, invitation_shared_at: at })
-    api.markInvitationShared(id).catch(() => {})
-  }, [id])
+    api.markInvitationShared(exchange?.id ?? id ?? '').catch(() => {})
+  }, [id, exchange?.id])
 
   if (!exchange) {
     if (!failure) return <p>{wording.common.loading}</p>
@@ -88,14 +128,30 @@ export default function ExchangePage({ id, revising }: { id: string; revising: b
     // A first proposal is not done until its link is sent: that step comes
     // next, as the page, before the exchange itself is shown.
     setSending(link !== null)
-    navigate(paths.exchange(id), { replace: true })
+    navigate(paths.exchange(result.exchange.id), { replace: true })
+  }
+
+  // The exchange of a fresh start has just been made: this page is now that
+  // exchange's, at its own address, replacing the one that had none.
+  function created(made: Exchange) {
+    setExchange((current) => (current?.id === made.id ? current : made))
+    fresh.id = made.id
+    if (window.location.pathname !== paths.exchange(made.id)) {
+      navigate(paths.exchange(made.id), { replace: true })
+    }
   }
 
   const composing = exchange.state === 'DRAFT' || revising
   if (composing) {
     return (
       <Suspense fallback={<p>{wording.common.loading}</p>}>
-        <Composer exchange={exchange} reload={reload} onSent={sent} />
+        <Composer
+          exchange={exchange}
+          reload={reload}
+          onSent={sent}
+          pending={pending}
+          onCreated={created}
+        />
       </Suspense>
     )
   }

@@ -440,7 +440,8 @@ impl Kind {
         }
     }
 
-    fn as_str(self) -> &'static str {
+    /// The name a kind is stored and hashed under: `email` or `phone`.
+    pub fn as_str(self) -> &'static str {
         match self {
             Kind::Email => "email",
             Kind::Phone => "phone",

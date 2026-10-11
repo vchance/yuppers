@@ -98,8 +98,8 @@ test('a phone number is added after a code to the email, with a code by text onc
   await until(() => text().includes(wording.errors.INVALID_CODE), 'the wrong code refused')
   await type(field(wording.signIn.codeLabel), GOOD_CODE)
   await press(button(w.removeConfirm))
-  await until(() => text().includes(w.removed), 'the number removed')
-  expect(text()).not.toContain('(856) 548-8780')
+  // The live region repeats "Added …" until its next announcement replaces it.
+  await until(() => text().includes(w.removed) && !text().includes('(856) 548-8780'), 'the number removed')
   expect(service.sent.some((each) => each.call === 'DELETE /v1/me/identifiers/phone')).toBe(true)
 })
 

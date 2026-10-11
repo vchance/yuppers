@@ -164,7 +164,7 @@ impl Test {
                 None,
                 Method::POST,
                 "/v1/auth/sessions",
-                Some(json!({ "identifier": identifier, "code": code, "delivery": "TOKEN" })),
+                Some(json!({ "identifier": identifier, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
                 &[],
             )
             .await
@@ -201,8 +201,8 @@ async fn history(app: &App, exchange: &str) -> History {
         "SELECT row_to_json(t)::text FROM revision t WHERE exchange_id = $1 ORDER BY sequence",
         "SELECT row_to_json(t)::text FROM contribution_snapshot t WHERE exchange_id = $1
          ORDER BY revision_id, position",
-        "SELECT row_to_json(t)::text FROM acceptance t WHERE exchange_id = $1
-         ORDER BY accepted_at, id",
+        "SELECT (row_to_json(t)::jsonb - 'signer_identifier_hash')::text FROM acceptance t
+         WHERE exchange_id = $1 ORDER BY accepted_at, id",
     ] {
         let rows: Vec<String> = sqlx::query_scalar(query)
             .bind(id(exchange))
@@ -367,7 +367,7 @@ async fn deleting_takes_a_code_sent_for_deleting_and_nothing_less() {
         None,
         Method::POST,
         "/v1/auth/sessions",
-        Some(json!({ "identifier": ana.email, "code": code, "delivery": "TOKEN" })),
+        Some(json!({ "identifier": ana.email, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
         &[],
     )
     .await
@@ -511,7 +511,7 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
         );
         for _ in 0..5 {
             let guess = json!({
-                "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN",
+                "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION,
             });
             test.post_from(STRANGER, None, "/v1/auth/sessions", guess)
                 .await
@@ -519,7 +519,7 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
         }
     }
     let guess = json!({
-        "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN",
+        "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION,
     });
     test.post_from(STRANGER, None, "/v1/auth/sessions", guess)
         .await
@@ -536,7 +536,7 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
     test.post_from(own, None, "/v1/auth/codes", to_ana.clone())
         .await
         .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
-    let session = json!({ "identifier": ana.email, "code": sign_in_code, "delivery": "TOKEN" });
+    let session = json!({ "identifier": ana.email, "code": sign_in_code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION });
     test.post_from(own, None, "/v1/auth/sessions", session)
         .await
         .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
@@ -692,7 +692,7 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
             Some(json!({
                 "identifier": ana.email,
                 "code": test.codes.last(&ana.email).0,
-                "delivery": "COOKIE",
+                "delivery": "COOKIE", "terms_version": yuppers_backend::terms::TERMS_VERSION,
             })),
             &[("origin", WEB_ORIGIN)],
         )
@@ -1667,6 +1667,71 @@ async fn a_closed_exchange_is_left_exactly_as_it_is() {
 // ---- Repeats and races ------------------------------------------------------
 
 #[tokio::test]
+async fn deleting_removes_the_terms_acceptances_and_what_the_account_kept_of_them() {
+    let test = start().await;
+    let app = &test.app;
+    let (ana, ben) = (app.user("Ana").await, app.user("Ben").await);
+    for user in [&ana, &ben] {
+        for _ in 0..2 {
+            sqlx::query(
+                "INSERT INTO terms_acceptance (account_id, terms_version, language)
+                 VALUES ($1, '2026-10-09', 'en')",
+            )
+            .bind(user.id)
+            .execute(&app.owner)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "UPDATE account SET terms_version = '2026-10-09', terms_accepted_at = now()
+             WHERE id = $1",
+        )
+        .bind(user.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+    // An account combined into Ana's: its rows go with hers.
+    let cy = app.user("Cy").await;
+    for _ in 0..2 {
+        sqlx::query(
+            "INSERT INTO terms_acceptance (account_id, terms_version, language)
+             VALUES ($1, '2026-10-09', 'en')",
+        )
+        .bind(cy.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "UPDATE account SET terms_version = '2026-10-09', terms_accepted_at = now(),
+                status = 'MERGED', merged_into = $2, merged_at = now(), email_encrypted = NULL,
+                email_index = NULL, phone_encrypted = NULL, phone_index = NULL
+         WHERE id = $1",
+    )
+    .bind(cy.id)
+    .bind(ana.id)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    let rows = "SELECT count(*) FROM terms_acceptance WHERE account_id = $1";
+    assert_eq!(count(app, rows, ana.id).await, 2);
+    assert_eq!(count(app, rows, cy.id).await, 2);
+
+    let code = test.deletion_code(&ana, "EMAIL", &ana.email).await;
+    done(&test.delete_with(&ana, "EMAIL", &code).await);
+
+    assert_eq!(count(app, rows, ana.id).await, 0);
+    let kept = "SELECT count(*) FROM account WHERE id = $1 AND terms_version IS NOT NULL";
+    assert_eq!(count(app, kept, ana.id).await, 0);
+    assert_eq!(count(app, rows, cy.id).await, 0);
+    assert_eq!(count(app, kept, cy.id).await, 0);
+    // Only hers.
+    assert_eq!(count(app, rows, ben.id).await, 2);
+    assert_eq!(count(app, kept, ben.id).await, 1);
+}
+
+#[tokio::test]
 async fn a_repeated_deletion_does_nothing_more() {
     let test = start().await;
     let app = &test.app;
@@ -2455,4 +2520,101 @@ async fn a_deletion_code_by_text_needs_the_box_ticked_and_is_recorded_with_it() 
             .await
             .unwrap();
     assert_eq!(kept, 1);
+}
+
+// ---- Signatures: the identifier they were made with --------------------------
+
+/// Runs one statement (taking the exchange as `$1`) in a transaction of its
+/// own as the owner, with the deletion allowance on or off, and says whether
+/// the append-only guard refused it. Nothing is kept.
+async fn refused_for_owner(app: &App, allowance: bool, statement: &str, exchange: Uuid) -> bool {
+    let mut tx = app.owner.begin().await.unwrap();
+    if allowance {
+        sqlx::query("SELECT set_config('yuppers.account_deletion', 'on', true)")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    let result = sqlx::query(sqlx::AssertSqlSafe(statement.to_owned()))
+        .bind(exchange)
+        .execute(&mut *tx)
+        .await;
+    tx.rollback().await.ok();
+    match result {
+        Ok(_) => false,
+        Err(error) => {
+            assert!(error.to_string().contains("append-only"), "{error}");
+            true
+        }
+    }
+}
+
+type Attribution = (Option<Vec<u8>>, Option<String>, Option<OffsetDateTime>);
+
+async fn attribution(app: &App, exchange: Uuid, slot: &str) -> Attribution {
+    sqlx::query_as(
+        "SELECT signer_identifier_hash, signer_identifier_kind, session_verified_at
+         FROM acceptance WHERE exchange_id = $1 AND slot = $2",
+    )
+    .bind(exchange)
+    .bind(slot)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn deleting_an_account_unlinks_its_signatures_from_its_identifier_and_nothing_else() {
+    let test = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let exchange = id(&deal.exchange);
+
+    let ana_before = attribution(app, exchange, "A").await;
+    let ben_before = attribution(app, exchange, "B").await;
+    assert!(ana_before.0.is_some() && ben_before.0.is_some());
+    assert!(ben_before.1.is_some() && ben_before.2.is_some());
+
+    // Ben leaves: his signature keeps its kind and its time, and loses the
+    // blind index. Ana's is as it was.
+    test.leave(&deal.ben, &[&deal.exchange]).await;
+    let ben_after = attribution(app, exchange, "B").await;
+    assert_eq!(ben_after.0, None);
+    assert_eq!((&ben_after.1, ben_after.2), (&ben_before.1, ben_before.2));
+    assert_eq!(attribution(app, exchange, "A").await, ana_before);
+
+    // The table is otherwise as append-only as before, for the owner too.
+    let clear = "UPDATE acceptance SET signer_identifier_hash = NULL
+         WHERE exchange_id = $1 AND signer_identifier_hash IS NOT NULL";
+    assert!(refused_for_owner(app, false, clear, exchange).await);
+    for statement in [
+        "UPDATE acceptance SET consent_version = 'x' WHERE exchange_id = $1",
+        "UPDATE acceptance SET signer_identifier_hash = NULL, session_verified_at = NULL
+         WHERE exchange_id = $1",
+        // A value to another value, and null to a value.
+        "UPDATE acceptance SET signer_identifier_hash = decode(repeat('07', 32), 'hex')
+         WHERE exchange_id = $1",
+        "DELETE FROM acceptance WHERE exchange_id = $1",
+    ] {
+        assert!(
+            refused_for_owner(app, true, statement, exchange).await,
+            "{statement}"
+        );
+    }
+    // What the allowance does permit: a value to null, on the row that has one.
+    assert!(!refused_for_owner(app, true, clear, exchange).await);
+
+    // The service has that one column and no other.
+    let other = sqlx::query("UPDATE acceptance SET consent_version = 'x' WHERE exchange_id = $1")
+        .bind(exchange)
+        .execute(&app.db)
+        .await
+        .unwrap_err();
+    assert!(other.to_string().contains("permission denied"), "{other}");
+    let alone = sqlx::query(sqlx::AssertSqlSafe(clear.to_owned()))
+        .bind(exchange)
+        .execute(&app.db)
+        .await
+        .unwrap_err();
+    assert!(alone.to_string().contains("append-only"), "{alone}");
 }

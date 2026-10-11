@@ -48,6 +48,14 @@ pub struct Account {
     /// (`dismiss_notice` in `PATCH /v1/me`). Absent otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notice: Option<AccountNotice>,
+    /// The version of the Terms and the Privacy policy accepted at the
+    /// latest sign-in (`TERMS_VERSION`). Absent until the account signs in
+    /// again after this was first recorded. Only the account's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terms_version: Option<String>,
+    /// When it was accepted, as RFC 3339.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terms_accepted_at: Option<String>,
 }
 
 /// A notice the app shows once on the account.
@@ -68,10 +76,13 @@ type AccountRow = (
     bool,
     Option<String>,
     Option<OffsetDateTime>,
+    Option<String>,
+    Option<OffsetDateTime>,
 );
 
 const ACCOUNT_COLUMNS: &str = "id, email_encrypted, phone_encrypted, display_name, language, \
-                               adult_confirmed_at, notification_detail, notice_kind, notice_at";
+                               adult_confirmed_at, notification_detail, notice_kind, notice_at, \
+                               terms_version, terms_accepted_at";
 
 /// The account as its owner sees it: one of the few places its address and
 /// number are decrypted (`crate::contact`).
@@ -86,6 +97,8 @@ fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
         notification_detail,
         kind,
         at,
+        terms_version,
+        terms_accepted_at,
     ) = row;
     let keys = contact::keys();
     let notice = match (kind.as_deref().and_then(InAppNotice::parse), at) {
@@ -104,6 +117,8 @@ fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
         adult_confirmed: adult.is_some(),
         notification_detail,
         notice,
+        terms_version,
+        terms_accepted_at: terms_accepted_at.map(crate::exchanges::dto::rfc3339),
     })
 }
 

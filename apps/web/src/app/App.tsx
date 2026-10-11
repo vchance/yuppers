@@ -50,6 +50,9 @@ const PaymentOptionsPage = lazy(() => import('../screens/PaymentOptionsPage'))
 const DeleteAccount = lazy(() => import('../screens/DeleteAccount'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
 const RecordPage = lazy(() => import('../screens/RecordPage'))
+const StartPage = lazy(() => import('../screens/StartPage'))
+// The sample yup is loaded only when it is asked for.
+const ExamplePage = lazy(() => import('../screens/ExamplePage'))
 const HelpPage = lazy(() => import('../screens/HelpPage'))
 const LazyLegalPage = lazy(loadLegalPage)
 // Reviewers only, and English only is acceptable for it (DESIGN.md §9).
@@ -216,6 +219,17 @@ function Shell({ outdated }: { outdated: boolean }) {
           <AccountPage />
         </Gate>
       )
+      break
+    case 'start':
+      page = (
+        <Gate>
+          <StartPage />
+        </Gate>
+      )
+      break
+    case 'example':
+      // Open to anyone, signed in or not.
+      page = <ExamplePage key={route.language ?? ''} language={route.language} />
       break
     case 'payments':
       page = (

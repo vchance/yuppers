@@ -268,7 +268,8 @@ export interface paths {
          *     know about whether it went anywhere, and it says only that the sender
          *     opened a way to send it, not that it arrived. Shown back as
          *     `invitation_shared_at` on the exchange and in the list. Harmless to
-         *     repeat: the latest time is kept.
+         *     repeat: the latest time is kept. A claim counts as a share when none was
+         *     recorded, so a claimed link always has a time.
          */
         post: operations["invitation_shared"];
         delete?: never;
@@ -1087,6 +1088,14 @@ export interface components {
              *     on; never carries terms, amounts, dates or free text. */
             notification_detail: boolean;
             phone?: string | null;
+            /** @description When it was accepted, as RFC 3339. */
+            terms_accepted_at?: string | null;
+            /**
+             * @description The version of the Terms and the Privacy policy accepted at the
+             *     latest sign-in (`TERMS_VERSION`). Absent until the account signs in
+             *     again after this was first recorded. Only the account's own.
+             */
+            terms_version?: string | null;
         };
         /** @description A notice the app shows once on the account. */
         AccountNotice: {
@@ -1388,6 +1397,12 @@ export interface components {
         /** @enum {string} */
         CounterpartyDto: "UNCLAIMED" | "CLAIMED" | "CONFIRMED";
         CreateExchange: {
+            /**
+             * @description How the author began: a template and its version (`job-deposit-balance@1`),
+             *     `blank` or `copy`. Kept once for aggregate counts; never returned.
+             *     Clients that send nothing leave it unset.
+             */
+            started_from?: string | null;
             /** @description IANA timezone name, such as `America/Chicago`. Due dates are read in it. */
             timezone: string;
         };
@@ -1401,6 +1416,13 @@ export interface components {
              *     when this creates the account; an unsupported one becomes the default.
              */
             language?: string | null;
+            /**
+             * @description The version of the Terms and the Privacy policy the client showed
+             *     above the button (`TERMS_VERSION`); signing in is the assent to both.
+             *     A version the service does not know is refused. Absent from builds
+             *     that predate it: the sign-in completes and nothing is recorded.
+             */
+            terms_version?: string | null;
         };
         DeleteAccount: {
             /** @description Where the code was sent. */
@@ -1467,7 +1489,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "IDENTIFIER_TOO_RECENT" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "PHONE_OPTED_OUT" | "SMS_CONSENT_REQUIRED" | "TERMS_VERSION_UNKNOWN" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "IDENTIFIER_ON_OTHER_ACCOUNT" | "IDENTIFIER_KIND_TAKEN" | "PROOF_REQUIRED" | "IDENTIFIER_TOO_RECENT" | "NOT_INVITED_ADDRESS" | "CODE_NOT_SENT" | "LAST_IDENTIFIER" | "COMBINE_EXPIRED" | "COMBINE_SUSPENDED" | "COMBINE_REVIEWER" | "COMBINE_SHARED_EXCHANGE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1989,6 +2011,13 @@ export interface components {
             format_version: number;
             /** @description RFC 3339, UTC. */
             generated_at: string;
+            /**
+             * @description That the history is chained, and the fingerprint of its last entry,
+             *     in the document's language: a printed copy anchors the history with
+             *     it (`crate::chain`). Left out while the history has entries from
+             *     before the chain that have not been chained yet.
+             */
+            history_chain?: string | null;
             /**
              * @description The language `notices` and the descriptions are written in. What the
              *     parties wrote is never translated.
@@ -2537,6 +2566,12 @@ export interface components {
          *     they are. It is all the evidence there is.
          */
         Verification: {
+            /**
+             * @description The kind of identifier the signer had signed in with, and how long
+             *     before signing, in the document's language. Never the address or
+             *     number. Left out for a signature made before this was kept.
+             */
+            attribution?: string | null;
             /** @description The same, in words, in the document's language. */
             description: string;
             method: components["schemas"]["VerificationMethod"];
@@ -2773,7 +2808,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Invalid request */
+            /** @description Invalid request, or a `terms_version` the service does not know (`TERMS_VERSION_UNKNOWN`) */
             422: {
                 headers: {
                     [name: string]: unknown;

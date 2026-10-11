@@ -39,6 +39,7 @@ import {
 import { BrandHero } from '../components/Brand';
 import { ConsentCheckbox } from '../components/ConsentCheckbox';
 import { LegalLinks } from '../components/LegalLinks';
+import { TermsAssent } from '../components/TermsAssent';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
 import { DeleteAccount } from './DeleteAccount';
@@ -309,6 +310,8 @@ function SignIn() {
       <Failure code={failure} />
       {resent && <Notice>{w.resent}</Notice>}
       {resendReady ? null : <Hint>{w.resendSoon}</Hint>}
+      {/* Signing in is the assent to both documents (`terms.ts`). */}
+      <TermsAssent />
       <Actions>
         <Button variant="primary" label={w.submit} disabled={busy} onPress={() => void signIn()} />
         {resendReady && (

@@ -370,7 +370,7 @@ async fn sign_in(app: &App, phone: &str, code: &str) -> common::Reply {
         None,
         Method::POST,
         "/v1/auth/sessions",
-        Some(json!({ "identifier": phone, "code": code, "delivery": "TOKEN" })),
+        Some(json!({ "identifier": phone, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
         &[],
     )
     .await

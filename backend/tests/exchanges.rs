@@ -1637,3 +1637,104 @@ async fn who_an_invitation_is_for_is_said_outright() {
         assert!(app.post(&ana, &link, options).await.ok()["invitation_token"].is_string());
     }
 }
+
+// ---- What a yup was started from (DESIGN.md §4.4, "Measurement") ----------
+
+#[tokio::test]
+async fn what_a_yup_was_started_from_is_kept_once_and_never_shown() {
+    let app = app().await;
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let started = |value: Value| {
+        let (app, ana) = (&app, &ana);
+        async move {
+            app.post(
+                ana,
+                "/v1/exchanges",
+                json!({ "timezone": "America/Chicago", "started_from": value }),
+            )
+            .await
+        }
+    };
+
+    // A form that is not an entry is refused; nothing is made.
+    for bad in [
+        json!("dana@example.com"),
+        json!("Blank"),
+        json!("job-deposit-balance"),
+        json!("x@1; drop table exchange"),
+        json!(7),
+    ] {
+        started(bad)
+            .await
+            .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    }
+
+    let templated = started(json!("job-deposit-balance@1")).await.ok();
+    let blank = started(json!("blank")).await.ok();
+    let copied = started(json!("copy")).await.ok();
+    // A client that says nothing leaves it unset.
+    let silent = app.draft(&ana).await;
+    let stored = |id: String| {
+        let owner = app.owner.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT started_from FROM exchange WHERE id = $1::uuid",
+            )
+            .bind(id)
+            .fetch_one(&owner)
+            .await
+            .unwrap()
+        }
+    };
+    let id = |view: &Value| view["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        stored(id(&templated)).await.as_deref(),
+        Some("job-deposit-balance@1")
+    );
+    assert_eq!(stored(id(&blank)).await.as_deref(), Some("blank"));
+    assert_eq!(stored(id(&copied)).await.as_deref(), Some("copy"));
+    assert_eq!(stored(silent).await, None);
+
+    // Never returned: not on creating, reading, listing, nor in the history
+    // or the record, to either party.
+    let exchange = id(&templated);
+    let sent = app
+        .send(&ana, &exchange, fence_job(Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .ok();
+    app.post(
+        &ben,
+        "/v1/invitations/claim",
+        json!({ "token": sent["invitation_token"] }),
+    )
+    .await
+    .ok();
+    let mut pages = vec![templated.to_string(), sent.to_string()];
+    for user in [&ana, &ben] {
+        pages.push(app.view(user, &exchange).await.to_string());
+        pages.push(app.get(user, "/v1/exchanges").await.ok().to_string());
+        for part in ["history", "record"] {
+            let page = app
+                .get(user, &format!("/v1/exchanges/{exchange}/{part}"))
+                .await;
+            pages.push(format!("{} {}", page.status, page.body));
+        }
+    }
+    for page in pages {
+        assert!(!page.contains("started_from"), "{page}");
+        assert!(!page.contains("job-deposit-balance"), "{page}");
+    }
+
+    // Writing it again is not something a request can do.
+    app.post(
+        &ana,
+        &format!("/v1/exchanges/{exchange}/commands"),
+        json!({ "type": "RETRACT_CLOSE", "started_from": "blank" }),
+    )
+    .await;
+    assert_eq!(
+        stored(exchange).await.as_deref(),
+        Some("job-deposit-balance@1")
+    );
+}

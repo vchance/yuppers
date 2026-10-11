@@ -7,9 +7,10 @@ import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { CombinedNotice } from '../components/CombinedNotice'
+import { ExampleCard } from '../components/ExampleCard'
 import { Mark } from '../components/Mark'
 import { StatusChip } from '../components/StatusChip'
-import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
+import { Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
 import '../components/brand.css'
@@ -20,8 +21,9 @@ import '../components/brand.css'
  * they never sent come next; what is closed is kept but folded away, so it
  * never buries the rest. Within a group, most recently changed first.
  *
- * With no exchanges yet, the page is the mark, what to do, and the way to
- * start, in one place rather than a button over an empty list.
+ * With no exchanges yet, the page is the mark, what to do, the sample yup
+ * (DESIGN.md §4.3), and the way to start, in one place rather than a button
+ * over an empty list.
  */
 export default function HomePage() {
   const { wording, fmt } = useI18n()
@@ -29,8 +31,6 @@ export default function HomePage() {
 
   const [exchanges, setExchanges] = useState<ExchangeSummary[] | null>(null)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
-  const [starting, setStarting] = useState(false)
-  const [tooMany, setTooMany] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
 
   useEffect(() => {
@@ -48,29 +48,14 @@ export default function HomePage() {
     }
   }, [])
 
-  async function start() {
-    setStarting(true)
-    setFailure(null)
-    setTooMany(false)
-    try {
-      // Due dates are read in the timezone of whoever starts the exchange.
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-      const exchange = await api.createExchange(timezone)
-      navigate(paths.exchange(exchange.id))
-    } catch (error) {
-      const code = failureCode(error)
-      // Here the limit is on exchanges started today, not on codes.
-      if (code === 'TOO_MANY_REQUESTS') setTooMany(true)
-      else setFailure(code)
-      setStarting(false)
-    }
-  }
+  // Starting is a choice of how to begin (`StartPage`), then the composer.
+  const start = () => navigate(paths.start)
 
   const groups = exchanges ? groupExchanges(exchanges) : null
   const empty = exchanges?.length === 0
   const startButton = (
     <div className="actions">
-      <button type="button" className="primary" disabled={starting} onClick={start}>
+      <button type="button" className="primary" onClick={start}>
         {w.start}
       </button>
     </div>
@@ -82,13 +67,13 @@ export default function HomePage() {
       <CombinedNotice />
       {!empty && startButton}
       <Failure code={failure} />
-      {tooMany && <ErrorNote>{w.tooManyToday}</ErrorNote>}
 
       {!exchanges && !failure && <p>{wording.common.loading}</p>}
       {empty && (
         <div className="empty-state">
           <Mark />
           <p>{w.empty}</p>
+          <ExampleCard />
           {startButton}
         </div>
       )}

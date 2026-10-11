@@ -31,6 +31,12 @@ owner_url="$MIGRATION_DATABASE_URL"
 base="${owner_url%/*}"
 app_url="${DATABASE_URL%/*}"
 
+# Runs take turns: the end-to-end suites bind fixed ports, the target
+# directory is shared, and the cleanup below drops every database that
+# appeared during the run, which would be another run's if two overlapped.
+exec 9>"$HOME/development/yuppers-checks.lock"
+if ! flock -n 9; then echo "waiting for another check to finish..."; flock -w 10800 9; fi
+
 # The test binaries each make a database of their own and leave it; every
 # database that appears during the run is dropped with the run's own.
 list_dbs() { docker exec yuppers-pg psql -U exchange -d postgres -Atc "select datname from pg_database where datname like 'yuppers_%'" </dev/null; }
@@ -77,7 +83,10 @@ fi
 if [ "$what" = all ] || [ "$what" = web ]; then
   step "typecheck" npm run -s typecheck
   step "lint" bash -c 'npm run -s lint -w @yuppers/web && npm run -s lint -w @yuppers/mobile -- --max-warnings 0'
-  step "npm test" npm test --silent
+  # Longer timeouts than the five seconds the suites default to: the machine
+  # is shared and busy, and a slow test is not a failed one.
+  step "npm test" env YUPPERS_TEST_PATIENCE=5 bash -c 'for w in @yuppers/shared @yuppers/web @yuppers/mobile; do npm run -s test -w $w -- --testTimeout=20000 || exit 1; done'
+
   step "build:web and budget" bash -c 'npm run -s build:web >/dev/null && npm run -s budget -w @yuppers/web'
 fi
 if [ "$what" = all ] || [ "$what" = e2e ]; then

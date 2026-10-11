@@ -55,6 +55,7 @@ async function signUp(page: Page, name: string) {
 async function propose(page: Page, invitee: string | null, description: string) {
   await page.goto('/')
   await page.getByRole('button', { name: en.home.start }).click()
+  await page.getByRole('button', { name: en.templates.blank.name, exact: true }).click()
   await expect(page.getByRole('heading', { name: en.composer.titleFirst, level: 1 })).toBeVisible()
   await page.getByLabel(en.composer.otherName).fill('Dana')
   if (invitee === null) {

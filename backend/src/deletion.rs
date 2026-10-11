@@ -521,6 +521,28 @@ async fn attempt(
     sms_updates::forget_numbers(&mut tx, account, None, sms_updates::Source::AccountDeleted)
         .await?;
 
+    // The signatures it made no longer say which identifier they were made
+    // with: the blind index is cleared, so the signature cannot be linked to
+    // an address by anyone holding the key. The kind of identifier and when
+    // the session was verified stay, with everything else on the row. The
+    // table is append-only except for this one column going to null, for this
+    // transaction only (migration 0033).
+    sqlx::query("SELECT set_config('yuppers.account_deletion', 'on', true)")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "UPDATE acceptance SET signer_identifier_hash = NULL
+         WHERE signer_identifier_hash IS NOT NULL
+           AND (account_id = $1
+                OR account_id IN (SELECT id FROM account WHERE merged_into = $1))",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("SELECT set_config('yuppers.account_deletion', 'off', true)")
+        .execute(&mut *tx)
+        .await?;
+
     // Its devices first: nothing more is pushed to them. (Removing the
     // sessions would take them too; this says so.)
     sqlx::query("DELETE FROM device WHERE account_id = $1")
@@ -557,6 +579,24 @@ async fn attempt(
         .bind(account)
         .execute(&mut *tx)
         .await?;
+    // Its acceptances of the terms, and those of accounts combined into it:
+    // personal rows like the others here, and what those accounts kept of
+    // them.
+    sqlx::query(
+        "DELETE FROM terms_acceptance
+         WHERE account_id = $1
+            OR account_id IN (SELECT id FROM account WHERE merged_into = $1)",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE account SET terms_version = NULL, terms_accepted_at = NULL
+         WHERE merged_into = $1",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM account_proof WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)
@@ -615,7 +655,8 @@ async fn attempt(
          SET status = 'DELETED',
              email_encrypted = NULL, email_index = NULL,
              phone_encrypted = NULL, phone_index = NULL,
-             display_name = '', language = $2
+             display_name = '', language = $2,
+             terms_version = NULL, terms_accepted_at = NULL
          WHERE id = $1",
     )
     .bind(account)

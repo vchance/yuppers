@@ -6,6 +6,7 @@ import type { ProblemCode } from '../draft'
 import type { Move } from '../fulfillment'
 import type { SummaryOutcome } from '../summary'
 import type { HelpLinkPlace, HelpTopic } from '../help'
+import type { TemplateId } from '../templates'
 import type { TroubleSituation, TroubleWay } from '../trouble'
 
 type Schemas = components['schemas']
@@ -245,6 +246,19 @@ export interface Wording {
     introEmail: string
     emailLabel: string
     changeEmail: string
+    /**
+     * The one sentence above the button that signs in: continuing is the
+     * assent to the Terms and the Privacy policy (`terms.ts`). Uses `{terms}`
+     * and `{privacy}`, which become links to the documents, named as
+     * `termsOfUse.link` and `privacy.policy` name them.
+     */
+    agreement: string
+    /**
+     * Not shown. Marks `agreement` as awaiting legal review, as
+     * `consent.pendingReview` marks the signing wording; the sentence is
+     * shown as it is. Remove with the review.
+     */
+    agreementPendingReview: string
     /**
      * `identifierHint`, naming the country codes served: `{codes}`, such as
      * `+1, +52`. A US number needs none; the hint asks for one only for
@@ -1021,6 +1035,98 @@ export interface Wording {
     /** Where an amended item would stand. Uses `{status}`. */
     statusAfter: string
   }
+  /**
+   * Starting a yup (DESIGN.md §4.4): the chooser, the common agreements in
+   * it, and copying an earlier yup. A template's words are structure and
+   * examples only: no clause, no advice, nothing in the imperative about
+   * what to agree (`templates.test.ts` keeps it so). `entries` has one
+   * entry for each template in `TEMPLATES`, and `items` one for each of its
+   * items, whose texts are shown in grey and count as empty. `warning` is
+   * there for the templates that declare one.
+   */
+  templates: {
+    chooserTitle: string
+    chooserHeading: string
+    chooserIntro: string
+    orHeading: string
+    use: string
+    /** Uses `{name}`. */
+    useNamed: string
+    back: string
+    starting: string
+    blank: { name: string; summary: string }
+    copy: { name: string; summary: string }
+    notForHeading: string
+    /** The list of what yups are not for (LEGAL_MEMO.md), shown with the choices. */
+    notFor: string
+    notForAdvice: string
+    bandHeading: string
+    bandShow: string
+    bandHide: string
+    bandExamples: string
+    swapSides: string
+    swapSidesHint: string
+    swapped: string
+    copyHeading: string
+    copyIntro: string
+    copyNone: string
+    copyNoTerms: string
+    copyLoading: string
+    copyForLegend: string
+    copyForSomeoneElse: string
+    /** Uses `{name}`, the other party as the yup wrote them. */
+    copyForSame: string
+    copyForSameNoName: string
+    copyStart: string
+    /** Uses `{name}`. */
+    copyStartNamed: string
+    entries: Record<
+      TemplateId,
+      {
+        name: string
+        summary: string
+        hint: string
+        warning?: string
+        items: { description: string; criteria?: string; quantity?: string; unit?: string }[]
+      }
+    >
+  }
+  /**
+   * The sample yup (DESIGN.md §4.3): a worked example shown to newcomers.
+   * Product content, so it is worded in every language, the two made-up
+   * people and their deal included.
+   */
+  sample: {
+    banner: string
+    title: string
+    homeHeading: string
+    homeBody: string
+    see: string
+    signInLine: string
+    startOwn: string
+    signInToStart: string
+    help: string
+    termsHeading: string
+    historyHeading: string
+    /** Uses `{name}`. */
+    cardWith: string
+    cardState: string
+    cardDetail: string
+    actionsOff: string
+    /** Uses `{name}`. */
+    wouldTap: string
+    waitsOn: string
+    fingerprint: string
+    partyA: string
+    partyB: string
+    firstNameA: string
+    firstNameB: string
+    terms: string
+    deposit: string
+    repair: string
+    repairDone: string
+    balance: string
+  }
   exchange: {
     title: string
     titleNoName: string
@@ -1443,6 +1549,23 @@ export interface Wording {
       verification: Record<Schemas['VerificationMethod'], string>
       /** What stands in place of text a reviewer has hidden from the reader. */
       hidden: string
+      /**
+       * Under each signature, the kind of identifier the signer had signed in
+       * with and how long before signing (LEGAL_MEMO.md §2.2). `{span}` is
+       * one of `span`, filled in by the service.
+       */
+      attribution: { email: string; phone: string }
+      /** A length of time, `{count}` filled in by the service. */
+      span: {
+        minuteOne: string
+        minuteOther: string
+        hourOne: string
+        hourOther: string
+        dayOne: string
+        dayOther: string
+      }
+      /** The footer: that the history is chained, with the last fingerprint. */
+      chain: string
     }
     /**
      * The plain summary at the top of the record (DESIGN.md §14.1): who,

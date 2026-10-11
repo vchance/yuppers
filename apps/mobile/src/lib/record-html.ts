@@ -139,6 +139,7 @@ export function recordHtml(
     if (event.note) out.push(p(w.noteLabels[noteKind(event)], 'label'), written(event.note));
     out.push('</div>');
   }
+  if (record.history_chain) out.push(p(record.history_chain, 'hint'));
 
   /** One version that was sent, in full, with its signatures. */
   function version(revision: RecordRevision): string {
@@ -228,6 +229,7 @@ export function recordHtml(
     return [
       p(fmt(w.verifiedBy, { method: verificationText(signature.verification, w.export.verification) }), 'hint'),
       p(fmt(w.verifiedAt, { date: when(signature.verification.verified_at) }), 'hint'),
+      signature.verification.attribution ? p(signature.verification.attribution, 'hint') : '',
       p(fmt(w.consentShown, { version: signature.consent.version, language: signature.consent.language }), 'hint'),
     ].join('');
   }

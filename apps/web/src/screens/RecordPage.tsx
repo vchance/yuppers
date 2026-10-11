@@ -214,6 +214,8 @@ function Record({ record }: { record: RecordDocument }) {
           />
         )}
       </section>
+
+      {record.history_chain && <p className="hint record-chain">{record.history_chain}</p>}
     </div>
   )
 }
@@ -300,6 +302,12 @@ export function Version({ revision, name, when }: VersionProps) {
               })}
               <br />
               {fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}
+              {signature.verification.attribution && (
+                <>
+                  <br />
+                  {signature.verification.attribution}
+                </>
+              )}
               <br />
               {fmt(w.consentShown, {
                 version: signature.consent.version,
@@ -325,6 +333,12 @@ export function Version({ revision, name, when }: VersionProps) {
               })}
               <br />
               {fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}
+              {signature.verification.attribution && (
+                <>
+                  <br />
+                  {signature.verification.attribution}
+                </>
+              )}
               <br />
               {fmt(w.consentShown, {
                 version: signature.consent.version,

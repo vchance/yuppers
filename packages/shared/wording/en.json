@@ -252,7 +252,9 @@
     "identifierHintUs": "US phone numbers only, such as (555) 123-4567.",
     "emailOnly": "Sign in with your email address. We can’t send codes to phone numbers at the moment.",
     "invalidEmail": "Enter a valid email address.",
-    "changeEmail": "Use a different email address"
+    "changeEmail": "Use a different email address",
+    "agreement": "By continuing you agree to the {terms} and the {privacy}.",
+    "agreementPendingReview": "The wording of the agreement sentence is pending legal review."
   },
   "inAppBrowser": {
     "noteIos": "You’re in {app}’s browser, which may not keep you signed in. Open this page in Safari to stay signed in.",
@@ -1265,7 +1267,20 @@
         "EMAIL_OTP": "A single one-time code sent to an email address. Nothing else about the signer was checked.",
         "PHONE_OTP": "A single one-time code sent by text message to a phone number. Nothing else about the signer was checked."
       },
-      "hidden": "Hidden by review"
+      "hidden": "Hidden by review",
+      "attribution": {
+        "email": "The signer had signed in with an email address no more than {span} before signing.",
+        "phone": "The signer had signed in with a phone number no more than {span} before signing."
+      },
+      "span": {
+        "minuteOne": "1 minute",
+        "minuteOther": "{count} minutes",
+        "hourOne": "1 hour",
+        "hourOther": "{count} hours",
+        "dayOne": "1 day",
+        "dayOther": "{count} days"
+      },
+      "chain": "The history of this record is chained: the fingerprint of each entry is computed from the entry before it, so changing an earlier entry would change every later one. The fingerprint of entry {sequence}, the last when this copy was made, is {hash}."
     },
     "summary": {
       "heading": "In short",
@@ -1380,6 +1395,7 @@
     "REPORT_RESOLVED": "This report has already been resolved.",
     "SUBJECT_IS_REVIEWER": "The person reported is a reviewer. Only the owner can suspend a reviewer, or lift a reviewer’s suspension, after taking their reviewer role away.",
     "PHONE_OPTED_OUT": "This number replied STOP to our texts, so we can’t text it a code. Sign in with your email address instead, or reply START to one of our texts to get them again.",
+    "TERMS_VERSION_UNKNOWN": "The Terms or the Privacy policy changed while this page was open. Reload the page to read them, then sign in again.",
     "SMS_CONSENT_REQUIRED": "To get a code by text, tick the box beside the number. If there is no box, reload the page or update the app."
   },
   "a11y": {
@@ -1453,5 +1469,163 @@
     "now": "Now:",
     "notSet": "nothing",
     "statusAfter": "Once you both sign: {status}"
+  },
+  "templates": {
+    "chooserTitle": "Start a yup",
+    "chooserHeading": "Start from a common agreement",
+    "chooserIntro": "Each one sets out the items to change as needed. No wording is written for you: descriptions, amounts and dates are for you to type.",
+    "orHeading": "Or start another way",
+    "use": "Use this",
+    "useNamed": "Start from {name}",
+    "back": "Back to the choices",
+    "starting": "Starting…",
+    "blank": {
+      "name": "Blank",
+      "summary": "Your own words, from an empty form."
+    },
+    "copy": {
+      "name": "Copy a previous yup",
+      "summary": "Same sort of deal again. Items and terms are copied; dates, signatures and history are not."
+    },
+    "notForHeading": "What yups are not for",
+    "notFor": "Not for: anything illegal; bets; anyone under 18; selling, renting or giving away land or a home, or any lease of a place to live; wills, trusts, powers of attorney, health-care or family-law matters; support between unmarried partners; collateral or security for a debt; hiring an employee; firearms, prescription drugs, alcohol or cannabis.",
+    "notForAdvice": "Yuppers isn’t a lawyer and doesn’t give legal advice. If you’re not sure what to write, ask one.",
+    "bandHeading": "About this starting point",
+    "bandShow": "About this starting point",
+    "bandHide": "Hide this",
+    "bandExamples": "The grey text in the items is an example. It is not part of the yup and counts as empty until it is replaced.",
+    "swapSides": "Swap sides",
+    "swapSidesHint": "Flips who provides each item, for when the other person is the one writing.",
+    "swapped": "Sides swapped.",
+    "copyHeading": "Copy a previous yup",
+    "copyIntro": "Its last version is copied as a new draft: items and terms, with every due date, the message and all signatures and history left behind.",
+    "copyNone": "There are no earlier yups to copy yet.",
+    "copyNoTerms": "That yup has no terms to copy.",
+    "copyLoading": "Looking for your yups…",
+    "copyForLegend": "Who the copy is for",
+    "copyForSomeoneElse": "For someone else",
+    "copyForSame": "For the same person: {name}",
+    "copyForSameNoName": "For the same person",
+    "copyStart": "Copy this yup",
+    "copyStartNamed": "Copy the yup with {name}",
+    "entries": {
+      "job-deposit-balance": {
+        "name": "A job with a deposit and a balance",
+        "summary": "A deposit when you both sign, the job, and the balance once the job is confirmed.",
+        "hint": "The other person pays a deposit when you both sign, you do the job, and they pay the balance once they have confirmed it is done. Without a deposit, the first item can be removed. Anything else you have agreed goes in Terms, in your own words.",
+        "warning": "In New Jersey, registered home-improvement contractors need a written contract with specific contents for jobs over $500, so a yup may not be enough.",
+        "items": [
+          {
+            "description": "e.g. Deposit"
+          },
+          {
+            "description": "e.g. Repair the back fence",
+            "criteria": "e.g. Both posts are solid and the gate closes"
+          },
+          {
+            "description": "e.g. Balance"
+          }
+        ]
+      },
+      "selling-something": {
+        "name": "Selling something",
+        "summary": "One item for one payment, on the day it changes hands.",
+        "hint": "The buyer pays when they collect it, and each of you records your half there and then. A deposit due when you both sign can be added as another item. Anything else you have agreed goes in Terms, in your own words.",
+        "items": [
+          {
+            "description": "e.g. Trek mountain bike, 2019",
+            "criteria": "e.g. As shown, with the lock and both keys"
+          },
+          {
+            "description": "e.g. Payment"
+          }
+        ]
+      },
+      "swap-no-money": {
+        "name": "A swap, no money",
+        "summary": "Two things for each other, with no money involved.",
+        "hint": "Two things, no money. Each of you marks yours done, and the other confirms. Anything else you have agreed goes in Terms, in your own words.",
+        "items": [
+          {
+            "description": "e.g. Three afternoons of childcare"
+          },
+          {
+            "description": "e.g. Alter two dresses"
+          }
+        ]
+      },
+      "lending-item": {
+        "name": "Lending an item",
+        "summary": "Something lent, and brought back.",
+        "hint": "You record handing it over, they record bringing it back, and you confirm it came back as agreed. Anything else you have agreed goes in Terms, in your own words.",
+        "items": [
+          {
+            "description": "e.g. Pressure washer"
+          },
+          {
+            "description": "e.g. Pressure washer, returned",
+            "criteria": "e.g. Same condition as lent, hose included"
+          }
+        ]
+      },
+      "pet-sitting-childcare": {
+        "name": "Pet-sitting or childcare",
+        "summary": "Care for a set time, paid once it is done.",
+        "hint": "Paid once the care is done and they have confirmed it. A part paid up front is a deposit due when you both sign, which can be added as another item. Anything else you have agreed goes in Terms, in your own words.",
+        "items": [
+          {
+            "description": "e.g. Walk and feed Biscuit, twice a day",
+            "criteria": "e.g. Biscuit fed, walked and the key back",
+            "quantity": "e.g. 5",
+            "unit": "e.g. days"
+          },
+          {
+            "description": "e.g. Payment"
+          }
+        ]
+      },
+      "splitting-cost": {
+        "name": "Splitting a cost",
+        "summary": "One of you paid; the other pays their part.",
+        "hint": "You have paid for something you share, and they pay you their part. A yup is between two people, so splitting with three means a yup each. Anything else you have agreed goes in Terms, in your own words.",
+        "items": [
+          {
+            "description": "e.g. Half of the $240 camping gear"
+          },
+          {
+            "description": "e.g. The second ticket"
+          }
+        ]
+      }
+    }
+  },
+  "sample": {
+    "banner": "Example. These people aren’t real, nothing here is saved, and nothing is signed by you.",
+    "title": "Example: a fence repair",
+    "homeHeading": "This is what a yup looks like",
+    "homeBody": "A worked example, part-way through: a fence repair between two neighbours, with each step in view.",
+    "see": "See the example",
+    "signInLine": "New here? See what a yup looks like.",
+    "startOwn": "Start your own yup",
+    "signInToStart": "Sign in to start your own",
+    "help": "See the example yup",
+    "termsHeading": "The yup",
+    "historyHeading": "What has happened",
+    "cardWith": "With {name}",
+    "cardState": "Agreed, in progress",
+    "cardDetail": "Fence repair, 14 Elm Street",
+    "actionsOff": "Not available in the example.",
+    "wouldTap": "In a real yup, {name} would tap here.",
+    "waitsOn": "This waits for the fence repair to be confirmed.",
+    "fingerprint": "A real record carries a fingerprint of the signed terms here.",
+    "partyA": "Dana Reyes",
+    "partyB": "Sam Okafor",
+    "firstNameA": "Dana",
+    "firstNameB": "Sam",
+    "terms": "Repair the back fence at 14 Elm Street: replace the two leaning posts and the broken panel, and match the existing stain.",
+    "deposit": "Deposit",
+    "repair": "Fence repair",
+    "repairDone": "Both posts are solid and the gate closes without lifting",
+    "balance": "Balance"
   }
 }

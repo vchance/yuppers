@@ -252,7 +252,9 @@
     "identifierHintUs": "Solo números de teléfono de EE. UU., como (555) 123-4567.",
     "emailOnly": "Inicia sesión con tu correo electrónico. Por ahora no podemos enviar códigos a números de teléfono.",
     "invalidEmail": "Escribe un correo electrónico válido.",
-    "changeEmail": "Usar otro correo electrónico"
+    "changeEmail": "Usar otro correo electrónico",
+    "agreement": "Al continuar, aceptas los {terms} y la {privacy}.",
+    "agreementPendingReview": "La redacción de la frase de aceptación está pendiente de revisión legal."
   },
   "inAppBrowser": {
     "noteIos": "Estás en el navegador de {app}, que quizá no mantenga tu sesión abierta. Abre esta página en Safari para mantener la sesión abierta.",
@@ -1265,7 +1267,20 @@
         "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
         "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
       },
-      "hidden": "Oculto por revisión"
+      "hidden": "Oculto por revisión",
+      "attribution": {
+        "email": "Quien firmó había iniciado sesión con una dirección de correo electrónico no más de {span} antes de firmar.",
+        "phone": "Quien firmó había iniciado sesión con un número de teléfono no más de {span} antes de firmar."
+      },
+      "span": {
+        "minuteOne": "1 minuto",
+        "minuteOther": "{count} minutos",
+        "hourOne": "1 hora",
+        "hourOther": "{count} horas",
+        "dayOne": "1 día",
+        "dayOther": "{count} días"
+      },
+      "chain": "El historial de este registro está encadenado: la huella de cada entrada se calcula a partir de la entrada anterior, así que cambiar una entrada anterior cambiaría todas las posteriores. La huella de la entrada {sequence}, la última cuando se hizo esta copia, es {hash}."
     },
     "summary": {
       "heading": "En resumen",
@@ -1380,6 +1395,7 @@
     "REPORT_RESOLVED": "Esta denuncia ya se resolvió.",
     "SUBJECT_IS_REVIEWER": "La persona denunciada es revisora. Solo el propietario puede suspender a una persona revisora, o levantar su suspensión, después de quitarle ese rol.",
     "PHONE_OPTED_OUT": "Este número respondió STOP a nuestros mensajes, así que no podemos enviarle un código. Entra con tu correo electrónico, o responde START a uno de nuestros mensajes para volver a recibirlos.",
+    "TERMS_VERSION_UNKNOWN": "Los Términos o la Política de privacidad cambiaron mientras esta página estaba abierta. Vuelve a cargar la página para leerlos y luego inicia sesión de nuevo.",
     "SMS_CONSENT_REQUIRED": "Para recibir un código por mensaje de texto, marca la casilla junto al número. Si no ves la casilla, vuelve a cargar la página o actualiza la app."
   },
   "a11y": {
@@ -1453,5 +1469,163 @@
     "now": "Ahora:",
     "notSet": "nada",
     "statusAfter": "Cuando ambos firmen: {status}"
+  },
+  "templates": {
+    "chooserTitle": "Empezar un yup",
+    "chooserHeading": "Empezar desde un acuerdo común",
+    "chooserIntro": "Cada uno plantea los elementos para cambiarlos según haga falta. No se escribe ningún texto por ti: las descripciones, los importes y las fechas los escribes tú.",
+    "orHeading": "O empezar de otra manera",
+    "use": "Usar este",
+    "useNamed": "Empezar desde {name}",
+    "back": "Volver a las opciones",
+    "starting": "Empezando…",
+    "blank": {
+      "name": "En blanco",
+      "summary": "Con tus propias palabras, desde un formulario vacío."
+    },
+    "copy": {
+      "name": "Copiar un yup anterior",
+      "summary": "Otro trato del mismo tipo. Se copian los elementos y las condiciones; las fechas, las firmas y el historial no."
+    },
+    "notForHeading": "Para qué no sirven los yups",
+    "notFor": "No sirve para: nada ilegal; apuestas; menores de 18 años; vender, alquilar o regalar terrenos o una vivienda, ni ningún contrato de alquiler de un lugar donde vivir; testamentos, fideicomisos, poderes notariales, asuntos de salud o de derecho de familia; manutención entre parejas no casadas; garantías o avales de una deuda; contratar a un empleado; armas de fuego, medicamentos con receta, alcohol o cannabis.",
+    "notForAdvice": "Yuppers no es un abogado y no da asesoría legal. Si no estás seguro de qué escribir, consulta a uno.",
+    "bandHeading": "Sobre este punto de partida",
+    "bandShow": "Sobre este punto de partida",
+    "bandHide": "Ocultar",
+    "bandExamples": "El texto gris de los elementos es un ejemplo. No forma parte del yup y cuenta como vacío hasta que se reemplaza.",
+    "swapSides": "Cambiar de lado",
+    "swapSidesHint": "Invierte quién aporta cada elemento, para cuando la otra persona es quien escribe.",
+    "swapped": "Lados cambiados.",
+    "copyHeading": "Copiar un yup anterior",
+    "copyIntro": "Su última versión se copia como un borrador nuevo: los elementos y las condiciones, sin las fechas de vencimiento, el mensaje, las firmas ni el historial.",
+    "copyNone": "Todavía no hay yups anteriores que copiar.",
+    "copyNoTerms": "Ese yup no tiene condiciones que copiar.",
+    "copyLoading": "Buscando tus yups…",
+    "copyForLegend": "Para quién es la copia",
+    "copyForSomeoneElse": "Para otra persona",
+    "copyForSame": "Para la misma persona: {name}",
+    "copyForSameNoName": "Para la misma persona",
+    "copyStart": "Copiar este yup",
+    "copyStartNamed": "Copiar el yup con {name}",
+    "entries": {
+      "job-deposit-balance": {
+        "name": "Un trabajo con anticipo y saldo",
+        "summary": "Un anticipo cuando ambos firman, el trabajo y el saldo cuando se confirma el trabajo.",
+        "hint": "La otra persona paga un anticipo cuando ambos firman, tú haces el trabajo y ella paga el saldo cuando confirma que está hecho. Sin anticipo, se puede quitar el primer elemento. Todo lo demás que hayan acordado va en las condiciones, con tus propias palabras.",
+        "warning": "En Nueva Jersey, los contratistas registrados de mejoras del hogar necesitan un contrato por escrito con un contenido específico para trabajos de más de $500, así que un yup puede no bastar.",
+        "items": [
+          {
+            "description": "p. ej. Anticipo"
+          },
+          {
+            "description": "p. ej. Reparar la cerca del fondo",
+            "criteria": "p. ej. Los dos postes firmes y el portón cierra"
+          },
+          {
+            "description": "p. ej. Saldo"
+          }
+        ]
+      },
+      "selling-something": {
+        "name": "Vender algo",
+        "summary": "Una cosa por un pago, el día en que cambia de manos.",
+        "hint": "Quien compra paga cuando lo recoge, y cada uno registra su parte en el momento. Un anticipo con vencimiento al firmar ambos se puede añadir como otro elemento. Todo lo demás que hayan acordado va en las condiciones, con tus propias palabras.",
+        "items": [
+          {
+            "description": "p. ej. Bicicleta de montaña Trek, 2019",
+            "criteria": "p. ej. Como se ve, con el candado y las dos llaves"
+          },
+          {
+            "description": "p. ej. Pago"
+          }
+        ]
+      },
+      "swap-no-money": {
+        "name": "Un intercambio sin dinero",
+        "summary": "Dos cosas una por la otra, sin dinero de por medio.",
+        "hint": "Dos cosas, sin dinero. Cada uno marca la suya como hecha y el otro la confirma. Todo lo demás que hayan acordado va en las condiciones, con tus propias palabras.",
+        "items": [
+          {
+            "description": "p. ej. Tres tardes cuidando niños"
+          },
+          {
+            "description": "p. ej. Arreglar dos vestidos"
+          }
+        ]
+      },
+      "lending-item": {
+        "name": "Prestar una cosa",
+        "summary": "Algo que se presta y se devuelve.",
+        "hint": "Tú registras la entrega, la otra persona registra la devolución y tú confirmas que volvió como se acordó. Todo lo demás que hayan acordado va en las condiciones, con tus propias palabras.",
+        "items": [
+          {
+            "description": "p. ej. Hidrolavadora"
+          },
+          {
+            "description": "p. ej. Hidrolavadora, devuelta",
+            "criteria": "p. ej. En el mismo estado en que se prestó, con la manguera"
+          }
+        ]
+      },
+      "pet-sitting-childcare": {
+        "name": "Cuidar una mascota o a los niños",
+        "summary": "Cuidado durante un tiempo fijo, que se paga al terminar.",
+        "hint": "Se paga cuando el cuidado termina y la otra persona lo confirma. Una parte pagada por adelantado es un anticipo con vencimiento al firmar ambos, que se puede añadir como otro elemento. Todo lo demás que hayan acordado va en las condiciones, con tus propias palabras.",
+        "items": [
+          {
+            "description": "p. ej. Pasear y dar de comer a Biscuit, dos veces al día",
+            "criteria": "p. ej. Biscuit alimentado, paseado y la llave devuelta",
+            "quantity": "p. ej. 5",
+            "unit": "p. ej. días"
+          },
+          {
+            "description": "p. ej. Pago"
+          }
+        ]
+      },
+      "splitting-cost": {
+        "name": "Dividir un gasto",
+        "summary": "Uno de ustedes pagó; el otro paga su parte.",
+        "hint": "Tú pagaste algo que comparten, y la otra persona te paga su parte. Un yup es entre dos personas, así que dividir entre tres significa un yup para cada una. Todo lo demás que hayan acordado va en las condiciones, con tus propias palabras.",
+        "items": [
+          {
+            "description": "p. ej. La mitad del equipo de acampada de $240"
+          },
+          {
+            "description": "p. ej. La segunda entrada"
+          }
+        ]
+      }
+    }
+  },
+  "sample": {
+    "banner": "Ejemplo. Estas personas no son reales, nada de esto se guarda y tú no firmas nada.",
+    "title": "Ejemplo: la reparación de una cerca",
+    "homeHeading": "Así es un yup",
+    "homeBody": "Un ejemplo a medias: la reparación de una cerca entre dos vecinos, con cada paso a la vista.",
+    "see": "Ver el ejemplo",
+    "signInLine": "¿Eres nuevo? Mira cómo es un yup.",
+    "startOwn": "Empezar tu propio yup",
+    "signInToStart": "Inicia sesión para empezar el tuyo",
+    "help": "Ver el yup de ejemplo",
+    "termsHeading": "El yup",
+    "historyHeading": "Lo que ha pasado",
+    "cardWith": "Con {name}",
+    "cardState": "Acordado, en curso",
+    "cardDetail": "Cerca, 14 Elm Street",
+    "actionsOff": "No disponible en el ejemplo.",
+    "wouldTap": "En un yup real, {name} tocaría aquí.",
+    "waitsOn": "Espera a que se confirme la reparación de la cerca.",
+    "fingerprint": "Un registro real lleva aquí una huella de las condiciones firmadas.",
+    "partyA": "Dana Reyes",
+    "partyB": "Sam Okafor",
+    "firstNameA": "Dana",
+    "firstNameB": "Sam",
+    "terms": "Reparar la cerca del fondo en 14 Elm Street: cambiar los dos postes inclinados y el panel roto, e igualar el tinte actual.",
+    "deposit": "Anticipo",
+    "repair": "Reparación de la cerca",
+    "repairDone": "Los dos postes están firmes y el portón cierra sin levantarlo",
+    "balance": "Saldo"
   }
 }

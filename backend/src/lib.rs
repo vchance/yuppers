@@ -5,6 +5,7 @@
 pub mod app_role;
 pub mod auth;
 pub mod build_info;
+pub mod chain;
 pub mod client_version;
 pub mod code_consent;
 pub mod combine;
@@ -30,4 +31,5 @@ pub mod safety;
 pub mod shutdown;
 pub mod sweep;
 pub mod telemetry;
+pub mod terms;
 pub mod wallet;

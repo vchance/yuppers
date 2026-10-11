@@ -28,6 +28,7 @@ use crate::domain::invitation;
 use crate::domain::revision::{ContributionId, Kind, Revision, RevisionId, Settlement, Slot};
 use crate::domain::risk::{Tier, required_tier};
 use crate::error::{ApiError, ErrorCode, Redacted};
+use crate::funnel::StartedFrom;
 use crate::http::Settings;
 use crate::http::extract::Session;
 use crate::languages;
@@ -223,11 +224,23 @@ async fn record_signature(
     signature: Signature<'_>,
     at: OffsetDateTime,
 ) -> Result<(), sqlx::Error> {
+    // How this session signed in: the blind index and kind of the
+    // identifier its code proved (migration 0033), never the identifier.
+    // Null for a session from before it was kept.
+    let signed_in_with: Option<(Option<Vec<u8>>, Option<String>)> = sqlx::query_as(
+        "SELECT identifier_hash, identifier_kind FROM account_session WHERE id = $1",
+    )
+    .bind(session.id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let (identifier_hash, identifier_kind) = signed_in_with.unwrap_or_default();
+
     let acceptance: Uuid = sqlx::query_scalar(
         "INSERT INTO acceptance
             (exchange_id, revision_id, slot, account_id, content_hash, auth_method,
-             authenticated_at, consent_language, consent_version, accepted_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             authenticated_at, consent_language, consent_version, accepted_at,
+             signer_identifier_hash, signer_identifier_kind, session_verified_at, session_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $7, $13)
          RETURNING id",
     )
     .bind(signature.exchange)
@@ -240,6 +253,9 @@ async fn record_signature(
     .bind(signature.consent_language)
     .bind(signature.consent_version)
     .bind(at)
+    .bind(identifier_hash)
+    .bind(identifier_kind)
+    .bind(session.id)
     .fetch_one(&mut *conn)
     .await?;
 
@@ -524,19 +540,24 @@ pub async fn create(
     if !known_timezone(&mut tx, &body.timezone).await? {
         return Err(ErrorCode::InvalidRequest.into());
     }
+    let started_from = match body.started_from.as_deref() {
+        None => None,
+        Some(text) => Some(StartedFrom::parse(text).ok_or(ErrorCode::InvalidRequest)?),
+    };
 
     // A display code is short, so a clash is possible; try again with another.
     let mut id = None;
     for _ in 0..5 {
         id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO exchange (display_code, timezone, created_by)
-             VALUES ($1, $2, $3)
+            "INSERT INTO exchange (display_code, timezone, created_by, started_from)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (display_code) DO NOTHING
              RETURNING id",
         )
         .bind(display_code())
         .bind(&body.timezone)
         .bind(session.account_id)
+        .bind(started_from.as_ref().map(StartedFrom::as_str))
         .fetch_optional(&mut *tx)
         .await?;
         if id.is_some() {
@@ -557,6 +578,9 @@ pub async fn create(
 
     let view = view(&mut tx, rules, id, session.account_id).await?;
     tx.commit().await?;
+    if let Some(started_from) = &started_from {
+        crate::funnel::funnel().yup_started(started_from.entry());
+    }
     Ok(view)
 }
 
@@ -1143,6 +1167,7 @@ pub async fn reissue_invitation(
 /// Yuppers never sends the link itself (DESIGN.md §8), so this is all the
 /// service can know of it, and it says only that, not that the link arrived.
 /// The latest time is kept, so sending it again after a while shows as such.
+/// A claim records the share too when none was recorded.
 /// Nothing to record once someone is in the invited party's place.
 pub async fn invitation_shared(db: &PgPool, session: &Session, id: Uuid) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
@@ -1566,18 +1591,34 @@ pub(crate) async fn claim_in(
         .bind(account)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE invitation SET claimed_by = $2, claimed_at = $3 WHERE id = $1")
-        .bind(found.id)
-        .bind(account)
-        .bind(at)
-        .execute(&mut *tx)
-        .await?;
+    // A link that was claimed was in someone's hands, so one never marked as
+    // shared counts as shared at the claim, and the funnel never shows more
+    // claims than shares. The row is locked, so this reads what it updates.
+    let unshared: bool =
+        sqlx::query_scalar("SELECT shared_at IS NULL FROM invitation WHERE id = $1")
+            .bind(found.id)
+            .fetch_one(&mut *tx)
+            .await?;
+    sqlx::query(
+        "UPDATE invitation
+         SET claimed_by = $2, claimed_at = $3, shared_at = COALESCE(shared_at, $3)
+         WHERE id = $1",
+    )
+    .bind(found.id)
+    .bind(account)
+    .bind(at)
+    .execute(&mut *tx)
+    .await?;
     // Stored with the slot now filled, so the claim event records who
     // claimed it. That fact then lives in the permanent history and not only
     // in a row that can change.
     let mut claimed = aggregate.clone();
     claimed.accounts[1] = Some(account);
     repo::persist(&mut *tx, &claimed, &decision, actor, None, at).await?;
+    if unshared {
+        // Counted where the claimed counter is, with the rest of the claim.
+        crate::funnel::funnel().invitation_shared();
+    }
 
     view(&mut *tx, rules, exchange, account).await
 }

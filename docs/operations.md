@@ -80,6 +80,10 @@ With `SMS_CODE_DELIVERY` off (and `CODE_DELIVERY=resend` or `smtp`), a code for 
 
 `PUSH_DELIVERY=log` on both is for development: the worker writes each notification to its log. Turning push off again closes whatever is queued for push unsent, and the apps stop offering it; the devices stay registered, harmlessly, until their sessions end.
 
+## The terms version
+
+Signing in is the assent to the Terms and the Privacy policy: the sentence above the sign-in button names them, and the request that completes the sign-in carries the version shown (`terms_version`). The service refuses a version it does not know (`TERMS_VERSION_UNKNOWN`) and stores the one accepted, with the time, in `terms_acceptance` and on the account (`GET /v1/me`). The version is the documents' effective date. To publish new terms or a new policy, change `TERMS_VERSION` in `backend/src/terms.rs` and in `packages/shared/src/terms.ts` together with `LEGAL_EFFECTIVE_DATES` in `packages/shared/src/legal-text.ts`; a test fails if they differ. Pages loaded before the deploy are asked to reload on their next sign-in. The field is optional on the request, because builds already in users' hands (the TestFlight app) do not send it: without it the sign-in completes and nothing is recorded. It becomes required once every shipped client sends it, by raising the minimum client version (`backend/src/client_version.rs`) past the first build that does, and then making the field required in `CreateSession` and the API document. Nothing is backfilled: an account gets its first row at its next sign-in, and nothing yet asks an account that stays signed in to accept a newer version.
+
 ## Health checks
 
 | Path | Answers | Use it for |
@@ -135,11 +139,12 @@ From both, the **funnel** (`backend/src/funnel.rs`): each step counted where it 
 |---|---|---|
 | `yuppers_accounts_created_total` | counter | `channel`: `email`, `phone`. A first sign-in made an account (the api) |
 | `yuppers_yups_created_total` | counter | A first proposal was sent, opening a negotiation |
-| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`) |
+| `yuppers_invitations_shared_total` | counter | The initiator passed the invitation on (`POST /v1/exchanges/{id}/invitation/shared`), or it was claimed with no share recorded |
 | `yuppers_invitations_claimed_total` | counter | The other party opened and claimed an invitation |
 | `yuppers_agreements_in_force_total` | counter | Both signed, the first time an exchange came into force (an amendment in force is not another) |
 | `yuppers_contributions_confirmed_total`, `yuppers_contributions_disputed_total` | counter | A recipient confirmed a delivery; a party disputed a contribution |
 | `yuppers_agreements_closed_total` | counter | `outcome`: `withdrawn`, `declined`, `expired`, `discarded` (nothing was agreed), `completed`, `ended_by_agreement`, `unresolved_close_request`, `unresolved_inactive`. The timers' closures count in the worker, the parties' in the api |
+| `yuppers_entries_started_total`, `yuppers_entries_sent_total`, `yuppers_entries_in_force_total`, `yuppers_entries_completed_total` | counter | `entry`: a template id (`job-deposit-balance`, `selling-something`, `swap-no-money`, `lending-item`, `pet-sitting-childcare`, `splitting-cost`), `blank`, `copy`, `unknown` (the client said nothing), `other`. Yups by what they were started from (DESIGN.md §4.4): drafts made; first proposals sent; first in force; completed. Never the template version, never a person |
 | `yuppers_codes_sent_total` | counter | `channel`: `email`, `phone`. One-time codes handed to a provider (the api) |
 | `yuppers_texts_sent_total` | counter | Agreement updates sent by text (the worker) |
 | `yuppers_emails_sent_total` | counter | `kind`: `notice` (about an exchange, reminders included), `account` (a report to review, accounts combined). Emails the worker sent from the outbox; codes count under `yuppers_codes_sent_total` |
@@ -149,7 +154,7 @@ From the worker, the funnel's **daily snapshot**: the previous UTC day's counts,
 | Metric | Type | |
 |---|---|---|
 | `yuppers_daily_yups_created` | gauge | first proposals sent that day (an exchange's first `REVISION_SENT` event) |
-| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on, and claimed, that day |
+| `yuppers_daily_invitations_shared`, `yuppers_daily_invitations_claimed` | gauge | invitations passed on (a claim counts as one if none was recorded), and claimed, that day |
 | `yuppers_daily_agreements_in_force` | gauge | agreements that first came into force that day |
 | `yuppers_daily_agreements_completed` | gauge | agreements closed as completed that day |
 
@@ -415,6 +420,25 @@ CI runs the same steps on every change (the `Backup and restore` job). It fills 
 **Backups and restores.** A backup holds the values and the index key encrypted, never the key. Restoring one needs the key it was made under, set as `CONTACT_DATA_KEY` (or as `CONTACT_DATA_KEY_PREVIOUS` beside a newer one) for `migrate`, `replay-deletions` and the api. The restore drill's `check-restored-record.sh` starts an api on the copy with it, which proves that the copy kept outside the platform still opens the backups.
 
 **The release that added it** started from an empty database. Its migration (0025) drops the plaintext columns rather than converting them, and refuses to run, changing nothing, on a database where any of those tables has a row; docs/deploy-render.md, "Contact data key", says how the live database was emptied first. A database restored from a backup made before that release cannot be migrated past it. From now on, any change to how contact details are stored, on a database with people in it, needs a migration that converts what is there.
+
+## Signature attribution and the history chain
+
+Migration 0033 (LEGAL_MEMO.md §2.2 and §2.4; DESIGN.md §14.1).
+
+**What is stored.** When someone signs in with a code, their session keeps the blind index of the email address or phone number the code proved (the same keyed hash `contact` uses for lookups) and its kind, `email` or `phone`. When they sign, the acceptance copies from the session: that hash and kind, the session's ID, and when the session's code was verified (`session_verified_at`). The record and its PDF then say, under each signature, which kind of identifier the signer had signed in with and that they had done so no more than so many minutes, hours or days before signing, in the reader's language, from the wording files (`record.export.attribution` and `span`). Sessions and signatures from before the migration have none of it, and the record leaves that line out for them.
+
+**What is never stored or shown.** The address or number itself is not in the acceptance, the session's new columns, the record, a log, a span or a metric; the record says only the kind. The hash is kept for the owner's counsel to be able to show, with the key, that the signature was made in a session that proved a given identifier; it is not in the record. Nothing about the content hash or what is signed changed.
+
+**The history chain.** Every `exchange_event` row has a `chain_hash`: the SHA-256 of the previous row's `chain_hash` in the same exchange (a fixed genesis value for the first) and the row's own fields. `backend/src/chain.rs` defines the fields and their order and is the only place the hash is computed; the service writes it in the transaction that inserts the event. A record ends with a sentence in the reader's language (`record.export.chain`) giving the last entry's number and hash in hex, so a printed copy fixes the history at that point.
+
+**The commands**, run by the owner with `MIGRATION_DATABASE_URL` (in the image, `/usr/local/bin/staff`, as a one-off job on Render):
+
+- `staff backfill-chain` chains the rows written before the migration, exchange by exchange in order. It only fills an empty `chain_hash` (the one change the history's trigger allows, for the command's own transaction), never changes a row that has one, and running it again changes nothing. Run `staff backfill-chain` straight after deploying this migration; until then new rows are unchained and the record footer is omitted. It takes each exchange's row lock first (`SELECT 1 FROM exchange WHERE id = $1 FOR UPDATE`), the lock a live insert of an event takes, so an insert either finishes before the exchange is chained or waits for it, and none is left unchained behind it.
+- `staff verify-chain` recomputes every hash and prints each `MISMATCH` (a row whose fields or predecessor no longer give its hash, or a hash after a row that has none) and `GAP` (a row missing before a later one, or an exchange whose last event is missing: it walks the exchanges, and each must have rows up to its `last_event_seq`, so a deleted last row or a deleted history shows too), and exits 1 if there is one. It also counts rows not chained yet.
+
+**Deletion.** Deleting an account sets `signer_identifier_hash` to null on its signatures, and on those of accounts combined into it, so the signatures can no longer be linked to an address by anyone with the key. The kind of identifier and `session_verified_at` stay, as does everything else on the row. `acceptance` is still append-only for every role, except that this one column may go from a value to null while a deletion's transaction has set `yuppers.account_deletion` (migration 0033); the application role holds `UPDATE` on that column and no other, and the trigger refuses any other change even then. `restore-inventory.txt` lists the column grant and the trigger. A restore brings the hashes back with the accounts, until the deletion log is replayed (the replay clears them again, as it deletes the account through the same code).
+
+**The daily anchor.** Once a day, on the worker's first pass after midnight UTC, it logs one `history anchor` line (`event=history_anchor`) with the number of chained exchanges and the SHA-256 of their last hashes, in exchange ID order, one after the other. Nothing in it is personal. Keep those lines (the log shipper does) or copy them somewhere the database's operator cannot change: if the history is ever rewritten and rechained, the old anchor no longer matches. There is no external timestamping yet.
 
 ## Rotating `APP_SECRET`
 

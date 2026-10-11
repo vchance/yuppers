@@ -87,9 +87,15 @@ export async function stop(): Promise<void> {
   await act(async () => mounted.unmount())
 }
 
+/**
+ * How many times longer than usual to wait: a shared or busy machine sets
+ * `YUPPERS_TEST_PATIENCE` so that a slow answer is not read as a missing one.
+ */
+const patience = Math.max(1, Number(process.env.YUPPERS_TEST_PATIENCE ?? '1') || 1)
+
 /** Waits, letting the app answer, until `check` holds. */
 export async function until(check: () => boolean, what: string): Promise<void> {
-  for (let tries = 0; tries < 100; tries += 1) {
+  for (let tries = 0; tries < 100 * patience; tries += 1) {
     if (check()) return
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10))

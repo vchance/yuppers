@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture};
-use yuppers_backend::funnel::funnel;
+use yuppers_backend::funnel::{self, funnel};
 use yuppers_backend::metrics::Text;
 use yuppers_backend::otel::{self, Config};
 use yuppers_backend::telemetry::{self, LogFormat};
@@ -139,7 +139,7 @@ async fn sign_in(app: &App, codes: &Codes) -> Secrets {
             None,
             Method::POST,
             "/v1/auth/sessions",
-            Some(json!({ "identifier": email, "code": code, "delivery": "TOKEN" })),
+            Some(json!({ "identifier": email, "code": code, "delivery": "TOKEN", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
             &[],
         )
         .await
@@ -161,7 +161,7 @@ async fn sign_in(app: &App, codes: &Codes) -> Secrets {
             None,
             Method::POST,
             "/v1/auth/sessions",
-            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE" })),
+            Some(json!({ "identifier": email, "code": code, "delivery": "COOKIE", "terms_version": yuppers_backend::terms::TERMS_VERSION })),
             &[("origin", "https://app.test")],
         )
         .await;
@@ -1023,6 +1023,18 @@ async fn what_is_exported_carries_the_resource_the_headers_and_nothing_personal(
     assert_eq!(after.codes_email, before.codes_email + 2);
     assert_eq!(after.codes_phone, before.codes_phone + 1);
     assert_eq!(after.yups_created, before.yups_created + 1);
+    // The deal's draft said nothing of where it was started from: its steps
+    // count under `unknown`, and nothing else by entry moves.
+    let unknown = funnel::Entry::Unknown as usize;
+    assert_eq!(
+        after.entries_sent[unknown],
+        before.entries_sent[unknown] + 1
+    );
+    assert_eq!(
+        after.entries_in_force[unknown],
+        before.entries_in_force[unknown] + 1
+    );
+    assert_eq!(after.entries_started, before.entries_started);
     assert_eq!(after.invitations_shared, before.invitations_shared + 1);
     assert_eq!(after.invitations_claimed, before.invitations_claimed + 1);
     assert_eq!(after.agreements_in_force, before.agreements_in_force + 1);
@@ -1186,4 +1198,68 @@ async fn an_unreachable_collector_slows_nothing_and_fails_nothing() {
     assert_eq!(warnings, 1, "once, not once per attempt:\n{text}");
     assert!(!text.contains("test-client-secret-value"), "{text}");
     assert!(text.contains("request completed"), "{text}");
+}
+
+/// The process's shared-invitations counter, as the metrics page shows it.
+fn shared_total() -> u64 {
+    let mut text = Text::new();
+    funnel().render(&mut text);
+    let page = text.finish();
+    page.lines()
+        .find_map(|line| line.strip_prefix("yuppers_invitations_shared_total "))
+        .unwrap_or_else(|| panic!("no shared total in\n{page}"))
+        .trim()
+        .parse()
+        .unwrap()
+}
+
+async fn shared_at(app: &App, exchange: &str) -> Option<time::OffsetDateTime> {
+    sqlx::query_scalar("SELECT shared_at FROM invitation WHERE exchange_id = $1::uuid")
+        .bind(exchange)
+        .fetch_one(&app.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_claim_counts_as_a_share_only_when_none_was_recorded() {
+    let _turn = TURN.lock().await;
+    let app = App::start(DATABASE).await;
+
+    // Claimed without ever being shared: shared at the claim, counted once.
+    let deal = app.negotiating().await;
+    assert!(shared_at(&app, &deal.exchange).await.is_none());
+    let before = shared_total();
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    assert!(shared_at(&app, &deal.exchange).await.is_some());
+    assert_eq!(shared_total(), before + 1);
+
+    // Shared first: the claim leaves the time and the counter as they were.
+    let deal = app.negotiating().await;
+    let shared = app
+        .post(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/invitation/shared", deal.exchange),
+            json!({}),
+        )
+        .await;
+    assert_eq!(shared.status, StatusCode::NO_CONTENT, "{}", shared.body);
+    let recorded = shared_at(&app, &deal.exchange).await;
+    assert!(recorded.is_some());
+    let before = shared_total();
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    assert_eq!(shared_at(&app, &deal.exchange).await, recorded);
+    assert_eq!(shared_total(), before);
 }

@@ -2,7 +2,8 @@
 //! "Telemetry"): accounts created, yups created (a first proposal sent),
 //! invitations shared and claimed, agreements come into force, contributions
 //! confirmed and disputed, agreements closed, and the codes, texts and emails
-//! sent. Counts only: no label here ever names a person, an exchange, an
+//! sent. A claim counts as a share when none was recorded, so there are never
+//! more claims than shares. Counts only: no label here ever names a person, an exchange, an
 //! address or a number, and every label is from a fixed set.
 //!
 //! One set of counters for the process, like the historian's, rather than
@@ -40,6 +41,10 @@ pub const AGREEMENTS_CLOSED: Name = Name::new("yuppers.agreements.closed", "{agr
 pub const CODES_SENT: Name = Name::new("yuppers.codes.sent", "{code}");
 pub const TEXTS_SENT: Name = Name::new("yuppers.texts.sent", "{message}");
 pub const EMAILS_SENT: Name = Name::new("yuppers.emails.sent", "{message}");
+pub const ENTRIES_STARTED: Name = Name::new("yuppers.entries.started", "{yup}");
+pub const ENTRIES_SENT: Name = Name::new("yuppers.entries.sent", "{yup}");
+pub const ENTRIES_IN_FORCE: Name = Name::new("yuppers.entries.in_force", "{agreement}");
+pub const ENTRIES_COMPLETED: Name = Name::new("yuppers.entries.completed", "{agreement}");
 pub const DAILY_YUPS_CREATED: Name = Name::new("yuppers.daily.yups_created", "{yup}");
 pub const DAILY_INVITATIONS_SHARED: Name =
     Name::new("yuppers.daily.invitations_shared", "{invitation}");
@@ -49,6 +54,100 @@ pub const DAILY_AGREEMENTS_IN_FORCE: Name =
     Name::new("yuppers.daily.agreements_in_force", "{agreement}");
 pub const DAILY_AGREEMENTS_COMPLETED: Name =
     Name::new("yuppers.daily.agreements_completed", "{agreement}");
+
+/// Where a yup was started from, as a label: one of the shipped templates,
+/// the blank form, a copy of an earlier yup, a client that said nothing
+/// (`unknown`), or something well formed that this version does not list
+/// (`other`). A fixed set, so the label never carries what a client chose
+/// to send. The ids are the shared package's (`packages/shared/src/templates.ts`),
+/// which a test there checks against this list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+pub enum Entry {
+    JobDepositBalance,
+    SellingSomething,
+    SwapNoMoney,
+    LendingItem,
+    PetSittingChildcare,
+    SplittingCost,
+    Blank,
+    Copy,
+    Unknown,
+    Other,
+}
+
+impl Entry {
+    pub const ALL: [Self; 10] = [
+        Self::JobDepositBalance,
+        Self::SellingSomething,
+        Self::SwapNoMoney,
+        Self::LendingItem,
+        Self::PetSittingChildcare,
+        Self::SplittingCost,
+        Self::Blank,
+        Self::Copy,
+        Self::Unknown,
+        Self::Other,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::JobDepositBalance => "job-deposit-balance",
+            Self::SellingSomething => "selling-something",
+            Self::SwapNoMoney => "swap-no-money",
+            Self::LendingItem => "lending-item",
+            Self::PetSittingChildcare => "pet-sitting-childcare",
+            Self::SplittingCost => "splitting-cost",
+            Self::Blank => "blank",
+            Self::Copy => "copy",
+            Self::Unknown => "unknown",
+            Self::Other => "other",
+        }
+    }
+
+    fn of_id(id: &str) -> Self {
+        Self::ALL
+            .iter()
+            .copied()
+            .filter(|entry| !matches!(entry, Self::Unknown | Self::Other))
+            .find(|entry| entry.as_str() == id)
+            .unwrap_or(Self::Other)
+    }
+}
+
+/// What a client says a yup was started from (`exchange.started_from`,
+/// DESIGN.md section 4.4, "Measurement"): `blank`, `copy`, or a template id
+/// and version such as `job-deposit-balance@1`. Only this form is accepted,
+/// so the column cannot hold free text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StartedFrom(String);
+
+impl StartedFrom {
+    pub fn parse(text: &str) -> Option<Self> {
+        let valid = match text {
+            "blank" | "copy" => true,
+            _ => text.split_once('@').is_some_and(|(id, version)| {
+                (1..=40).contains(&id.len())
+                    && id.starts_with(|c: char| c.is_ascii_lowercase())
+                    && id
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                    && (1..=4).contains(&version.len())
+                    && version.chars().all(|c| c.is_ascii_digit())
+            }),
+        };
+        valid.then(|| Self(text.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The entry, without the version.
+    pub fn entry(&self) -> Entry {
+        Entry::of_id(self.0.split_once('@').map_or(self.0.as_str(), |(id, _)| id))
+    }
+}
 
 /// How a person signed up, or a code went: by email address or phone number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,6 +247,13 @@ impl Closure {
     }
 }
 
+#[derive(Clone, Copy)]
+enum Step {
+    Sent,
+    InForce,
+    Completed,
+}
+
 /// The previous UTC day's counts, read from the database by [`daily`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Daily {
@@ -174,6 +280,10 @@ pub struct Funnel {
     codes: [AtomicU64; 2],
     texts_sent: AtomicU64,
     emails: [AtomicU64; 2],
+    entries_started: [AtomicU64; 10],
+    entries_sent: [AtomicU64; 10],
+    entries_in_force: [AtomicU64; 10],
+    entries_completed: [AtomicU64; 10],
     daily: Mutex<Option<Daily>>,
 }
 
@@ -197,6 +307,12 @@ pub struct Counts {
     pub texts_sent: u64,
     /// Notices, account notices.
     pub emails: [u64; 2],
+    /// Yups started, sent for the first time, come into force and completed,
+    /// each by [`Entry`], in its order.
+    pub entries_started: [u64; 10],
+    pub entries_sent: [u64; 10],
+    pub entries_in_force: [u64; 10],
+    pub entries_completed: [u64; 10],
 }
 
 static FUNNEL: Funnel = Funnel {
@@ -211,6 +327,10 @@ static FUNNEL: Funnel = Funnel {
     codes: [const { AtomicU64::new(0) }; 2],
     texts_sent: AtomicU64::new(0),
     emails: [const { AtomicU64::new(0) }; 2],
+    entries_started: [const { AtomicU64::new(0) }; 10],
+    entries_sent: [const { AtomicU64::new(0) }; 10],
+    entries_in_force: [const { AtomicU64::new(0) }; 10],
+    entries_completed: [const { AtomicU64::new(0) }; 10],
     daily: Mutex::new(None),
 };
 
@@ -252,6 +372,46 @@ impl Funnel {
     /// An email went out.
     pub fn email_sent(&self, kind: EmailKind) {
         bump(&self.emails[kind as usize]);
+    }
+
+    /// A draft was made, from this entry (`exchanges::service::create`).
+    pub fn yup_started(&self, entry: Entry) {
+        bump(&self.entries_started[entry as usize]);
+    }
+
+    /// Whether any of these events is a step counted by entry, so that the
+    /// store need only be asked what a yup was started from when one is.
+    pub fn counts_by_entry(before: State, events: &[Event]) -> bool {
+        events
+            .iter()
+            .any(|event| Self::step(before, event).is_some())
+    }
+
+    fn step(before: State, event: &Event) -> Option<Step> {
+        match event {
+            Event::RevisionSent { .. } if before == State::Draft => Some(Step::Sent),
+            Event::AgreementInForce { .. } if before != State::Active => Some(Step::InForce),
+            Event::Closed {
+                outcome: Outcome::Completed,
+                ..
+            } => Some(Step::Completed),
+            _ => None,
+        }
+    }
+
+    /// The same steps as [`Funnel::events`] counts, by what the yup was
+    /// started from: first sent, first in force, completed. `entry` is
+    /// [`Entry::Unknown`] for a yup whose client said nothing.
+    pub fn events_by_entry(&self, entry: Entry, before: State, events: &[Event]) {
+        for event in events {
+            let counter = match Self::step(before, event) {
+                Some(Step::Sent) => &self.entries_sent,
+                Some(Step::InForce) => &self.entries_in_force,
+                Some(Step::Completed) => &self.entries_completed,
+                None => continue,
+            };
+            bump(&counter[entry as usize]);
+        }
     }
 
     /// What an exchange's events say happened, given the state the exchange
@@ -306,6 +466,10 @@ impl Funnel {
             codes_phone: read(&self.codes[Channel::Phone as usize]),
             texts_sent: read(&self.texts_sent),
             emails: std::array::from_fn(|index| read(&self.emails[index])),
+            entries_started: std::array::from_fn(|index| read(&self.entries_started[index])),
+            entries_sent: std::array::from_fn(|index| read(&self.entries_sent[index])),
+            entries_in_force: std::array::from_fn(|index| read(&self.entries_in_force[index])),
+            entries_completed: std::array::from_fn(|index| read(&self.entries_completed[index])),
         }
     }
 
@@ -402,6 +566,37 @@ impl Funnel {
                 &[("kind", kind.as_str())],
                 read(&self.emails[kind as usize]) as f64,
             );
+        }
+        for (name, help, counters) in [
+            (
+                ENTRIES_STARTED,
+                "Drafts made, by entry: a template id, blank, copy, unknown (the client said nothing) or other. No version, no person.",
+                &self.entries_started,
+            ),
+            (
+                ENTRIES_SENT,
+                "Yups whose first proposal was sent, by the entry they were started from.",
+                &self.entries_sent,
+            ),
+            (
+                ENTRIES_IN_FORCE,
+                "Agreements that first came into force, by the entry they were started from.",
+                &self.entries_in_force,
+            ),
+            (
+                ENTRIES_COMPLETED,
+                "Agreements completed, by the entry they were started from.",
+                &self.entries_completed,
+            ),
+        ] {
+            text.family(name, Kind::Counter, help);
+            for entry in Entry::ALL {
+                text.sample(
+                    name,
+                    &[("entry", entry.as_str())],
+                    read(&counters[entry as usize]) as f64,
+                );
+            }
         }
 
         let daily = self
@@ -668,6 +863,108 @@ mod tests {
             assert!(page.contains(&format!("{line}\n")), "{line} in\n{page}");
         }
         assert!(page.contains("# TYPE yuppers_daily_yups_created gauge"));
+    }
+
+    #[test]
+    fn what_a_yup_was_started_from_is_a_fixed_set_of_entries() {
+        for good in [
+            "blank",
+            "copy",
+            "job-deposit-balance@1",
+            "selling-something@12",
+            "some-future-one@3",
+        ] {
+            assert!(StartedFrom::parse(good).is_some(), "{good}");
+        }
+        for bad in [
+            "",
+            "Blank",
+            "job-deposit-balance",
+            "job-deposit-balance@",
+            "job-deposit-balance@x",
+            "job-deposit-balance@12345",
+            "-x@1",
+            "a b@1",
+            "dana@example.com",
+            "copy of 3f1c",
+            &format!("{}@1", "a".repeat(41)),
+        ] {
+            assert!(StartedFrom::parse(bad).is_none(), "{bad}");
+        }
+        let entry = |text: &str| StartedFrom::parse(text).unwrap().entry();
+        assert_eq!(entry("job-deposit-balance@1"), Entry::JobDepositBalance);
+        assert_eq!(entry("blank"), Entry::Blank);
+        assert_eq!(entry("copy"), Entry::Copy);
+        // Well formed but not listed: counted, under a label of ours.
+        assert_eq!(entry("something-new@1"), Entry::Other);
+        assert_eq!(entry("unknown@1"), Entry::Other);
+        for (index, entry) in Entry::ALL.iter().enumerate() {
+            assert_eq!(*entry as usize, index);
+        }
+        let labels: std::collections::BTreeSet<&str> =
+            Entry::ALL.iter().map(|entry| entry.as_str()).collect();
+        assert_eq!(labels.len(), Entry::ALL.len());
+    }
+
+    #[test]
+    fn the_steps_are_also_counted_by_entry() {
+        let funnel = Funnel::default();
+        funnel.yup_started(Entry::JobDepositBalance);
+        funnel.yup_started(Entry::Blank);
+        funnel.yup_started(Entry::Blank);
+        let revision = RevisionId(Uuid::new_v4());
+        let sent = Event::RevisionSent {
+            revision,
+            by: Slot::A,
+            expires_at: OffsetDateTime::UNIX_EPOCH,
+        };
+        let in_force = Event::AgreementInForce {
+            revision,
+            statuses: Statuses::default(),
+        };
+        let completed = Event::Closed {
+            outcome: Outcome::Completed,
+            waived: Vec::new(),
+        };
+        assert!(Funnel::counts_by_entry(
+            State::Draft,
+            std::slice::from_ref(&sent)
+        ));
+        // A counteroffer, an amendment in force: not counted by entry.
+        assert!(!Funnel::counts_by_entry(
+            State::Negotiating,
+            std::slice::from_ref(&sent)
+        ));
+        assert!(!Funnel::counts_by_entry(
+            State::Active,
+            std::slice::from_ref(&in_force)
+        ));
+        funnel.events_by_entry(Entry::Blank, State::Draft, &[sent]);
+        funnel.events_by_entry(Entry::Blank, State::Negotiating, &[in_force]);
+        funnel.events_by_entry(Entry::Blank, State::Active, &[completed]);
+
+        let counts = funnel.counts();
+        assert_eq!(counts.entries_started, [1, 0, 0, 0, 0, 0, 2, 0, 0, 0]);
+        assert_eq!(counts.entries_sent, [0, 0, 0, 0, 0, 0, 1, 0, 0, 0]);
+        assert_eq!(counts.entries_in_force, [0, 0, 0, 0, 0, 0, 1, 0, 0, 0]);
+        assert_eq!(counts.entries_completed, [0, 0, 0, 0, 0, 0, 1, 0, 0, 0]);
+
+        let mut text = Text::new();
+        funnel.render(&mut text);
+        let page = text.finish();
+        for line in [
+            r#"yuppers_entries_started_total{entry="job-deposit-balance"} 1"#,
+            r#"yuppers_entries_started_total{entry="blank"} 2"#,
+            r#"yuppers_entries_started_total{entry="copy"} 0"#,
+            r#"yuppers_entries_started_total{entry="other"} 0"#,
+            r#"yuppers_entries_sent_total{entry="blank"} 1"#,
+            r#"yuppers_entries_in_force_total{entry="blank"} 1"#,
+            r#"yuppers_entries_completed_total{entry="blank"} 1"#,
+        ] {
+            assert!(page.contains(&format!("{line}\n")), "{line} in\n{page}");
+        }
+        // Labels are entries, never a version or anything a client typed.
+        assert!(!page.contains('@'), "{page}");
     }
 
     #[test]

@@ -170,7 +170,7 @@
             }
           },
           "422": {
-            "description": "Invalid request",
+            "description": "Invalid request, or a `terms_version` the service does not know (`TERMS_VERSION_UNKNOWN`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -837,7 +837,7 @@
         "tags": [
           "exchanges"
         ],
-        "summary": "Records that the initiator opened a way to pass the invitation link on:\nthe share sheet, a text message, an email, WhatsApp, a copy or its QR\ncode. Yuppers never sends the link itself, so this is all the service can\nknow about whether it went anywhere, and it says only that the sender\nopened a way to send it, not that it arrived. Shown back as\n`invitation_shared_at` on the exchange and in the list. Harmless to\nrepeat: the latest time is kept.",
+        "summary": "Records that the initiator opened a way to pass the invitation link on:\nthe share sheet, a text message, an email, WhatsApp, a copy or its QR\ncode. Yuppers never sends the link itself, so this is all the service can\nknow about whether it went anywhere, and it says only that the sender\nopened a way to send it, not that it arrived. Shown back as\n`invitation_shared_at` on the exchange and in the list. Harmless to\nrepeat: the latest time is kept. A claim counts as a share when none was\nrecorded, so a claimed link always has a time.",
         "operationId": "invitation_shared",
         "parameters": [
           {
@@ -3513,6 +3513,20 @@
               "string",
               "null"
             ]
+          },
+          "terms_accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it was accepted, as RFC 3339."
+          },
+          "terms_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version of the Terms and the Privacy policy accepted at the\nlatest sign-in (`TERMS_VERSION`). Absent until the account signs in\nagain after this was first recorded. Only the account's own."
           }
         }
       },
@@ -4239,6 +4253,13 @@
           "timezone"
         ],
         "properties": {
+          "started_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How the author began: a template and its version (`job-deposit-balance@1`),\n`blank` or `copy`. Kept once for aggregate counts; never returned.\nClients that send nothing leave it unset."
+          },
           "timezone": {
             "type": "string",
             "description": "IANA timezone name, such as `America/Chicago`. Due dates are read in it."
@@ -4269,6 +4290,13 @@
               "null"
             ],
             "description": "The language the client is showing, as a tag such as `es-MX`. Used only\nwhen this creates the account; an unsupported one becomes the default."
+          },
+          "terms_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version of the Terms and the Privacy policy the client showed\nabove the button (`TERMS_VERSION`); signing in is the assent to both.\nA version the service does not know is refused. Absent from builds\nthat predate it: the sign-in completes and nothing is recorded."
           }
         }
       },
@@ -4430,6 +4458,7 @@
           "PHONE_COUNTRY_NOT_SERVED",
           "PHONE_OPTED_OUT",
           "SMS_CONSENT_REQUIRED",
+          "TERMS_VERSION_UNKNOWN",
           "INVALID_CODE",
           "TOO_MANY_REQUESTS",
           "TOO_MANY_GUESSES",
@@ -5552,6 +5581,13 @@
           "generated_at": {
             "type": "string",
             "description": "RFC 3339, UTC."
+          },
+          "history_chain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That the history is chained, and the fingerprint of its last entry,\nin the document's language: a printed copy anchors the history with\nit (`crate::chain`). Left out while the history has entries from\nbefore the chain that have not been chained yet."
           },
           "language": {
             "type": "string",
@@ -7001,6 +7037,13 @@
           "description"
         ],
         "properties": {
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The kind of identifier the signer had signed in with, and how long\nbefore signing, in the document's language. Never the address or\nnumber. Left out for a signature made before this was kept."
+          },
           "description": {
             "type": "string",
             "description": "The same, in words, in the document's language."

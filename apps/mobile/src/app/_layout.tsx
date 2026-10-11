@@ -106,6 +106,7 @@ function Navigation() {
             <Stack.Screen name="account/payments" options={{ title: wording.payments.heading }} />
             <Stack.Screen name="invitation" />
             <Stack.Screen name="new" options={{ title: wording.templates.chooserTitle }} />
+            <Stack.Screen name="new/[from]" options={{ title: wording.composer.titleFirst }} />
             <Stack.Screen name="example" options={{ title: wording.sample.title }} />
             <Stack.Screen
               name="exchanges/[id]/index"

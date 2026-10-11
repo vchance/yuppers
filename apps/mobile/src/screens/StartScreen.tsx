@@ -1,6 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client';
 import {
-  applyTemplate,
   beginYup,
   draftFromCopy,
   failureCode,
@@ -30,7 +29,7 @@ import {
   Tags,
   Written,
 } from '../components/ui';
-import { useI18n, useSession } from '../lib/context';
+import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 import { deviceTimezone } from '../lib/time-zone';
 
@@ -44,17 +43,15 @@ type CopyDraft = Parameters<typeof beginYup>[3];
  */
 export function StartScreen() {
   const { wording } = useI18n();
-  const { account } = useSession();
   const router = useRouter();
   const w = wording.templates;
-  const author = account?.display_name ?? '';
 
   const [mode, setMode] = useState<'choose' | 'copy'>('choose');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [tooMany, setTooMany] = useState(false);
 
-  /** Makes the draft with the working copy a choice starts, and opens it. */
+  /** Makes the draft with the copy of an earlier yup, and opens it. */
   async function begin(choice: StartChoice, draft: CopyDraft) {
     setBusy(true);
     setFailure(null);
@@ -71,11 +68,11 @@ export function StartScreen() {
     }
   }
 
+  // A template or the blank form opens the composer with a working copy of
+  // its own and no exchange on the service: that is made when something is
+  // first changed.
   function startFrom(template: Template) {
-    void begin(
-      { kind: 'template', template },
-      applyTemplate(template, w.entries[template.id], author, () => Crypto.randomUUID()),
-    );
+    router.replace(`/new/${template.id}`);
   }
 
   return (
@@ -110,7 +107,7 @@ export function StartScreen() {
               label={w.blank.name}
               hint={w.blank.summary}
               disabled={busy}
-              onPress={() => void begin({ kind: 'blank' }, null)}
+              onPress={() => router.replace('/new/blank')}
             />
             <Hint>{w.blank.summary}</Hint>
           </Card>

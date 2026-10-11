@@ -177,8 +177,7 @@ function Editor({ exchange, reload, onSent, pending, onCreated }: Props) {
   // ---- Saving the working copy ----------------------------------------------
 
   const latest = useRef(draft)
-  const exchangeId = useRef(exchange.id)
-  exchangeId.current = pending?.created()?.id ?? exchange.id
+  const exchangeId = exchange.id
 
   // The exchange itself: for a fresh start, made now if it is not yet.
   async function made(): Promise<Exchange> {
@@ -192,14 +191,11 @@ function Editor({ exchange, reload, onSent, pending, onCreated }: Props) {
   const [saver] = useState(() =>
     createDraftSaver({
       save: async (copy) => {
-        if (pending && !pending.created()) {
-          // Nothing is made for a copy that is as it started.
-          if (!draftChanged(startCopy, copy)) return
-          const found = await made()
-          await api.saveDraft(found.id, copy)
-          return
-        }
-        await api.saveDraft(exchangeId.current, copy)
+        if (!pending) return api.saveDraft(exchangeId, copy)
+        // Nothing is made for a copy that is as it started.
+        if (!pending.created() && !draftChanged(startCopy, copy)) return
+        const found = await made()
+        await api.saveDraft(found.id, copy)
       },
       onState: setSaveState,
     }),

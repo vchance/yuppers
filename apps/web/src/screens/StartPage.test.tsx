@@ -84,6 +84,7 @@ describe('the chooser', () => {
     await heading(wording.composer.titleFirst)
     // The composer has an address of its own, with no exchange in it.
     expect(window.location.pathname).toBe('/new/job-deposit-balance')
+    expect(document.body.textContent).toContain(w.bandExamples)
     await settle(900)
     expect(startedBy(service.sent)).toEqual([])
     expect(window.location.pathname).toBe('/new/job-deposit-balance')
@@ -118,7 +119,6 @@ describe('the chooser', () => {
       w.entries['job-deposit-balance'].items.map((item) => item.description),
     )
     // The hint, the grey-text note and the warning are above the items.
-    expect(document.body.textContent).toContain(w.bandExamples)
     expect(document.body.textContent).toContain(w.entries['job-deposit-balance'].warning)
     expect(await violations()).toEqual([])
   })

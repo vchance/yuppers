@@ -7,7 +7,7 @@ import {
   type IssuedInvitation,
   type PendingStart,
 } from '@yuppers/shared'
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 
 import { useI18n, useSession } from '../app/context'
 import { fresh } from '../app/fresh'
@@ -57,8 +57,6 @@ export default function ExchangePage({
     return pendingStart(api, timezone, { kind: 'template', template }, draft)
   })
   const [exchange, setExchange] = useState<Exchange | null>(pending?.exchange ?? null)
-  const held = useRef(exchange)
-  held.current = exchange
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   // The invitation token, held only while this page stays open: it is shown
   // once and cannot be fetched again.
@@ -84,7 +82,7 @@ export default function ExchangePage({
 
   useEffect(() => {
     // A fresh start has nothing to read; one just made is already in hand.
-    if (!id || held.current?.id === id) return
+    if (!id || pending?.created()?.id === id) return
     let cancelled = false
     api.getExchange(id).then(
       (found) => {
@@ -97,7 +95,7 @@ export default function ExchangePage({
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, pending])
 
   // The person opened a way to send the link. The service is told, so the
   // reminder on this page and the chip in the list know; the page itself

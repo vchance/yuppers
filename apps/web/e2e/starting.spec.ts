@@ -1,7 +1,7 @@
 import { expect, test } from './support/fixtures'
 import {
   composerItem,
-  exchangeIdOf,
+  draftId,
   inviteFor,
   join,
   reviewAndSend,
@@ -13,7 +13,8 @@ import { en } from './support/wording'
  * Starting a yup and the sample yup (DESIGN.md sections 4.3 and 4.4), in a
  * real browser against the real service: the example is there before
  * signing in, the first yup starts from a common agreement, and what the
- * service was told about how it began is never shown to anyone.
+ * service was told about how it began is never shown to anyone. Nothing is
+ * made on the service until something is written.
  */
 
 test('the example can be read before signing in, and nothing in it can be done', async ({
@@ -32,6 +33,28 @@ test('the example can be read before signing in, and nothing in it can be done',
   }
 })
 
+test('opening a template and going back leaves no draft behind', async ({ person }) => {
+  const ana = await person('Ana')
+  await signUp(ana)
+  const { page } = ana
+
+  await page.getByRole('button', { name: en.home.start }).click()
+  await page
+    .getByRole('button', { name: en.templates.entries['selling-something'].name, exact: true })
+    .click()
+  await page.waitForURL(/\/new\/selling-something$/)
+  await expect(page.getByRole('heading', { name: en.composer.titleFirst, level: 1 })).toBeVisible()
+
+  // Back is the chooser; the way back into a template is choosing it again.
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: en.templates.chooserTitle, level: 1 })).toBeVisible()
+  await page.getByRole('link', { name: en.nav.exchanges, exact: true }).first().click()
+  await expect(page.getByRole('heading', { name: en.home.title, level: 1 })).toBeVisible()
+  await expect(page.getByRole('region', { name: en.home.groupDrafts })).toHaveCount(0)
+  const listed = await page.request.get('/v1/exchanges')
+  expect(await listed.json()).toEqual([])
+})
+
 test('a first yup starts from a common agreement, and how it began is never shown', async ({
   person,
 }) => {
@@ -48,9 +71,8 @@ test('a first yup starts from a common agreement, and how it began is never show
   await page
     .getByRole('button', { name: en.templates.entries['selling-something'].name, exact: true })
     .click()
-  await page.waitForURL(/\/exchanges\/[0-9a-f-]{36}$/)
+  await page.waitForURL(/\/new\/selling-something$/)
   await expect(page.getByRole('heading', { name: en.composer.titleFirst, level: 1 })).toBeVisible()
-  const id = exchangeIdOf(page)
 
   // Two items in place, with their examples in grey and nothing typed.
   const entry = en.templates.entries['selling-something']
@@ -67,6 +89,9 @@ test('a first yup starts from a common agreement, and how it began is never show
   await expect(page.getByText(en.composer.problems.DESCRIPTION_MISSING).first()).toBeVisible()
 
   await page.getByLabel(en.composer.otherName).fill(bruno.name)
+  // The first thing written makes the draft, and the address moves to it.
+  const id = await draftId(page)
+  await expect(page.getByText(entry.hint)).toBeHidden()
   await inviteFor(page, null)
   await first.getByLabel(en.composer.descriptionLabel).fill('A blue bicycle')
   await first.getByLabel(en.composer.dueLabel).selectOption('DATE')

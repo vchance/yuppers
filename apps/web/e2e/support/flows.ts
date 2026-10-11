@@ -75,15 +75,24 @@ export async function signUp(person: Person): Promise<void> {
 
 // ---- Writing and sending terms -------------------------------------------------
 
-/** Starts an exchange from the list, from the blank form, which opens the composer on the new draft. */
-export async function startExchange(person: Person): Promise<string> {
+/**
+ * Opens the composer from the list, on the blank form. Nothing is made on
+ * the service yet: the draft is made the first time something is written,
+ * and `draftId` waits for that.
+ */
+export async function startExchange(person: Person): Promise<void> {
   const { page } = person
   await page.goto('/')
   await page.getByRole('button', { name: en.home.start }).click()
   // New yup opens on the choices; the blank form is the composer as it was.
   await page.getByRole('button', { name: en.templates.blank.name, exact: true }).click()
-  await page.waitForURL(UUID)
+  await page.waitForURL(/\/new\/blank$/)
   await expect(page.getByRole('heading', { name: en.composer.titleFirst, level: 1 })).toBeVisible()
+}
+
+/** The id of the draft once something written has made it: the address moves to the exchange. */
+export async function draftId(page: Page): Promise<string> {
+  await page.waitForURL(UUID)
   return exchangeIdOf(page)
 }
 
@@ -159,8 +168,9 @@ export async function propose(
   { invitee = null }: { invitee?: string | null } = {},
 ): Promise<Proposal> {
   const { page } = initiator
-  const id = await startExchange(initiator)
+  await startExchange(initiator)
   await page.getByLabel(en.composer.otherName).fill(other.name)
+  const id = await draftId(page)
   await inviteFor(page, invitee)
   await addItems(page, items)
   await reviewAndSend(page)

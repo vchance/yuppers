@@ -70,6 +70,11 @@ pub const DAILY_AGREEMENTS_COMPLETED: Name =
 /// (`other`). A fixed set, so the label never carries what a client chose
 /// to send. The ids are the shared package's (`packages/shared/src/templates.ts`),
 /// which a test there checks against this list.
+///
+/// A draft is made, and so counted as started, the first time the person adds
+/// something to a blank form or a template (a copy carries content, so it is
+/// made at once): opening the chooser, or a composer left untouched, makes and
+/// counts nothing (DESIGN.md section 4.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 pub enum Entry {

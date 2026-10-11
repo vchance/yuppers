@@ -1,5 +1,5 @@
 import { expect, test } from './support/fixtures'
-import { signUp, startExchange } from './support/flows'
+import { draftId, signUp, startExchange } from './support/flows'
 import { en, fill } from './support/wording'
 
 test('a draft that was never sent can be discarded from the composer, and leaves the list', async ({
@@ -8,10 +8,11 @@ test('a draft that was never sent can be discarded from the composer, and leaves
   const ana = await person('Ana')
   const { page } = ana
   await signUp(ana)
-  const id = await startExchange(ana)
+  await startExchange(ana)
 
-  // Something written, so the draft is saved as a working copy.
+  // Something written, so the draft is made and saved as a working copy.
   await page.getByLabel(en.composer.otherName).fill('Carmen')
+  const id = await draftId(page)
   await expect(page.getByText(en.composer.saved, { exact: true })).toBeVisible()
 
   // It is listed among the drafts.

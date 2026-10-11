@@ -1,11 +1,20 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
-import { failureCode, type IssuedInvitation, type RevisionSent } from '@yuppers/shared';
+import {
+  applyTemplate,
+  failureCode,
+  pendingStart,
+  templateById,
+  type IssuedInvitation,
+  type RevisionSent,
+} from '@yuppers/shared';
+import * as Crypto from 'expo-crypto';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 
 import { Actions, Button, Failure, Heading, P, Screen } from '../components/ui';
-import { useI18n } from '../lib/context';
+import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
+import { deviceTimezone } from '../lib/time-zone';
 import { Composer } from './Composer';
 import { ExchangeView } from './ExchangeView';
 import { SendInvitation } from './SendInvitation';
@@ -140,4 +149,39 @@ export function ReviseScreen({ id }: { id: string }) {
 
   if (!exchange) return <Unavailable failure={failure} />;
   return <Composer exchange={exchange} reload={reload} onLeave={back} onSent={back} />;
+}
+
+/**
+ * A fresh start, written before the service has an exchange for it: a
+ * template's id, or `blank`. The composer works on a local copy, and the
+ * first change makes the exchange and moves to its screen, replacing this
+ * one so that Back does not come to a screen with nothing behind it.
+ */
+export function NewDraftScreen({ from }: { from: string }) {
+  const router = useRouter();
+  const { wording } = useI18n();
+  const { account } = useSession();
+  const [pending] = useState(() => {
+    const timezone = deviceTimezone();
+    const template = from === 'blank' ? undefined : templateById(from);
+    if (!template) return pendingStart(api, timezone, { kind: 'blank' }, null);
+    const draft = applyTemplate(
+      template,
+      wording.templates.entries[template.id],
+      account?.display_name ?? '',
+      () => Crypto.randomUUID(),
+    );
+    return pendingStart(api, timezone, { kind: 'template', template }, draft);
+  });
+
+  return (
+    <Composer
+      exchange={pending.exchange}
+      reload={async () => pending.created()}
+      onLeave={() => router.dismissTo('/')}
+      onSent={() => {}}
+      pending={pending}
+      onCreated={(made) => router.replace(`/exchanges/${made.id}`)}
+    />
+  );
 }

@@ -8,6 +8,7 @@ import {
   composerKind,
   CONTRIBUTION_TYPES,
   createDraftSaver,
+  draftChanged,
   decimalForInput,
   draftEffects,
   draftFromTerms,
@@ -39,6 +40,7 @@ import {
   toMinorUnits,
   useSignInChannels,
   type Draft,
+  type PendingStart,
   type DraftContribution,
   type DraftDue,
   type InvitationChoice,
@@ -95,6 +97,13 @@ interface Props {
   onSent(sent: RevisionSent, boundTo: string | null): void;
   /** Leaving without sending. The working copy stays saved as a draft. */
   onLeave(): void;
+  /**
+   * A fresh start whose exchange is not made yet: the composer works on a
+   * local copy, and the exchange is made the first time that copy changes.
+   */
+  pending?: PendingStart;
+  /** The exchange is made and holds the working copy: the screen moves to it. */
+  onCreated?(exchange: Exchange): void;
 }
 
 /**
@@ -124,7 +133,7 @@ export function Composer(props: Props) {
   return <Editor {...props} />;
 }
 
-function Editor({ exchange, reload, onSent, onLeave }: Props) {
+function Editor({ exchange, reload, onSent, onLeave, pending, onCreated }: Props) {
   const { wording, fmt, language, money } = useI18n();
   const { account } = useSession();
   const w = wording.composer;
@@ -136,9 +145,11 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const base = baseRevision(exchange);
   const digits = fractionDigitsOf(exchange.currency);
 
-  const [draft, setDraft] = useState<Draft>(() =>
-    startingDraft(exchange, account?.display_name ?? '', digits),
+  const [draft, setDraft] = useState<Draft>(
+    () => pending?.draft ?? startingDraft(exchange, account?.display_name ?? '', digits),
   );
+  // What a fresh start opened with: only a change from it makes the draft.
+  const [startCopy] = useState(draft);
   // Bumped to rebuild the inputs when the whole working copy is replaced.
   const [generation, setGeneration] = useState(0);
   const [step, setStep] = useState<'edit' | 'sign'>('edit');
@@ -150,7 +161,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   // The common agreement this draft was started from, if this session started it
   // from one, and whether its hint is open: until the first edit.
-  const template = kind === 'first' ? templateStartedFrom(exchange.id) : undefined;
+  const template =
+    kind === 'first' ? (pending?.template ?? templateStartedFrom(exchange.id)) : undefined;
   const [bandOpen, setBandOpen] = useState(true);
   // The split sheet open on an item (DESIGN.md §7.1, §7.2).
   const [sheet, setSheet] = useState<{ id: string; kind: 'INSTALMENTS' | 'STAGES' } | null>(null);
@@ -189,7 +201,16 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   // One save at a time, a moment after the typing pauses.
   const [saver] = useState(() =>
     createDraftSaver({
-      save: (copy) => api.saveDraft(exchangeId, copy),
+      save: async (copy) => {
+        if (!pending) return api.saveDraft(exchangeId, copy);
+        // Nothing is made for a copy that is as it started.
+        if (!pending.created() && !draftChanged(startCopy, copy)) return;
+        const found = await pending.ensure();
+        await api.saveDraft(found.id, copy);
+        // The screen moves to the exchange once what is on it is saved; if
+        // more was typed meanwhile, the next save moves it.
+        if (latest.current === copy) onCreated?.(found);
+      },
       onState: setSaveState,
     }),
   );
@@ -280,6 +301,15 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     // still on its way must not put it back afterwards.
     await saver.settle();
     try {
+      if (pending) {
+        // Sent before the draft was made: make it and move to it, and the
+        // person reviews and signs there.
+        const found = await pending.ensure();
+        await api.saveDraft(found.id, latest.current);
+        saver.resume();
+        onCreated?.(found);
+        return;
+      }
       const result = await api.sendRevision(
         exchange.id,
         revisionToSend(
@@ -316,7 +346,9 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     // be refused noisily, or put anything back.
     await saver.settle();
     try {
-      await api.runCommand(exchange.id, exchange.version, { type: 'DISCARD' });
+      // A fresh start nobody changed is not on the service: nothing to throw away.
+      const made = pending?.created() ?? (pending ? null : exchange);
+      if (made) await api.runCommand(made.id, made.version, { type: 'DISCARD' });
       saver.sent();
       onLeave();
     } catch (error) {

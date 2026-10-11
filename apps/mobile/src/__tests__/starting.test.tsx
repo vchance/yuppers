@@ -102,7 +102,7 @@ describe('the chooser', () => {
       screen.getByRole('button', { name: w.templates.entries['job-deposit-balance'].name }),
     );
     await screen.findByRole('header', { name: w.composer.titleFirst });
-    expect(screen.getPathname()).toBe('/new/job-deposit-balance');
+    expect(screen).toHavePathname('/new/job-deposit-balance');
 
     // Nothing is on the service, and the band is there already.
     const entry = w.templates.entries['job-deposit-balance'];
@@ -127,7 +127,7 @@ describe('the chooser', () => {
       started_from: 'job-deposit-balance@1',
     });
     expect(JSON.stringify(saved.body)).not.toContain('job-deposit-balance');
-    await waitFor(() => expect(screen.getPathname()).toBe(`/exchanges/${DRAFT}`), {
+    await waitFor(() => expect(screen).toHavePathname(`/exchanges/${DRAFT}`), {
       timeout: 5000,
     });
     await screen.findByRole('header', { name: w.composer.titleFirst });
@@ -170,7 +170,7 @@ describe('the chooser', () => {
     await screen.findByRole('header', { name: w.templates.chooserTitle });
     await fireEvent.press(screen.getByRole('button', { name: w.templates.blank.name }));
     await screen.findByRole('header', { name: w.composer.titleFirst });
-    expect(screen.getPathname()).toBe('/new/blank');
+    expect(screen).toHavePathname('/new/blank');
     expect(screen.queryByText(w.templates.bandExamples)).toBeNull();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -182,7 +182,7 @@ describe('the chooser', () => {
     const [created, saved] = startedBy();
     expect(created.body).toMatchObject({ started_from: 'blank' });
     expect((saved.body as { body: { partyB: string } }).body.partyB).toBe('Ben');
-    await waitFor(() => expect(screen.getPathname()).toBe(`/exchanges/${DRAFT}`), {
+    await waitFor(() => expect(screen).toHavePathname(`/exchanges/${DRAFT}`), {
       timeout: 5000,
     });
   });

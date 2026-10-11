@@ -3,13 +3,14 @@ import {
   applyTemplate,
   failureCode,
   pendingStart,
+  type PendingStart,
   templateById,
   type IssuedInvitation,
   type RevisionSent,
 } from '@yuppers/shared';
 import * as Crypto from 'expo-crypto';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { Actions, Button, Failure, Heading, P, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
@@ -20,13 +21,15 @@ import { ExchangeView } from './ExchangeView';
 import { SendInvitation } from './SendInvitation';
 
 /** Loads one exchange, and again whenever its screen comes back to the front. */
-function useExchange(id: string) {
-  const [exchange, setExchange] = useState<Exchange | null>(null);
+function useExchange(id: string | null, pending?: PendingStart) {
+  const [exchange, setExchange] = useState<Exchange | null>(pending?.exchange ?? null);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
 
   const reload = useCallback(async () => {
+    const at = pending?.created()?.id ?? id;
+    if (!at) return null;
     try {
-      const latest = await api.getExchange(id);
+      const latest = await api.getExchange(at);
       setExchange(latest);
       setFailure(null);
       return latest;
@@ -34,13 +37,14 @@ function useExchange(id: string) {
       setFailure(failureCode(error));
       return null;
     }
-  }, [id]);
+  }, [id, pending]);
 
   // Coming back from writing a counteroffer, the exchange shows it.
   useFocusEffect(
     useCallback(() => {
-      void reload();
-    }, [reload]),
+      // A fresh start has nothing to read, and one just made is in hand.
+      if (!pending) void reload();
+    }, [reload, pending]),
   );
 
   return { exchange, setExchange, failure, reload };
@@ -72,9 +76,12 @@ function Unavailable({ failure }: { failure: ErrorCode | null }) {
  * step that sends its invitation link; anything further along is the
  * exchange view.
  */
-export function ExchangeScreen({ id }: { id: string }) {
+export function ExchangeScreen({ id, pending }: { id: string | null; pending?: PendingStart }) {
   const router = useRouter();
-  const { exchange, setExchange, failure, reload } = useExchange(id);
+  const { exchange, setExchange, failure, reload } = useExchange(id, pending);
+  // Whether the first proposal has been sent from a fresh start: the screen
+  // then stays as it is until its link has been dealt with.
+  const sentFromFresh = useRef(false);
   // The invitation token, held only while this screen stays open: it is shown
   // once and cannot be fetched again.
   const [issued, setIssued] = useState<IssuedInvitation | null>(null);
@@ -89,8 +96,14 @@ export function ExchangeScreen({ id }: { id: string }) {
   const shared = useCallback(() => {
     const at = new Date().toISOString();
     setExchange((current) => current && { ...current, invitation_shared_at: at });
-    api.markInvitationShared(id).catch(() => {});
-  }, [id, setExchange]);
+    api.markInvitationShared(exchange?.id ?? id ?? '').catch(() => {});
+  }, [id, exchange?.id, setExchange]);
+
+  // The link is dealt with: a fresh start moves to the exchange's own screen.
+  function finishSending() {
+    setSending(false);
+    if (pending && exchange) router.replace(`/exchanges/${exchange.id}`);
+  }
 
   if (!exchange) return <Unavailable failure={failure} />;
 
@@ -100,7 +113,14 @@ export function ExchangeScreen({ id }: { id: string }) {
         exchange={exchange}
         reload={reload}
         onLeave={() => router.dismissTo('/')}
+        pending={pending}
+        onCreated={(made) => {
+          setExchange((current) => (current?.id === made.id ? current : made));
+          // The exchange has its own screen; this one, which had none, gives way.
+          if (!sentFromFresh.current) router.replace(`/exchanges/${made.id}`);
+        }}
         onSent={(sent: RevisionSent, boundTo: string | null) => {
+          sentFromFresh.current = true;
           // A first proposal is not done until its link is sent: that step
           // comes next, as the screen, before the exchange itself is shown.
           const link = sent.invitation_token ? { token: sent.invitation_token, boundTo } : null;
@@ -118,8 +138,8 @@ export function ExchangeScreen({ id }: { id: string }) {
         exchange={exchange}
         issued={issued}
         onShared={shared}
-        onDone={() => setSending(false)}
-        onLater={() => setSending(false)}
+        onDone={finishSending}
+        onLater={finishSending}
       />
     );
   }
@@ -158,7 +178,6 @@ export function ReviseScreen({ id }: { id: string }) {
  * one so that Back does not come to a screen with nothing behind it.
  */
 export function NewDraftScreen({ from }: { from: string }) {
-  const router = useRouter();
   const { wording } = useI18n();
   const { account } = useSession();
   const [pending] = useState(() => {
@@ -173,15 +192,5 @@ export function NewDraftScreen({ from }: { from: string }) {
     );
     return pendingStart(api, timezone, { kind: 'template', template }, draft);
   });
-
-  return (
-    <Composer
-      exchange={pending.exchange}
-      reload={async () => pending.created()}
-      onLeave={() => router.dismissTo('/')}
-      onSent={() => {}}
-      pending={pending}
-      onCreated={(made) => router.replace(`/exchanges/${made.id}`)}
-    />
-  );
+  return <ExchangeScreen id={null} pending={pending} />;
 }

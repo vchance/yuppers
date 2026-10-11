@@ -301,19 +301,12 @@ function Editor({ exchange, reload, onSent, onLeave, pending, onCreated }: Props
     // still on its way must not put it back afterwards.
     await saver.settle();
     try {
-      if (pending) {
-        // Sent before the draft was made: make it and move to it, and the
-        // person reviews and signs there.
-        const found = await pending.ensure();
-        await api.saveDraft(found.id, latest.current);
-        saver.resume();
-        onCreated?.(found);
-        return;
-      }
+      // Sent before the draft was made: it is made now.
+      const current = pending ? await pending.ensure() : exchange;
       const result = await api.sendRevision(
-        exchange.id,
+        current.id,
         revisionToSend(
-          exchange,
+          current,
           built,
           language,
           invitationBoundTo(invitee) ?? '',
@@ -321,7 +314,7 @@ function Editor({ exchange, reload, onSent, onLeave, pending, onCreated }: Props
         ),
       );
       saver.sent();
-      await showAfterSigning(exchange.id, alsoShow);
+      await showAfterSigning(current.id, alsoShow);
       onSent(result, kind === 'first' ? invitationBoundTo(invitee) : null);
     } catch (error) {
       const code = failureCode(error);

@@ -48,6 +48,7 @@ export const ana: Account = {
   id: 'a0000000-0000-4000-8000-000000000001',
   display_name: 'Ana Ruiz',
   adult_confirmed: true,
+  notification_detail: false,
   language: 'en',
   email: 'ana@example.test',
 }
@@ -57,6 +58,7 @@ export const rita: Account = {
   id: 'a0000000-0000-4000-8000-000000000009',
   display_name: 'Rita Reviewer',
   adult_confirmed: true,
+  notification_detail: false,
   language: 'en',
   email: 'rita@example.test',
 }

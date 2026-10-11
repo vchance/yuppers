@@ -52,6 +52,9 @@ pub struct PushMessage {
     pub to: String,
     /// The text, generic by design ([`Wording::push`]).
     pub body: String,
+    /// Who it is with and what step, for someone who chose to have detail
+    /// ([`Wording::push_title`]). Absent otherwise.
+    pub title: Option<String>,
     /// What the app does when it is tapped.
     pub data: PushData,
 }
@@ -477,12 +480,13 @@ async fn prepare(
 
     // Read now, not when it was queued: the person may have changed their
     // language since, signed out of a device, or left.
-    let language: Option<String> =
-        sqlx::query_scalar("SELECT language FROM account WHERE id = $1 AND status = 'ACTIVE'")
-            .bind(recipient)
-            .fetch_optional(&mut *conn)
-            .await?;
-    let Some(language) = language else {
+    let account: Option<(String, bool)> = sqlx::query_as(
+        "SELECT language, notification_detail FROM account WHERE id = $1 AND status = 'ACTIVE'",
+    )
+    .bind(recipient)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((language, detailed)) = account else {
         return Ok(Err(Outcome::Dropped(
             "not sent: the recipient's account is closed",
         )));
@@ -528,6 +532,19 @@ async fn prepare(
     }
 
     let body = delivery.wording.push(&language);
+    // Only for someone who chose it, and only who, what step and which code.
+    let title = if detailed {
+        match super::yup_of(conn, exchange, recipient).await? {
+            Some((code, other_party)) => {
+                delivery
+                    .wording
+                    .push_title(&language, notice, &other_party, &code)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let data = PushData {
         url: format!("/exchanges/{exchange}"),
     };
@@ -537,6 +554,7 @@ async fn prepare(
             let message = PushMessage {
                 to: token,
                 body: body.clone(),
+                title: title.clone(),
                 data: data.clone(),
             };
             (device, message)

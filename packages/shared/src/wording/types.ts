@@ -307,6 +307,8 @@ export interface Wording {
     adultLabel: string
     adultConfirmed: string
     adultRequired: string
+    detailLabel: string
+    detailHint: string
     continue: string
     save: string
     saved: string

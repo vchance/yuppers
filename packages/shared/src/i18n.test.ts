@@ -41,7 +41,7 @@ test('messages are filled in by the language’s rules', () => {
 })
 
 test('an account can sign once it has a name and has confirmed being an adult', () => {
-  const account: Account = { id: 'a', display_name: '', adult_confirmed: false, language: 'en' }
+  const account: Account = { id: 'a', display_name: '', adult_confirmed: false, notification_detail: false, language: 'en' }
   expect(isComplete(account)).toBe(false)
   expect(isComplete({ ...account, display_name: 'Ana' })).toBe(false)
   expect(isComplete({ ...account, adult_confirmed: true })).toBe(false)

@@ -1083,6 +1083,10 @@ export interface components {
             /** @description A supported language tag, such as `en` or `es`. */
             language: string;
             notice?: components["schemas"]["AccountNotice"] | null;
+            /** @description The holder wants texts and phone notifications to say who a yup is
+             *     with and what step happened, with its code. Off until they turn it
+             *     on; never carries terms, amounts, dates or free text. */
+            notification_detail: boolean;
             phone?: string | null;
             /** @description When it was accepted, as RFC 3339. */
             terms_accepted_at?: string | null;
@@ -2554,6 +2558,8 @@ export interface components {
              *     unsupported language is refused.
              */
             language?: string | null;
+            /** @description Turns the detail of texts and phone notifications on or off. */
+            notification_detail?: boolean | null;
         };
         /**
          * @description The evidence behind a signature: how the signer had shown the service who

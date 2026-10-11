@@ -259,7 +259,7 @@ async fn outbox(app: &App) -> Vec<(i32, Option<String>)> {
 }
 
 /// The email a notice makes for an exchange, in a language.
-fn rendered(language: &str, notice: Notice, deal: &Deal, code: &str) -> Rendered {
+fn rendered(language: &str, notice: Notice, deal: &Deal, code: &str, other: &str) -> Rendered {
     let link = format!("{WEB_ORIGIN}/exchanges/{}", deal.exchange);
     let links = Links {
         exchange: &link,
@@ -267,12 +267,12 @@ fn rendered(language: &str, notice: Notice, deal: &Deal, code: &str) -> Rendered
     };
     Wording::embedded()
         .unwrap()
-        .email(language, notice, code, links)
+        .email(language, notice, code, other, links)
 }
 
 /// The subject a notice has for an exchange, in a language.
-fn subject(language: &str, notice: Notice, deal: &Deal, code: &str) -> String {
-    rendered(language, notice, deal, code).subject
+fn subject(language: &str, notice: Notice, deal: &Deal, code: &str, other: &str) -> String {
+    rendered(language, notice, deal, code, other).subject
 }
 
 /// Checks that a message is `multipart/alternative` with a UTF-8 plain text
@@ -339,19 +339,31 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
     let want: BTreeSet<(String, String)> = [
         (
             deal.ana.email.clone(),
-            subject("es", Notice::InvitationClaimedUnconfirmed, &deal, &code),
+            subject(
+                "es",
+                Notice::InvitationClaimedUnconfirmed,
+                &deal,
+                &code,
+                "Ben Ortiz",
+            ),
         ),
         (
             deal.ana.email.clone(),
-            subject("es", Notice::AgreementInForce, &deal, &code),
+            subject("es", Notice::AgreementInForce, &deal, &code, "Ben Ortiz"),
         ),
         (
             deal.ben.email.clone(),
-            subject("en", Notice::CounterpartyConfirmed, &deal, &code),
+            subject(
+                "en",
+                Notice::CounterpartyConfirmed,
+                &deal,
+                &code,
+                "Ana Ruiz",
+            ),
         ),
         (
             deal.ben.email.clone(),
-            subject("en", Notice::AgreementInForce, &deal, &code),
+            subject("en", Notice::AgreementInForce, &deal, &code, "Ana Ruiz"),
         ),
     ]
     .into_iter()
@@ -405,16 +417,16 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
     // Each message carries the text exactly as the wording has it, and the
     // same message as HTML beside it.
     let sent = [
-        ("es", Notice::InvitationClaimedUnconfirmed),
-        ("es", Notice::AgreementInForce),
-        ("en", Notice::CounterpartyConfirmed),
-        ("en", Notice::AgreementInForce),
+        ("es", Notice::InvitationClaimedUnconfirmed, "Ben Ortiz"),
+        ("es", Notice::AgreementInForce, "Ben Ortiz"),
+        ("en", Notice::CounterpartyConfirmed, "Ana Ruiz"),
+        ("en", Notice::AgreementInForce, "Ana Ruiz"),
     ];
     for message in &received {
         let (text, html) = alternatives(message);
         let want = sent
             .iter()
-            .map(|(language, notice)| rendered(language, *notice, &deal, &code))
+            .map(|(language, notice, other)| rendered(language, *notice, &deal, &code, other))
             .find(|want| want.subject == message.subject())
             .expect("a message that was meant to be sent");
         assert_eq!(text, want.body);

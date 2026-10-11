@@ -15,7 +15,9 @@ afterEach(stop)
 
 const PHONE = '+15552345678'
 
-const box = () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')
+// The consent box, not the account page's switches.
+const box = () =>
+  document.querySelector<HTMLInputElement>('input[type="checkbox"]:not([role="switch"])')
 const radio = (channel: string) =>
   document.querySelector<HTMLInputElement>(`input[type="radio"][value="${channel}"]`)!
 

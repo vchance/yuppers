@@ -39,6 +39,10 @@ pub struct Account {
     pub language: String,
     /// The holder has confirmed they are 18 or over. Required before signing.
     pub adult_confirmed: bool,
+    /// The holder wants texts and phone notifications to say who a yup is
+    /// with and what step happened, with its code. Off until they turn it
+    /// on; never carries terms, amounts, dates or free text.
+    pub notification_detail: bool,
     /// Something that happened to the account with no email address to tell
     /// about it: the clients show it once, until it is dismissed
     /// (`dismiss_notice` in `PATCH /v1/me`). Absent otherwise.
@@ -69,6 +73,7 @@ type AccountRow = (
     String,
     String,
     Option<OffsetDateTime>,
+    bool,
     Option<String>,
     Option<OffsetDateTime>,
     Option<String>,
@@ -76,7 +81,8 @@ type AccountRow = (
 );
 
 const ACCOUNT_COLUMNS: &str = "id, email_encrypted, phone_encrypted, display_name, language, \
-                               adult_confirmed_at, notice_kind, notice_at, terms_version, terms_accepted_at";
+                               adult_confirmed_at, notification_detail, notice_kind, notice_at, \
+                               terms_version, terms_accepted_at";
 
 /// The account as its owner sees it: one of the few places its address and
 /// number are decrypted (`crate::contact`).
@@ -88,6 +94,7 @@ fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
         display_name,
         language,
         adult,
+        notification_detail,
         kind,
         at,
         terms_version,
@@ -108,6 +115,7 @@ fn from_row(row: AccountRow) -> Result<Account, contact::Unreadable> {
         display_name,
         language,
         adult_confirmed: adult.is_some(),
+        notification_detail,
         notice,
         terms_version,
         terms_accepted_at: terms_accepted_at.map(crate::exchanges::dto::rfc3339),
@@ -149,6 +157,8 @@ pub struct UpdateAccount {
     pub language: Option<String>,
     /// Only `true` is meaningful: a confirmation cannot be taken back.
     pub adult_confirmed: Option<bool>,
+    /// Turns the detail of texts and phone notifications on or off.
+    pub notification_detail: Option<bool>,
     /// `true` once the account's `notice` has been shown.
     pub dismiss_notice: Option<bool>,
 }
@@ -187,6 +197,7 @@ pub async fn update_me(
              language = coalesce($3, language),
              adult_confirmed_at = CASE WHEN $4 THEN coalesce(adult_confirmed_at, now())
                                        ELSE adult_confirmed_at END,
+             notification_detail = coalesce($6, notification_detail),
              notice_kind = CASE WHEN $5 THEN NULL ELSE notice_kind END,
              notice_at = CASE WHEN $5 THEN NULL ELSE notice_at END
          WHERE id = $1 AND status = 'ACTIVE'",
@@ -196,6 +207,7 @@ pub async fn update_me(
     .bind(language)
     .bind(update.adult_confirmed == Some(true))
     .bind(update.dismiss_notice == Some(true))
+    .bind(update.notification_detail)
     .execute(&state.db)
     .await?
     .rows_affected();

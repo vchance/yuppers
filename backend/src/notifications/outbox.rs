@@ -554,12 +554,11 @@ async fn prepare(
     let Some(notice) = payload["notice"].as_str().and_then(Notice::parse) else {
         return Ok(Err(unreadable()));
     };
-    let code: Option<String> =
-        sqlx::query_scalar("SELECT display_code FROM exchange WHERE id = $1")
-            .bind(row.exchange)
-            .fetch_optional(&mut *conn)
-            .await?;
-    let (Some(exchange), Some(code)) = (row.exchange, code) else {
+    let yup = match row.exchange {
+        Some(exchange) => super::yup_of(conn, exchange, row.recipient).await?,
+        None => None,
+    };
+    let (Some(exchange), Some((code, other_party))) = (row.exchange, yup) else {
         return Ok(Err(Attempt::Failed("no such exchange".to_owned())));
     };
 
@@ -623,7 +622,9 @@ async fn prepare(
         exchange: &link,
         record: &format!("{link}/record"),
     };
-    let rendered = delivery.wording.email(&language, notice, &code, links);
+    let rendered = delivery
+        .wording
+        .email(&language, notice, &code, &other_party, links);
     Ok(Ok(Email {
         to,
         subject: rendered.subject,

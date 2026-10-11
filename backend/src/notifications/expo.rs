@@ -137,7 +137,7 @@ pub fn send_body(messages: &[PushMessage]) -> Value {
         messages
             .iter()
             .map(|message| {
-                json!({
+                let mut item = json!({
                     "to": message.to,
                     "body": message.body,
                     "data": message.data,
@@ -146,7 +146,11 @@ pub fn send_body(messages: &[PushMessage]) -> Value {
                     // are messages a person sees, few and far between.
                     "priority": "high",
                     "channelId": ANDROID_CHANNEL,
-                })
+                });
+                if let Some(title) = &message.title {
+                    item["title"] = json!(title);
+                }
+                item
             })
             .collect(),
     )

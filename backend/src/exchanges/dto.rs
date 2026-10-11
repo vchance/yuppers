@@ -206,6 +206,11 @@ pub struct Consent {
 pub struct CreateExchange {
     /// IANA timezone name, such as `America/Chicago`. Due dates are read in it.
     pub timezone: String,
+    /// How the author began: a template and its version (`job-deposit-balance@1`),
+    /// `blank` or `copy`. Kept once for aggregate counts; never returned.
+    /// Clients that send nothing leave it unset.
+    #[serde(default)]
+    pub started_from: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

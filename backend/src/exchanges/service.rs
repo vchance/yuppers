@@ -28,6 +28,7 @@ use crate::domain::invitation;
 use crate::domain::revision::{ContributionId, Kind, Revision, RevisionId, Settlement, Slot};
 use crate::domain::risk::{Tier, required_tier};
 use crate::error::{ApiError, ErrorCode, Redacted};
+use crate::funnel::StartedFrom;
 use crate::http::Settings;
 use crate::http::extract::Session;
 use crate::languages;
@@ -524,19 +525,24 @@ pub async fn create(
     if !known_timezone(&mut tx, &body.timezone).await? {
         return Err(ErrorCode::InvalidRequest.into());
     }
+    let started_from = match body.started_from.as_deref() {
+        None => None,
+        Some(text) => Some(StartedFrom::parse(text).ok_or(ErrorCode::InvalidRequest)?),
+    };
 
     // A display code is short, so a clash is possible; try again with another.
     let mut id = None;
     for _ in 0..5 {
         id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO exchange (display_code, timezone, created_by)
-             VALUES ($1, $2, $3)
+            "INSERT INTO exchange (display_code, timezone, created_by, started_from)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (display_code) DO NOTHING
              RETURNING id",
         )
         .bind(display_code())
         .bind(&body.timezone)
         .bind(session.account_id)
+        .bind(started_from.as_ref().map(StartedFrom::as_str))
         .fetch_optional(&mut *tx)
         .await?;
         if id.is_some() {
@@ -557,6 +563,9 @@ pub async fn create(
 
     let view = view(&mut tx, rules, id, session.account_id).await?;
     tx.commit().await?;
+    if let Some(started_from) = &started_from {
+        crate::funnel::funnel().yup_started(started_from.entry());
+    }
     Ok(view)
 }
 

@@ -25,6 +25,8 @@ import {
   revisionToSend,
   startingDraft,
   statusesOf,
+  swapSides,
+  templateStartedFrom,
   todayIn,
   dueDateZone,
   timeZoneCity,
@@ -69,7 +71,8 @@ import {
   TextField,
   Written,
 } from '../components/ui';
-import { useReduceMotion } from '../lib/accessibility';
+import { StartingPoint, SwapSides } from '../components/StartingPoint';
+import { announce, useReduceMotion } from '../lib/accessibility';
 import { useI18n, useSession } from '../lib/context';
 import { deviceTimezone } from '../lib/time-zone';
 import { showAfterSigning } from '../lib/payments';
@@ -137,6 +140,10 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  // The common agreement this draft was started from, if this session started it
+  // from one, and whether its hint is open: until the first edit.
+  const template = kind === 'first' ? templateStartedFrom(exchange.id) : undefined;
+  const [bandOpen, setBandOpen] = useState(true);
   const [discarding, setDiscarding] = useState(false);
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null);
   // Showing payment options on this yup too, once the terms are sent.
@@ -178,6 +185,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   );
 
   function edit(next: Draft) {
+    // The hint above the items folds away at the first edit.
+    setBandOpen(false);
     latest.current = next;
     setDraft(next);
     saver.changed(next);
@@ -363,6 +372,13 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
       <FieldErrorsAnnounced value={false}>
         <Heading>{title}</Heading>
         <P>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</P>
+        {template && (
+          <StartingPoint
+            template={template}
+            open={bandOpen}
+            onToggle={() => setBandOpen((open) => !open)}
+          />
+        )}
         {kind === 'amend' && (
           <>
             <P>{w.effectsSteer}</P>
@@ -483,6 +499,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                 error={errorFor('description', item.id)}
                 multiline
                 disabled={fixed}
+                placeholder={item.example?.description}
                 defaultValue={item.description}
                 onChangeText={(description) => changeItem(item.id, { description })}
               />
@@ -513,6 +530,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                     label={w.quantityLabel}
                     error={errorFor('quantity', item.id)}
                     disabled={fixed}
+                    placeholder={item.example?.quantity}
                     value={item.quantity}
                     onChange={(quantity) => changeItem(item.id, { quantity })}
                   />
@@ -521,6 +539,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                     maxLength={40}
                     disabled={fixed}
                     autoCapitalize="none"
+                    placeholder={item.example?.unit}
                     defaultValue={item.unit}
                     onChangeText={(unit) => changeItem(item.id, { unit })}
                   />
@@ -565,6 +584,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                 label={w.criteriaLabel}
                 multiline
                 disabled={fixed}
+                placeholder={item.example?.criteria}
                 defaultValue={item.criteria}
                 onChangeText={(criteria) => changeItem(item.id, { criteria })}
               />
@@ -613,6 +633,14 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
           <Button label={w.addYours} onPress={() => addItem(you)} />
           <Button label={w.addTheirs} onPress={() => addItem(other)} />
         </Actions>
+        {kind === 'first' && draft.contributions.length > 0 && (
+          <SwapSides
+            onSwap={() => {
+              edit(swapSides(latest.current));
+              announce(wording.templates.swapped);
+            }}
+          />
+        )}
 
         <TextField
           label={w.noteLabel}
@@ -697,6 +725,8 @@ function Effects({ effects }: { effects: readonly ItemEffect[] }) {
 }
 
 interface DecimalFieldProps {
+  /** Grey text for an empty field: an example, never a value. */
+  placeholder?: string;
   label: string;
   error: string | null;
   disabled: boolean;
@@ -711,7 +741,15 @@ interface DecimalFieldProps {
  * stays on screen as typed; the working copy gets the plain form, or `null`
  * while it cannot be read as a number.
  */
-function DecimalField({ label, error, disabled, required, value, onChange }: DecimalFieldProps) {
+function DecimalField({
+  label,
+  error,
+  disabled,
+  required,
+  placeholder,
+  value,
+  onChange,
+}: DecimalFieldProps) {
   const { language } = useI18n();
   const [text, setText] = useState(() => (value ? decimalForInput(value, language) : ''));
   return (
@@ -720,6 +758,7 @@ function DecimalField({ label, error, disabled, required, value, onChange }: Dec
       error={error}
       required={required}
       disabled={disabled}
+      placeholder={placeholder}
       inputMode="decimal"
       autoComplete="off"
       value={text}

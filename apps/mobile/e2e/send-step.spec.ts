@@ -31,6 +31,7 @@ async function proposeToDana(ben: Person): Promise<string> {
   })
   await signUp(ben)
   await button(page, en.home.start).click()
+  await button(page, en.templates.blank.name).click()
   await expect(title(page, en.composer.titleFirst)).toBeVisible()
   await page.getByLabel(en.composer.otherName, { exact: true }).fill('Dana')
   await page.getByLabel(en.invitationLink.forLabel, { exact: true }).fill(PHONE)

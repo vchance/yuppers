@@ -223,17 +223,33 @@
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0, "color": { "mode": "fixed", "fixedColor": "#3987e5" } }, "overrides": [] }
     },
     {
+      "type": "bargauge",
+      "title": "Started from",
+      "description": "Yups started, by entry: a common agreement, blank or copy. Counts only; nothing about anyone.",
+      "id": 26,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{entry}}", "expr": "sum by (entry) (increase(yuppers_entries_started_total{deployment_environment=~\"$environment\"}[$__range]))" }
+      ],
+      "options": {
+        "orientation": "horizontal", "displayMode": "basic", "showUnfilled": true, "valueMode": "color", "namePlacement": "left", "sizing": "auto", "minVizWidth": 8, "minVizHeight": 16,
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0, "color": { "mode": "fixed", "fixedColor": "#3987e5" } }, "overrides": [] }
+    },
+    {
       "type": "row",
       "title": "Requests",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 },
       "id": 101
     },
     {
       "type": "timeseries",
       "title": "Requests per second, by status class",
       "id": 11,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (rate(yuppers_http_requests_total{deployment_environment=~\"$environment\"}[$__rate_interval]))" }
@@ -258,7 +274,7 @@
       "title": "Latency, p50 / p95 / p99",
       "description": "Over every route. The 95th percentile above 500 ms for a route is worth a look (docs/operations.md, \"What to watch\").",
       "id": 12,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(yuppers_http_request_duration_seconds_bucket{deployment_environment=~\"$environment\"}[$__rate_interval])))" },
@@ -282,7 +298,7 @@
       "type": "stat",
       "title": "5xx, share of requests (5 min)",
       "id": 13,
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 30 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 38 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "sum(rate(yuppers_http_requests_total{deployment_environment=~\"$environment\", status=\"5xx\"}[5m])) / sum(rate(yuppers_http_requests_total{deployment_environment=~\"$environment\"}[5m]))" }
@@ -301,7 +317,7 @@
       "title": "Worker: seconds since its last pass",
       "description": "Above 60 the worker is down or stuck (docs/operations.md, \"When the worker is down\").",
       "id": 14,
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 30 },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 38 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "time() - max(yuppers_worker_last_pass_timestamp_seconds{deployment_environment=~\"$environment\"})" }
@@ -319,7 +335,7 @@
       "type": "stat",
       "title": "Outbox: oldest pending, age",
       "id": 15,
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 30 },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 38 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "max(yuppers_outbox_oldest_pending_age_seconds{deployment_environment=~\"$environment\"})" }
@@ -337,7 +353,7 @@
       "type": "stat",
       "title": "Outbox: given up",
       "id": 16,
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 30 },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 38 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "max(yuppers_outbox_messages{deployment_environment=~\"$environment\", state=\"given_up\"})" }
@@ -356,7 +372,7 @@
       "title": "Reports waiting for review",
       "description": "Every report is reviewed within 24 hours; the oldest's age is in the tooltip of yuppers_reports_oldest_open_age_seconds.",
       "id": 17,
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 30 },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 38 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "max(yuppers_reports_open{deployment_environment=~\"$environment\"})" }
@@ -375,7 +391,7 @@
       "title": "Telemetry: records dropped",
       "description": "Spans and log records not exported over the range: the collector refused them or the buffer was full.",
       "id": 18,
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 30 },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 38 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "sum(increase(yuppers_telemetry_dropped_total{deployment_environment=~\"$environment\"}[$__range]))" }
@@ -393,7 +409,7 @@
       "type": "table",
       "title": "Routes: requests and p95 latency over the range",
       "id": 19,
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 34 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 42 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "format": "table", "instant": true, "expr": "sum by (route, method) (increase(yuppers_http_requests_total{deployment_environment=~\"$environment\"}[$__range]))" },
@@ -425,7 +441,7 @@
       "type": "timeseries",
       "title": "Database pool: connections in use, against the limit",
       "id": 20,
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 34 },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 42 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "legendFormat": "{{service_name}} in use", "expr": "max by (service_name) (yuppers_db_pool_in_use{deployment_environment=~\"$environment\"})" },
@@ -448,14 +464,14 @@
       "type": "row",
       "title": "Messages",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 },
       "id": 102
     },
     {
       "type": "timeseries",
       "title": "Sent per hour: codes, texts, emails",
       "id": 21,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "legendFormat": "codes by email", "expr": "sum(increase(yuppers_codes_sent_total{deployment_environment=~\"$environment\", channel=\"email\"}[1h]))" },
@@ -482,7 +498,7 @@
       "title": "Text messages this hour, against the cap",
       "description": "Codes by Twilio Verify and update texts together; each is paid for (docs/operations.md, \"Text messages, which cost money\").",
       "id": 22,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "legendFormat": "{{result}}", "expr": "max by (result) (yuppers_sms_codes_this_hour{deployment_environment=~\"$environment\"})" },
@@ -503,7 +519,7 @@
     },
     {
       "type": "row", "title": "Logs", "id": 103, "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 },
       "panels": []
     },
     {
@@ -511,7 +527,7 @@
       "title": "Log lines per minute, by level (without readiness probes)",
       "description": "Every request writes one line at INFO; WARN and ERROR are the ones to read. Render's readiness probes are left out.",
       "id": 23,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 53 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 61 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range", "legendFormat": "{{detected_level}}",
@@ -532,7 +548,7 @@
       "title": "Warnings and errors",
       "description": "Every line at WARN or above, newest first. Click a line for its fields: request id, route, status, trace id.",
       "id": 24,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 61 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range",
@@ -545,7 +561,7 @@
       "title": "Latest lines (without readiness probes)",
       "description": "Everything the api and the worker log, newest first, with the request's route, status and latency when there is one. Click a line for all its fields; the trace id opens the trace in Tempo.",
       "id": 25,
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 61 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 69 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range",

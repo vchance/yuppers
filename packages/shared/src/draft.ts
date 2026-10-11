@@ -22,6 +22,19 @@ export type DraftDue =
   | { kind: 'DATE'; date: string }
   | { kind: 'AFTER_CONTRIBUTION'; contribution: string }
 
+/**
+ * Grey text shown in an empty field of an item to give an idea of what goes
+ * there (DESIGN.md §4.4). It is never a value: a field left at its example is
+ * empty, and nothing here is sent, signed or checked. It is kept in the
+ * working copy so that it is still there when the person comes back.
+ */
+export interface ItemExample {
+  description?: string
+  criteria?: string
+  quantity?: string
+  unit?: string
+}
+
 export interface DraftContribution {
   /** Stable for the life of the exchange; chosen here for a new one. */
   id: string
@@ -36,6 +49,8 @@ export interface DraftContribution {
   required: boolean
   /** Money only. A plain decimal in major units, as `quantity`. */
   amount: string | null
+  /** Grey examples for the empty fields, from a template. Not part of the terms. */
+  example?: ItemExample
 }
 
 export interface Draft {
@@ -125,6 +140,16 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+function readExample(value: unknown): ItemExample | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const found = value as Record<string, unknown>
+  const example: ItemExample = {}
+  for (const key of ['description', 'criteria', 'quantity', 'unit'] as const) {
+    if (typeof found[key] === 'string' && found[key] !== '') example[key] = found[key]
+  }
+  return Object.keys(example).length > 0 ? example : undefined
+}
+
 function readDue(value: unknown): DraftDue {
   const due = (value ?? {}) as Record<string, unknown>
   if (due.kind === 'DATE') return { kind: 'DATE', date: text(due.date) }
@@ -149,6 +174,7 @@ export function readDraft(stored: unknown): Draft | null {
     if (typeof entry !== 'object' || entry === null) return null
     const item = entry as Record<string, unknown>
     if (typeof item.id !== 'string' || item.id === '') return null
+    const example = readExample(item.example)
     contributions.push({
       id: item.id,
       from: item.from === 'B' ? 'B' : 'A',
@@ -160,6 +186,7 @@ export function readDraft(stored: unknown): Draft | null {
       criteria: text(item.criteria),
       required: item.required !== false,
       amount: text(item.amount),
+      ...(example ? { example } : {}),
     })
   }
 

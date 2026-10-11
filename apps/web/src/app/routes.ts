@@ -1,5 +1,7 @@
 import {
+  defaultLanguage,
   helpPath,
+  languages,
   invitationPath,
   legalPath,
   legalPathOf,
@@ -18,6 +20,13 @@ export { invitationToken } from '@yuppers/shared'
 export type Route =
   | { name: 'home' }
   | { name: 'account' }
+  /** Starting a yup: the common agreements, the blank form, or a copy of an earlier yup. */
+  | { name: 'start' }
+  /**
+   * The sample yup, readable signed out. `language` is the one the address
+   * names (`/es/example`), or `null` for the reader's own.
+   */
+  | { name: 'example'; language: string | null }
   /** The account's payment options, each added, changed or removed on its own. */
   | { name: 'payments' }
   /** `language` is the sender's: it chose which entry page the link previews with, nothing more. */
@@ -44,6 +53,7 @@ const EXCHANGE = new RegExp(`^/exchanges/(${UUID})$`)
 const REVISE = new RegExp(`^/exchanges/(${UUID})/revise$`)
 const RECORD = new RegExp(`^/exchanges/(${UUID})/record$`)
 const INVITATION = new RegExp(`^/(${LANGUAGE_TAG})/i$`)
+const EXAMPLE = /^(?:\/([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*))?\/example$/
 const HELP_TOPIC = /^\/help\/([a-z0-9-]+)$/
 const STAFF_REPORT = new RegExp(`^/staff/reports/(${UUID})$`)
 
@@ -52,6 +62,14 @@ export function matchRoute(pathname: string): Route {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
   if (path === '/' || path === '') return { name: 'home' }
   if (path === '/account') return { name: 'account' }
+  if (path === '/new') return { name: 'start' }
+  const example = EXAMPLE.exec(path)
+  if (example) {
+    const wanted = example[1]?.toLowerCase()
+    if (wanted === undefined) return { name: 'example', language: null }
+    const language = languages.find((info) => info.code.toLowerCase() === wanted)?.code
+    if (language) return { name: 'example', language }
+  }
   if (path === '/account/payments') return { name: 'payments' }
   if (path === '/help') return { name: 'help', topic: null }
   const help = HELP_TOPIC.exec(path)
@@ -76,6 +94,10 @@ export function matchRoute(pathname: string): Route {
 export const paths = {
   home: '/',
   account: '/account',
+  start: '/new',
+  /** The sample yup: `/example` in the default language, `/{language}/example` in the others. */
+  example: (language: string = defaultLanguage) =>
+    language === defaultLanguage ? '/example' : `/${language}/example`,
   payments: '/account/payments',
   exchange: (id: string) => `/exchanges/${id}`,
   revise: (id: string) => `/exchanges/${id}/revise`,

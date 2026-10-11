@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture};
-use yuppers_backend::funnel::funnel;
+use yuppers_backend::funnel::{self, funnel};
 use yuppers_backend::metrics::Text;
 use yuppers_backend::otel::{self, Config};
 use yuppers_backend::telemetry::{self, LogFormat};
@@ -1023,6 +1023,18 @@ async fn what_is_exported_carries_the_resource_the_headers_and_nothing_personal(
     assert_eq!(after.codes_email, before.codes_email + 2);
     assert_eq!(after.codes_phone, before.codes_phone + 1);
     assert_eq!(after.yups_created, before.yups_created + 1);
+    // The deal's draft said nothing of where it was started from: its steps
+    // count under `unknown`, and nothing else by entry moves.
+    let unknown = funnel::Entry::Unknown as usize;
+    assert_eq!(
+        after.entries_sent[unknown],
+        before.entries_sent[unknown] + 1
+    );
+    assert_eq!(
+        after.entries_in_force[unknown],
+        before.entries_in_force[unknown] + 1
+    );
+    assert_eq!(after.entries_started, before.entries_started);
     assert_eq!(after.invitations_shared, before.invitations_shared + 1);
     assert_eq!(after.invitations_claimed, before.invitations_claimed + 1);
     assert_eq!(after.agreements_in_force, before.agreements_in_force + 1);

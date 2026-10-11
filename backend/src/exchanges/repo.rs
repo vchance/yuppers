@@ -692,6 +692,20 @@ pub async fn persist(
     // this counts one step too many, which is rare and does not matter to
     // a funnel.
     crate::funnel::funnel().events(before.exchange.state, &decision.events);
+    // The same steps by what the yup was started from, which is asked of the
+    // store only when one of them happened.
+    if crate::funnel::Funnel::counts_by_entry(before.exchange.state, &decision.events) {
+        let started_from: Option<String> =
+            sqlx::query_scalar("SELECT started_from FROM exchange WHERE id = $1")
+                .bind(before.id)
+                .fetch_one(&mut *conn)
+                .await?;
+        let entry = started_from
+            .as_deref()
+            .and_then(crate::funnel::StartedFrom::parse)
+            .map_or(crate::funnel::Entry::Unknown, |from| from.entry());
+        crate::funnel::funnel().events_by_entry(entry, before.exchange.state, &decision.events);
+    }
     Ok(())
 }
 

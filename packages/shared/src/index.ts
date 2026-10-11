@@ -95,6 +95,7 @@ export type {
   Built,
   Draft,
   DraftContribution,
+  ItemExample,
   DraftDue,
   Problem,
   ProblemCode,
@@ -394,3 +395,29 @@ export {
   useSignInChannels,
 } from './sign-in'
 export type { SignInApi, SignInChannel, SignInChannels, SignInText } from './sign-in'
+
+export {
+  applyTemplate,
+  draftFromCopy,
+  exampleOf,
+  isExampleOnly,
+  startedFrom,
+  swapSides,
+  templateById,
+  TEMPLATES,
+  type StartChoice,
+  type Template,
+  type TemplateDue,
+  type TemplateId,
+  type TemplateItem,
+  type TemplateWords,
+} from './templates'
+export { beginYup, templateStartedFrom } from './start'
+export {
+  SAMPLE_CURRENCY,
+  SAMPLE_DUE_IN_DAYS,
+  SAMPLE_IDS,
+  SAMPLE_SIGNED_DAYS_AGO,
+  sampleYup,
+  type Sample,
+} from './sample'

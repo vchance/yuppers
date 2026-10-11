@@ -460,6 +460,8 @@ jobs:
           SMS_CODE_DELIVERY: log
           SMS_MAX_PER_HOUR: "1000000"
           SMS_MAX_PER_PREFIX_PER_HOUR: "1000000"
+          # A text follows its change at once (see textMessages in env.ts).
+          COALESCE_HOLD_SECONDS: "0"
         run: |
           mkdir -p "$(dirname "$E2E_API_LOG")"
           nohup backend/target/debug/api > "$E2E_API_LOG" 2>&1 &

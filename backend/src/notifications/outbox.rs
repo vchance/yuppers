@@ -42,7 +42,7 @@ use super::wording::{Links, Wording};
 use super::{Email, EmailSender, KeyConflict, Outage, Undeliverable};
 use crate::combine;
 use crate::contact::{self, Field};
-use crate::domain::notification::{COALESCE_HOLD, COALESCE_WINDOW, Notice, PROGRESS_NOTICE_WINDOW};
+use crate::domain::notification::{COALESCE_WINDOW, Notice, PROGRESS_NOTICE_WINDOW, coalesce_hold};
 use crate::domain::reminder;
 use crate::domain::revision::{ContributionId, Slot};
 use crate::error::Redacted;
@@ -160,7 +160,7 @@ pub struct Queued {
 /// notice for the same person if the same party has done nothing but this on
 /// the yup since, within [`COALESCE_WINDOW`] of the message's first; that
 /// message then says how many items. Such a message waits
-/// [`COALESCE_HOLD`] for the next event before it may be sent. A message
+/// [`coalesce_hold`] for the next event before it may be sent. A message
 /// that has been sent is not recalled: a burst never makes more messages
 /// than its events would have.
 ///
@@ -191,7 +191,11 @@ pub async fn enqueue(conn: &mut PgConnection, queued: Queued) -> Result<(), sqlx
     if count > 1 {
         payload["count"] = json!(count);
     }
-    let hold = if burst { COALESCE_HOLD } else { Duration::ZERO };
+    let hold = if burst {
+        coalesce_hold()
+    } else {
+        Duration::ZERO
+    };
     insert(
         conn,
         exchange,
@@ -272,7 +276,7 @@ async fn join_burst(
     .bind(queued.notice.as_str())
     .bind(queued.event_sequence)
     .bind(count)
-    .bind(COALESCE_HOLD.as_seconds_f64())
+    .bind(coalesce_hold().as_seconds_f64())
     .bind(COALESCE_WINDOW.as_seconds_f64())
     .bind(actor.as_str())
     .fetch_all(conn)

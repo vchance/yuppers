@@ -36,6 +36,8 @@ async fn app() -> (App, MutexGuard<'static, ()>) {
         },
     )
     .await;
+    // The hold the service gives a burst, which the shared start leaves off.
+    yuppers_backend::domain::notification::set_coalesce_hold(time::Duration::seconds(60));
     sqlx::query("DELETE FROM outbox")
         .execute(&app.db)
         .await

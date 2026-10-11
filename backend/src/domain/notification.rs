@@ -8,6 +8,8 @@
 //! Reminders are messages too, but no decision causes them:
 //! `domain::reminder` says when one is due.
 
+use std::sync::atomic::{AtomicI64, Ordering};
+
 use time::Duration;
 
 use super::contribution::Action;
@@ -204,9 +206,29 @@ pub const COALESCE_WINDOW: Duration = Duration::minutes(10);
 
 /// How long a coalescing message waits for the next event of its burst before
 /// it may be sent, each event pushing it back, but never beyond
-/// [`COALESCE_WINDOW`] from the first. Not in the design: a message that
-/// went out at once could not say how many items a burst held. A placeholder.
-pub const COALESCE_HOLD: Duration = Duration::seconds(60);
+/// [`COALESCE_WINDOW`] from the first. Not in the design: a message that went
+/// out at once could not say how many items a burst held. A placeholder of 60
+/// seconds, which `COALESCE_HOLD_SECONDS` changes (the end-to-end suites set
+/// it to 0, so that a text follows its change at once).
+pub fn coalesce_hold() -> Duration {
+    let set = HOLD.load(Ordering::Relaxed);
+    if set >= 0 {
+        return Duration::seconds(set);
+    }
+    let seconds = std::env::var("COALESCE_HOLD_SECONDS")
+        .ok()
+        .and_then(|text| text.trim().parse::<i64>().ok())
+        .filter(|seconds| (0..=600).contains(seconds))
+        .unwrap_or(60);
+    Duration::seconds(seconds)
+}
+
+/// Fixes the hold for this process, over the environment's.
+pub fn set_coalesce_hold(hold: Duration) {
+    HOLD.store(hold.whole_seconds().clamp(0, 600), Ordering::Relaxed);
+}
+
+static HOLD: AtomicI64 = AtomicI64::new(-1);
 
 /// How long after a progress-note notification a recipient is told of no
 /// further note on the same yup (DESIGN.md §7.2: at most one per recipient

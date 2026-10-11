@@ -398,6 +398,8 @@ impl App {
         messaging: (AuthRules, bool),
         wallet: Option<Arc<Wallet>>,
     ) -> Self {
+        // A burst waits to be counted in production; here a message is due at once.
+        yuppers_backend::domain::notification::set_coalesce_hold(time::Duration::ZERO);
         Self::start_full(
             database_name,
             rules,

@@ -64,6 +64,8 @@ export const signInLimits = {
 export const textMessages = {
   SMS_DELIVERY: 'log',
   SMS_CODE_DELIVERY: 'log',
+  // A burst of claims is held a minute in production to be told as one text; here a text follows its change.
+  COALESCE_HOLD_SECONDS: '0',
   SMS_MAX_PER_HOUR: '1000000',
   SMS_MAX_PER_PREFIX_PER_HOUR: '1000000',
 }

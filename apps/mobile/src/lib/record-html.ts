@@ -82,6 +82,7 @@ export function recordHtml(
   for (const side of summary.sides) {
     out.push(heading(3, side.heading));
     if (side.nothing) out.push(p(side.nothing));
+    for (const line of side.counts) out.push(p(line));
     for (const item of side.items) {
       out.push('<div class="entry">', written(item.description));
       for (const detail of item.details) out.push(p(detail));

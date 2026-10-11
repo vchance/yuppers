@@ -14,6 +14,7 @@ import {
   type DraftDue,
   type Problem,
 } from './draft'
+import { liveGroups } from './instalments'
 import { formatMessage } from './message'
 import { invitationOptions } from './share'
 import type { Wording } from './wording/types'
@@ -136,7 +137,8 @@ export interface SplitsUsed {
 }
 
 export function splitsUsed(draft: Draft): SplitsUsed {
-  const groups = draft.splits ?? []
+  // A split whose items were all removed since is not one the terms were written with.
+  const groups = liveGroups(draft.contributions, draft.splits ?? [])
   return {
     instalments: groups.filter((group) => group.kind === 'INSTALMENTS').length,
     stages: groups.filter((group) => group.kind === 'STAGES').length,

@@ -6,11 +6,17 @@ import {
   invitationForProblem,
   isInvitationSpent,
   isUnconfirmedClaimant,
+  MARK_REST_PANEL,
+  markRestCommand,
   moneyIds,
   NAMED_INVITATION,
   otherPartyName,
   paymentOptionsKey,
+  progressNotesOf,
   remainingRequired,
+  restToMarkPaid,
+  seriesInExchange,
+  seriesLine,
   sendReminder,
   statusesOf,
   troublePanel,
@@ -45,10 +51,10 @@ import { TermsView } from '../components/TermsView'
 import { WalletButton } from '../components/WalletButton'
 import { Failure, Notice, PageHeading, WithName, Written } from '../components/ui'
 import { restoreFocus, useActions, type Actions } from '../lib/actions'
-import { useAnnouncement } from '../lib/announce'
+import { announce, useAnnouncement } from '../lib/announce'
 import { focusLost } from '../lib/focus'
 import { showAfterSigning } from '../lib/payments'
-import { api, failureCode, type RevisionView } from '../lib/api'
+import { api, failureCode, type RevisionView, type Slot } from '../lib/api'
 import { ClaimantWaiting, ConfirmClaimant } from './Claimant'
 import { Ending } from './Ending'
 import { ExchangeSafety } from './ExchangeSafety'
@@ -91,7 +97,8 @@ interface Props {
  * was wrong.
  */
 export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, reload }: Props) {
-  const { wording, fmt } = useI18n()
+  const i18n = useI18n()
+  const { wording, fmt } = i18n
   const w = wording.exchange
   const actions = useActions(exchange, onChange, reload)
 
@@ -176,6 +183,11 @@ export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, r
   const statuses = statusesOf(exchange)
   const since = new Map(exchange.contributions.map((item) => [item.id, item.since ?? null]))
   const remaining = remainingRequired(exchange)
+  const series = seriesInExchange(exchange)
+  const rest = restToMarkPaid(exchange)
+  // A party's name as the agreement writes it, in a sentence about them.
+  const nameOf = (slot: Slot) =>
+    (slot === 'A' ? inForce?.terms.party_a_name : inForce?.terms.party_b_name) || wording.party.other
 
   return (
     <>
@@ -255,6 +267,19 @@ export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, r
             <p className="agreed-text">{w.agreementSigned}</p>
           </div>
           {active && remaining > 0 && <p>{fmt(w.remaining, { count: remaining })}</p>}
+          {/* Instalments and stages are read as counts in words (DESIGN.md §7.1, §7.2). */}
+          {series.length > 0 && (
+            <ul className="plain series">
+              {series.map((line) => (
+                <li key={`${line.kind}-${line.from}`}>
+                  {seriesLine(line, nameOf(line.from), i18n)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {active && rest.length > 0 && (
+            <MarkRest ids={rest} otherName={otherName} actions={actions} />
+          )}
           {active && <WalletButton exchange={exchange} />}
           <TermsView
             terms={inForce.terms}
@@ -264,6 +289,8 @@ export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, r
             statuses={statuses}
             footer={(contribution) => (
               <Fulfillment
+                notes={progressNotesOf(history.page?.events ?? [], contribution.id)}
+                names={{ A: inForce.terms.party_a_name, B: inForce.terms.party_b_name }}
                 contribution={contribution}
                 status={statuses.get(contribution.id) ?? 'PENDING'}
                 since={since.get(contribution.id) ?? null}
@@ -335,6 +362,62 @@ export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, r
             {w.refresh}
           </button>
         </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * "Mark the rest as paid" (DESIGN.md §7.1): one record of paying for each of
+ * the payments still to pay, sent as one command. Each payment is confirmed
+ * by the payee on its own.
+ */
+function MarkRest({
+  ids,
+  otherName,
+  actions,
+}: {
+  ids: readonly string[]
+  otherName: string
+  actions: Actions
+}) {
+  const { wording, fmt } = useI18n()
+  const w = wording.exchange.markRest
+  const opened = actions.panel === MARK_REST_PANEL
+  return (
+    <>
+      <div className="actions">
+        <button
+          type="button"
+          aria-expanded={opened}
+          disabled={actions.busy}
+          onClick={() => actions.open(MARK_REST_PANEL)}
+        >
+          {w.button}
+        </button>
+      </div>
+      {opened && (
+        <Panel title={w.button}>
+          <p>{fmt(w.text, { name: otherName, count: ids.length })}</p>
+          <Failure code={actions.failure} />
+          <div className="actions">
+            <button
+              type="button"
+              className="primary"
+              disabled={actions.busy}
+              onClick={() =>
+                void actions.run(markRestCommand(ids)).then((sent) => {
+                  if (sent) announce(fmt(w.done, { count: ids.length }))
+                })
+              }
+            >
+              {fmt(w.confirm, { count: ids.length })}
+            </button>
+            <button type="button" disabled={actions.busy} onClick={actions.close}>
+              {wording.common.cancel}
+            </button>
+          </div>
+        </Panel>
       )}
     </>
   )

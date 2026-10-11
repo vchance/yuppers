@@ -454,7 +454,9 @@ export { seriesChips, seriesInExchange, seriesLine, seriesOf } from './series'
 export type { Series, SeriesCounts, SeriesItem, SeriesKind } from './series'
 export {
   canNoteProgress,
+  MARK_REST_PANEL,
   markRestCommand,
+  progressPanel,
   PROGRESS_NOTE_MAX_CHARS,
   PROGRESS_NOTES_PER_ITEM,
   progressCommand,

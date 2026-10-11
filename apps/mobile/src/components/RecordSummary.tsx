@@ -32,6 +32,9 @@ export function RecordSummary({ record }: { record: RecordDocument }) {
         <View key={side.slot} style={styles.side}>
           <Heading level={3}>{side.heading}</Heading>
           {side.nothing ? <P>{side.nothing}</P> : null}
+          {side.counts.map((line) => (
+            <P key={line}>{line}</P>
+          ))}
           {side.items.length > 0 && (
             <View role="list" style={styles.list}>
               {side.items.map((item) => (

@@ -11,6 +11,7 @@ import {
   INVITATION,
   PAYMENT,
   REPAIR,
+  seriesExchange,
   signInOnScreen,
   TOKEN,
   ana,
@@ -519,6 +520,39 @@ describe('the exchange', () => {
     await fireEvent.press(screen.getAllByRole('button', { name: w.exchange.moves.CLAIM }).at(-1)!);
     await screen.findByText(w.exchange.updated);
     expect(announced).toHaveBeenCalledWith(w.exchange.updated);
+  });
+});
+
+describe('instalments, stages and progress notes', () => {
+  test('the split sheets and their links are named, stated and large enough', async () => {
+    await open(`/exchanges/${DRAFT}`, { signedIn: true });
+    await fireEvent.press(await screen.findByText(w.composer.split.stages.link));
+    await screen.findByLabelText('Name of stage 1');
+    expect(audit()).toEqual([]);
+    await fireEvent.press(screen.getByText(w.common.cancel, { exact: true }));
+    await fireEvent.press(await screen.findByRole('radio', { name: w.contributionTypes.MONEY }));
+    await fireEvent.changeText(screen.getByLabelText('Amount in USD'), '100');
+    await fireEvent.press(screen.getByText(w.composer.split.instalments.link));
+    await screen.findByText(w.composer.split.instalments.previewHeading);
+    expect(audit()).toEqual([]);
+  });
+
+  test('mark the rest as paid and the progress note panel', async () => {
+    await open(`/exchanges/${EXCHANGE}`, {
+      signedIn: true,
+      prepare: (fake) => {
+        fake.exchange = seriesExchange();
+      },
+    });
+    await fireEvent.press(await screen.findByRole('button', { name: w.exchange.markRest.button }));
+    expect(
+      screen.getByRole('button', { name: w.exchange.markRest.button, expanded: true }),
+    ).toBeTruthy();
+    expect(audit()).toEqual([]);
+    await fireEvent.press(screen.getByRole('button', { name: w.common.cancel }));
+    await fireEvent.press(screen.getByTestId(`progress-${REPAIR}`));
+    await screen.findByLabelText(w.exchange.progress.label);
+    expect(audit()).toEqual([]);
   });
 });
 

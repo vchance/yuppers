@@ -29,6 +29,14 @@ export function canNoteProgress(status: Status, role: Role): boolean {
   return role === 'PROVIDER' && (status === 'PENDING' || status === 'CLAIMED')
 }
 
+/** The name of the panel that opens a progress note on one item, as `movePanel` does for a move. */
+export function progressPanel(contribution: string): string {
+  return `progress:${contribution}`
+}
+
+/** The name of the panel that confirms "Mark the rest as paid". */
+export const MARK_REST_PANEL = 'mark-rest'
+
 /** The command that adds a progress note, or `null` when there is nothing written. */
 export function progressCommand(contribution: string, written: string): Command | null {
   const note = written.trim()

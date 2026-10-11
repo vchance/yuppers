@@ -16,13 +16,19 @@ import {
   fractionDigitsOf,
   invitationBoundTo,
   invitationForProblem,
+  liveGroups,
   lockedContributions,
+  mergeInstalments,
+  mergeStages,
   NAMED_INVITATION,
   newContribution,
   otherSlot,
   parseDecimal,
   problemText as problemMessage,
+  replaceItem,
   revisionToSend,
+  splitRoom,
+  splitsUsed,
   startingDraft,
   statusesOf,
   swapSides,
@@ -41,6 +47,7 @@ import {
   type ProblemField,
   type RevisionSent,
   type SaveState,
+  type SplitGroup,
   type Slot,
 } from '@yuppers/shared';
 import * as Crypto from 'expo-crypto';
@@ -71,6 +78,7 @@ import {
   TextField,
   Written,
 } from '../components/ui';
+import { InstalmentsSheet, StagesSheet, type SplitResult } from '../components/SplitSheets';
 import { StartingPoint, SwapSides } from '../components/StartingPoint';
 import { announce, useReduceMotion } from '../lib/accessibility';
 import { useI18n, useSession } from '../lib/context';
@@ -144,6 +152,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   // from one, and whether its hint is open: until the first edit.
   const template = kind === 'first' ? templateStartedFrom(exchange.id) : undefined;
   const [bandOpen, setBandOpen] = useState(true);
+  // The split sheet open on an item (DESIGN.md §7.1, §7.2).
+  const [sheet, setSheet] = useState<{ id: string; kind: 'INSTALMENTS' | 'STAGES' } | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null);
   // Showing payment options on this yup too, once the terms are sent.
@@ -212,6 +222,30 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     change({ contributions: [...latest.current.contributions, newContribution(id, from)] });
   }
 
+  function split(id: string, result: SplitResult) {
+    const current = latest.current;
+    change({
+      contributions: replaceItem(current.contributions, id, result.items),
+      splits: [...(current.splits ?? []), result.group],
+    });
+    setSheet(null);
+  }
+
+  // Puts a split back as the one item it was, while nothing has been sent.
+  function undo(group: SplitGroup) {
+    const current = latest.current;
+    const merged =
+      group.kind === 'INSTALMENTS'
+        ? mergeInstalments(current.contributions, group, digits)
+        : mergeStages(current.contributions, group);
+    if (!merged) return;
+    change({
+      contributions: merged,
+      splits: (current.splits ?? []).filter((candidate) => candidate !== group),
+    });
+    announce(group.kind === 'INSTALMENTS' ? w.split.instalments.undone : w.split.stages.undone);
+  }
+
   const built = useMemo(() => buildTerms(draft, digits, base?.terms), [draft, digits, base]);
   const problems = checked && !built.ok ? built.problems : [];
   const problemCount = problems.length + (boundProblem ? 1 : 0);
@@ -248,7 +282,13 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     try {
       const result = await api.sendRevision(
         exchange.id,
-        revisionToSend(exchange, built, language, invitationBoundTo(invitee) ?? ''),
+        revisionToSend(
+          exchange,
+          built,
+          language,
+          invitationBoundTo(invitee) ?? '',
+          splitsUsed(draft),
+        ),
       );
       saver.sent();
       await showAfterSigning(exchange.id, alsoShow);
@@ -348,6 +388,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     change(slot === 'A' ? { partyA: name } : { partyB: name });
   const general = problems.filter((problem) => problem.field === 'contributions');
   const today = todayIn(exchange.timezone);
+  const groups = liveGroups(draft.contributions, draft.splits ?? []);
   // Due dates are read in the exchange's zone; named when this device keeps another.
   const zone = dueDateZone(exchange.timezone, deviceTimezone());
 
@@ -596,6 +637,28 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                 onChange={(required) => changeItem(item.id, { required })}
               />
 
+              {!fixed && (
+                <SplitLinks
+                  item={item}
+                  count={draft.contributions.length}
+                  group={groups.find((candidate) => candidate.ids[0] === item.id) ?? null}
+                  open={sheet?.id === item.id ? sheet.kind : null}
+                  onOpen={(kind) => setSheet({ id: item.id, kind })}
+                  onUndo={undo}
+                />
+              )}
+              {sheet?.id === item.id && !fixed && (
+                <SplitPanel
+                  item={item}
+                  kind={sheet.kind}
+                  count={draft.contributions.length}
+                  currency={exchange.currency}
+                  today={today}
+                  onDone={(result) => split(item.id, result)}
+                  onCancel={() => setSheet(null)}
+                />
+              )}
+
               <Actions>
                 <Button
                   label={fmt(w.remove, { number })}
@@ -768,4 +831,85 @@ function DecimalField({
       }}
     />
   );
+}
+
+/** The links that open the split sheets on an item, and the way back from a split. */
+function SplitLinks({
+  item,
+  count,
+  group,
+  open,
+  onOpen,
+  onUndo,
+}: {
+  item: DraftContribution;
+  count: number;
+  group: SplitGroup | null;
+  open: 'INSTALMENTS' | 'STAGES' | null;
+  onOpen(kind: 'INSTALMENTS' | 'STAGES'): void;
+  onUndo(group: SplitGroup): void;
+}) {
+  const { wording } = useI18n();
+  const w = wording.composer.split;
+  const money = item.type === 'MONEY';
+  const stages = item.type === 'SERVICE' || item.type === 'TASK';
+  // Stages are offered with room for a payment each (DESIGN.md §7.2).
+  const offered = (money && splitRoom(count) >= 2) || (stages && splitRoom(count, 2) >= 2);
+  if (!offered && !group) return null;
+  return (
+    <Actions>
+      {offered && money && (
+        <Button
+          variant="link"
+          label={w.instalments.link}
+          expanded={open === 'INSTALMENTS'}
+          onPress={() => onOpen('INSTALMENTS')}
+        />
+      )}
+      {offered && stages && (
+        <Button
+          variant="link"
+          label={w.stages.link}
+          expanded={open === 'STAGES'}
+          onPress={() => onOpen('STAGES')}
+        />
+      )}
+      {group && (
+        <Button
+          variant="link"
+          label={group.kind === 'INSTALMENTS' ? w.instalments.undo : w.stages.undo}
+          onPress={() => onUndo(group)}
+        />
+      )}
+    </Actions>
+  );
+}
+
+function SplitPanel({
+  item,
+  kind,
+  count,
+  currency,
+  today,
+  onDone,
+  onCancel,
+}: {
+  item: DraftContribution;
+  kind: 'INSTALMENTS' | 'STAGES';
+  count: number;
+  currency: string;
+  today: string;
+  onDone(result: SplitResult): void;
+  onCancel(): void;
+}) {
+  const props = {
+    item,
+    existing: count,
+    currency,
+    today,
+    newId: () => Crypto.randomUUID(),
+    onDone,
+    onCancel,
+  };
+  return kind === 'INSTALMENTS' ? <InstalmentsSheet {...props} /> : <StagesSheet {...props} />;
 }

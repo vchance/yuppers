@@ -518,8 +518,39 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Instalments, stages and progress notes, per day",
+      "description": "Counts only (DESIGN.md 7.1, 7.2). Agreements first in force with two or more payments from one party, or with two or more services or tasks from one party; split sheets completed before a proposal was sent; Mark the rest as paid used; emails that told of several claims or confirmations at once; progress notes added. Payments per agreement = yuppers_instalments_items_total / yuppers_instalments_yups_total.",
+      "id": 26,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 60 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "agreements with instalments", "expr": "sum(increase(yuppers_instalments_yups_total{deployment_environment=~\"$environment\"}[1d]))" },
+        { "refId": "B", "legendFormat": "agreements with stages", "expr": "sum(increase(yuppers_stages_yups_total{deployment_environment=~\"$environment\"}[1d]))" },
+        { "refId": "C", "legendFormat": "split sheets completed", "expr": "sum(increase(yuppers_splits_used_total{deployment_environment=~\"$environment\"}[1d]))" },
+        { "refId": "D", "legendFormat": "mark the rest used", "expr": "sum(increase(yuppers_mark_rest_used_total{deployment_environment=~\"$environment\"}[1d]))" },
+        { "refId": "E", "legendFormat": "emails for several items", "expr": "sum(increase(yuppers_notices_coalesced_total{deployment_environment=~\"$environment\"}[1d]))" },
+        { "refId": "F", "legendFormat": "progress notes", "expr": "sum(increase(yuppers_progress_notes_added_total{deployment_environment=~\"$environment\"}[1d]))" }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "axisBorderShow": false }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "agreements with instalments" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "agreements with stages" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "split sheets completed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "mark the rest used" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "emails for several items" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#898781" } }] },
+          { "matcher": { "id": "byName", "options": "progress notes" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#fab219" } }] }
+        ]
+      }
+    },
+    {
       "type": "row", "title": "Logs", "id": 103, "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 },
       "panels": []
     },
     {
@@ -527,7 +558,7 @@
       "title": "Log lines per minute, by level (without readiness probes)",
       "description": "Every request writes one line at INFO; WARN and ERROR are the ones to read. Render's readiness probes are left out.",
       "id": 23,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 61 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 69 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range", "legendFormat": "{{detected_level}}",
@@ -548,7 +579,7 @@
       "title": "Warnings and errors",
       "description": "Every line at WARN or above, newest first. Click a line for its fields: request id, route, status, trace id.",
       "id": 24,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 61 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 69 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range",
@@ -561,7 +592,7 @@
       "title": "Latest lines (without readiness probes)",
       "description": "Everything the api and the worker log, newest first, with the request's route, status and latency when there is one. Click a line for all its fields; the trace id opens the trace in Tempo.",
       "id": 25,
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 69 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 77 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "queryType": "range",

@@ -31,6 +31,13 @@ export const WAITING = 'ce5f6a7b-8c9d-4eaf-8a0b-3c4d5e6f7a8b'
 export const REPAIR = '11111111-1111-4111-8111-111111111111'
 export const PAYMENT = '22222222-2222-4222-8222-222222222222'
 export const GATE = '33333333-3333-4333-8333-333333333333'
+/** An agreement with payments in parts and a job in stages, in force. */
+export const SERIES = 'df5a6b7c-8d9e-4fb0-9b1c-4d5e6f7a8b9c'
+export const POSTS = '44444444-4444-4444-8444-444444444444'
+export const PANELS = '55555555-5555-4555-8555-555555555555'
+export const PART_1 = '66666666-6666-4666-8666-666666666666'
+export const PART_2 = '77777777-7777-4777-8777-777777777777'
+export const PART_3 = '88888888-8888-4888-8888-888888888888'
 export const INVITATION = 'a3'.repeat(32)
 /** A second invitation, to another proposal, whose preview carries its own reference. */
 export const OTHER_INVITATION = 'b4'.repeat(32)
@@ -360,17 +367,125 @@ const exchanges = (service: FakeService): ExchangeView[] => [
   offerExchange(),
   waitingExchange(service),
   draftExchange(),
+  ...(service.series.listed ? [seriesExchange(service)] : []),
 ]
 /** Exchanges that can be opened but are not in the list, so the list stays as it was. */
-const others = (): ExchangeView[] => [
+const others = (service: FakeService): ExchangeView[] => [
   counterExchange(),
   amendingExchange(),
   disputedExchange(),
   endedExchange(),
+  ...(service.series.listed ? [] : [seriesExchange(service)]),
 ]
 
-function summary(exchange: ExchangeView): ExchangeSummary {
+const seriesTerms = {
+  party_a_name: PARTIES.A,
+  party_b_name: PARTIES.B,
+  terms: 'A fence in two stages, paid in three parts.',
+  contributions: [
+    {
+      id: POSTS,
+      from: 'A' as const,
+      type: 'SERVICE' as const,
+      description: 'Posts set',
+      due: { kind: 'ON_AGREEMENT' as const },
+      required: true,
+    },
+    {
+      id: PANELS,
+      from: 'A' as const,
+      type: 'SERVICE' as const,
+      description: 'Panels up',
+      due: { kind: 'ON_AGREEMENT' as const },
+      required: true,
+    },
+    ...[
+      [PART_1, 'Repayment 1 of 3', 15000],
+      [PART_2, 'Repayment 2 of 3', 15000],
+      [PART_3, 'Repayment 3 of 3', 15000],
+    ].map(([id, description, amount]) => ({
+      id: id as string,
+      from: 'B' as const,
+      type: 'MONEY' as const,
+      description: description as string,
+      due: { kind: 'ON_AGREEMENT' as const },
+      required: true,
+      amount_minor: amount as number,
+    })),
+  ],
+}
+
+/** The agreement with a series, as the reader (`service.series.you`) sees it now. */
+function seriesExchange(service: FakeService): ExchangeView {
+  const { you, version, statuses } = service.series
   return {
+    ...common,
+    id: SERIES,
+    version,
+    state: 'ACTIVE',
+    you,
+    display_code: 'SRSD-4T7M',
+    in_force_revision: { ...revision, note: null, terms: seriesTerms },
+    contributions: Object.entries(statuses).map(([id, status]) => ({ id, status })),
+  } as ExchangeView
+}
+
+/** What the agreement with a series did, with the progress notes written so far. */
+function seriesHistory(service: FakeService): HistoryPage {
+  const at = '2026-10-02T15:00:05Z'
+  const sent = { id: revision.id, sequence: 1 }
+  return {
+    you: service.series.you,
+    parties: PARTIES,
+    earlier: null,
+    events: [
+      { sequence: 1, type: 'REVISION_SENT', actor: 'A', at, revision: sent },
+      { sequence: 2, type: 'REVISION_ACCEPTED', actor: 'B', at, revision: sent },
+      ...service.series.notes.map((note, index) => ({
+        sequence: 3 + index,
+        type: 'PROGRESS_NOTED' as const,
+        actor: 'A' as const,
+        at: note.at,
+        revision: sent,
+        contribution: { id: note.id, description: 'Panels up' },
+        note: note.text,
+      })),
+    ],
+  } as HistoryPage
+}
+
+/** A command on the agreement with a series: the two this feature adds, and nothing else. */
+function seriesCommand(service: FakeService, body: unknown): [number, unknown] {
+  const { command } = body as {
+    command: { type: string; contributions?: string[]; contribution?: string; note?: string }
+  }
+  const state = service.series
+  if (command.type === 'CLAIM_REST') {
+    for (const id of command.contributions ?? []) state.statuses[id] = 'CLAIMED'
+    state.version += 1
+    return [200, seriesExchange(service)]
+  }
+  if (command.type === 'NOTE_PROGRESS') {
+    const id = command.contribution ?? ''
+    if (state.you !== 'A') return [403, { code: 'WRONG_ACTOR' }]
+    if (state.notes.filter((note) => note.id === id).length >= state.noteLimit) {
+      return [429, { code: 'TOO_MANY_REQUESTS' }]
+    }
+    state.notes.push({ id, text: command.note ?? '', at: '2026-10-21T10:00:00Z' })
+    state.version += 1
+    return [200, seriesExchange(service)]
+  }
+  return [404, { code: 'NOT_FOUND' }]
+}
+
+function summary(exchange: ExchangeView): ExchangeSummary {
+  // Where a series stands, as the list carries it: counts, never an amount.
+  const series =
+    exchange.id === SERIES
+      ? { payments: { total: 3, confirmed: 1, disputed: 0 }, stages: { total: 2, confirmed: 1, disputed: 0 } }
+      : {}
+  return {
+    ...series,
     id: exchange.id,
     display_code: exchange.display_code,
     other_party_name:
@@ -551,7 +666,23 @@ function record(exchange: ExchangeView): RecordDocument {
   } as RecordDocument
 }
 
+/** Where the agreement with a series stands, which commands change (`SERIES`). */
+export interface SeriesState {
+  /** Which party the reader is. */
+  you: 'A' | 'B'
+  version: number
+  statuses: Record<string, ExchangeView['contributions'][number]['status']>
+  /** Progress notes written so far, oldest first. */
+  notes: { id: string; text: string; at: string }[]
+  /** Progress notes one item takes before the service refuses more. */
+  noteLimit: number
+  /** Whether the list shows this agreement too. */
+  listed: boolean
+}
+
 export interface FakeService {
+  /** The agreement with a series of payments and stages. */
+  series: SeriesState
   /** Who the session cookie belongs to; `null` when nobody is signed in. */
   account: Account | null
   /** Every request so far, as `METHOD /path` with its body, oldest first. */
@@ -628,6 +759,20 @@ export const GOOD_PROOF = 'f0'.repeat(32)
 
 export function fakeService(account: Account | null): FakeService {
   const service: FakeService = {
+    series: {
+      you: 'B',
+      version: 3,
+      statuses: {
+        [POSTS]: 'ACCEPTED',
+        [PANELS]: 'PENDING',
+        [PART_1]: 'ACCEPTED',
+        [PART_2]: 'PENDING',
+        [PART_3]: 'PENDING',
+      },
+      notes: [],
+      noteLimit: 3,
+      listed: false,
+    },
     account,
     sent: [],
     phone: true,
@@ -1025,9 +1170,11 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     service.waitingSharedAt = '2026-10-02T06:35:00Z'
     return [204, null]
   }
-  for (const exchange of [...exchanges(service), ...others()]) {
+  for (const exchange of [...exchanges(service), ...others(service)]) {
     const at = `/v1/exchanges/${exchange.id}`
     if (call === `GET ${at}`) return [200, withPayments(service, exchange)]
+    if (exchange.id === SERIES && call === `POST ${at}/commands`) return seriesCommand(service, body)
+    if (exchange.id === SERIES && call === `GET ${at}/history`) return [200, seriesHistory(service)]
     if (call === `PUT ${at}/payment-options`) {
       const { on } = body as { on: boolean }
       const any = Object.values(service.handles).some(Boolean)

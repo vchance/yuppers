@@ -29,6 +29,12 @@ export function RecordSummary({ record }: { record: RecordDocument }) {
         <section key={side.slot} aria-labelledby={`record-plain-${side.slot}`}>
           <h3 id={`record-plain-${side.slot}`}>{side.heading}</h3>
           {side.nothing && <p>{side.nothing}</p>}
+          {/* Where a series of payments or stages stands, in words (DESIGN.md §7.1, §7.2). */}
+          {side.counts.map((line) => (
+            <p key={line} className="series">
+              {line}
+            </p>
+          ))}
           {side.items.length > 0 && (
             <ul className="plain">
               {side.items.map((item) => (

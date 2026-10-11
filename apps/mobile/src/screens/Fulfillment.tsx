@@ -7,20 +7,38 @@ import {
   moveWording,
   noteFor,
   NOTE_MAX_CHARS,
+  canNoteProgress,
+  labelText,
   payOffered,
+  progressCommand,
+  PROGRESS_NOTE_MAX_CHARS,
   statusWording,
   troublePanel,
   waitingLong,
   type Actions as ExchangeActions,
   type Move,
+  type ProgressNote,
   type Slot,
 } from '@yuppers/shared';
 import { useState } from 'react';
+import { View } from 'react-native';
 
 import { PaySheet } from '../components/PaySheet';
 
 import { StatusChip } from '../components/StatusChip';
-import { Actions, Button, Failure, Hint, Notice, P, Panel, TextField } from '../components/ui';
+import {
+  Actions,
+  Button,
+  Failure,
+  Heading,
+  Hint,
+  Notice,
+  P,
+  Panel,
+  TextField,
+  Written,
+} from '../components/ui';
+import { announce } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 
 type Contribution = components['schemas']['ContributionDto'];
@@ -44,6 +62,8 @@ interface Props {
   exchange?: Exchange;
   /** Brings the exchange up to date, once the pay sheet has read it again. */
   onChange?(exchange: Exchange): void;
+  /** The progress notes already on this item, oldest first (DESIGN.md §7.2). */
+  notes?: readonly ProgressNote[];
 }
 
 /**
@@ -64,6 +84,7 @@ export function Fulfillment({
   actions,
   exchange,
   onChange,
+  notes = [],
 }: Props) {
   const { wording, fmt, moment, money: formatMoney } = useI18n();
   const w = wording.exchange;
@@ -80,6 +101,10 @@ export function Fulfillment({
   const pay = exchange && active && payOffered(exchange, contribution, status);
   const [paying, setPaying] = useState(false);
   const claim: Move = status === 'DISPUTED' ? 'RECLAIM' : 'CLAIM';
+  // A progress note is the provider's own statement on an item under way; it
+  // changes no status (DESIGN.md §7.2).
+  const noteOffered = active && canNoteProgress(status, role);
+  const progressPanel = `progress:${contribution.id}`;
 
   return (
     <>
@@ -152,6 +177,26 @@ export function Fulfillment({
           ))}
         </Actions>
       )}
+      {noteOffered && (
+        <Actions>
+          <Button
+            testID={`progress-${contribution.id}`}
+            label={w.progress.add}
+            expanded={actions.panel === progressPanel}
+            disabled={actions.busy}
+            onPress={() => actions.open(progressPanel)}
+          />
+        </Actions>
+      )}
+      {noteOffered && actions.panel === progressPanel && (
+        <ProgressPanel
+          key={progressPanel}
+          contribution={contribution.id}
+          otherName={otherName}
+          actions={actions}
+        />
+      )}
+      <ProgressNotes notes={notes} you={you} otherName={otherName} />
       {opened && (
         <MovePanel
           key={opened}
@@ -219,5 +264,93 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
         <Button label={wording.common.cancel} disabled={actions.busy} onPress={actions.close} />
       </Actions>
     </Panel>
+  );
+}
+
+/** The panel for a progress note: free words from the provider, never a status. */
+function ProgressPanel({
+  contribution,
+  otherName,
+  actions,
+}: {
+  contribution: string;
+  otherName: string;
+  actions: ExchangeActions;
+}) {
+  const { wording, fmt } = useI18n();
+  const w = wording.exchange.progress;
+  const [text, setText] = useState('');
+  const [missing, setMissing] = useState(false);
+  const name = labelText(otherName);
+
+  async function submit() {
+    const command = progressCommand(contribution, text);
+    if (!command) {
+      setMissing(true);
+      return;
+    }
+    if (await actions.run(command)) announce(w.added);
+  }
+
+  return (
+    <Panel title={w.add}>
+      <TextField
+        label={w.label}
+        hint={fmt(w.hint, { name })}
+        required
+        error={missing ? w.required : null}
+        multiline
+        maxLength={PROGRESS_NOTE_MAX_CHARS}
+        value={text}
+        onChangeText={(next) => {
+          setText(next);
+          setMissing(false);
+        }}
+      />
+      <Hint>{fmt(w.told, { name })}</Hint>
+      {actions.failure === 'TOO_MANY_REQUESTS' ? (
+        <Notice quiet>{w.full}</Notice>
+      ) : (
+        <Failure code={actions.failure} />
+      )}
+      <Actions>
+        <Button variant="primary" label={w.send} disabled={actions.busy} onPress={() => void submit()} />
+        <Button label={wording.common.cancel} disabled={actions.busy} onPress={actions.close} />
+      </Actions>
+    </Panel>
+  );
+}
+
+/** The progress notes on one item, each as the words of whoever wrote it. */
+function ProgressNotes({
+  notes,
+  you,
+  otherName,
+}: {
+  notes: readonly ProgressNote[];
+  you: Slot;
+  otherName: string;
+}) {
+  const { wording, fmt, moment } = useI18n();
+  const w = wording.exchange.progress;
+  if (notes.length === 0) return null;
+  return (
+    <>
+      <Heading level={4}>{w.listLabel}</Heading>
+      <Hint>{fmt(w.count, { count: notes.length })}</Hint>
+      <View role="list">
+      {notes.map((note) => (
+        <View key={note.sequence} role="listitem" accessible>
+          <Hint>
+            {fmt(w.noteBy, {
+              name: note.by === you ? wording.party.you : labelText(otherName),
+              date: moment(note.at),
+            })}
+          </Hint>
+          <Written>{note.text}</Written>
+        </View>
+      ))}
+      </View>
+    </>
   );
 }

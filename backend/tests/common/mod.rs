@@ -398,8 +398,6 @@ impl App {
         messaging: (AuthRules, bool),
         wallet: Option<Arc<Wallet>>,
     ) -> Self {
-        // A burst waits to be counted in production; here a message is due at once.
-        yuppers_backend::domain::notification::set_coalesce_hold(time::Duration::ZERO);
         Self::start_full(
             database_name,
             rules,
@@ -427,6 +425,8 @@ impl App {
         wallet: Option<Arc<Wallet>>,
         webhook_token: Option<&str>,
     ) -> Self {
+        // A burst waits to be counted in production; here a message is due at once.
+        yuppers_backend::domain::notification::set_coalesce_hold(time::Duration::ZERO);
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
         let metrics = Arc::new(HttpMetrics::default());

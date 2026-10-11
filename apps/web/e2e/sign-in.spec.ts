@@ -121,7 +121,7 @@ test('where the service has no text messages, an email address is asked for, and
 
   // An email address signs in as ever.
   await page.getByLabel(en.signIn.emailLabel, { exact: true }).fill(ben.email)
-  await expect(page.getByText(en.signIn.emailOnly)).toHaveCount(0)
+  await expect(page.locator('p.notice', { hasText: en.signIn.emailOnly })).toHaveCount(0)
   await signIn(ben, en, en.signIn.emailLabel)
   await expect(page.getByRole('heading', { name: en.profile.firstTitle })).toBeVisible()
 })

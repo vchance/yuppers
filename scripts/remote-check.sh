@@ -85,7 +85,7 @@ if [ "$what" = all ] || [ "$what" = web ]; then
   step "lint" bash -c 'npm run -s lint -w @yuppers/web && npm run -s lint -w @yuppers/mobile -- --max-warnings 0'
   # Longer timeouts than the five seconds the suites default to: the machine
   # is shared and busy, and a slow test is not a failed one.
-  step "npm test" bash -c 'for w in @yuppers/shared @yuppers/web @yuppers/mobile; do npm run -s test -w $w -- --testTimeout=20000 || exit 1; done'
+  step "npm test" env YUPPERS_TEST_PATIENCE=5 bash -c 'for w in @yuppers/shared @yuppers/web @yuppers/mobile; do npm run -s test -w $w -- --testTimeout=20000 || exit 1; done'
 
   step "build:web and budget" bash -c 'npm run -s build:web >/dev/null && npm run -s budget -w @yuppers/web'
 fi

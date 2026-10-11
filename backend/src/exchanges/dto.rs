@@ -530,6 +530,25 @@ pub struct ExchangeSummary {
     /// the invited party's place, when they last opened a way to pass the
     /// link on, if they have.
     pub invitation_shared_at: Option<String>,
+    /// Where a series of payments stands, when one party owes the other two
+    /// or more money items in the agreement (instalments, DESIGN.md §7.1).
+    /// Counts only: never an amount. Left out for a single payment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payments: Option<SeriesCount>,
+    /// The same for two or more services or tasks from one party (stages,
+    /// DESIGN.md §7.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stages: Option<SeriesCount>,
+}
+
+/// How many items of a series are confirmed. Counted by the items' own
+/// statuses; there is no running total of anything.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct SeriesCount {
+    /// Items in the series: at least two.
+    pub total: i64,
+    pub confirmed: i64,
+    pub disputed: i64,
 }
 
 /// What someone holding an invitation link sees before signing in.

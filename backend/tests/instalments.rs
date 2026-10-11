@@ -591,3 +591,51 @@ async fn the_split_sheets_a_proposal_was_written_with_are_counted_and_nothing_el
     assert_eq!(after.splits_used[0], before.splits_used[0] + 1);
     assert_eq!(after.splits_used[1], before.splits_used[1]);
 }
+
+#[tokio::test]
+async fn the_list_counts_a_series_by_what_is_confirmed_and_a_single_item_has_none() {
+    let (app, _turn) = app().await;
+    let deal = series(&app).await;
+    let [first, second, _] = deal.payments;
+    claim_rest(&app, &deal.ben, &deal.exchange, &deal.payments)
+        .await
+        .ok();
+    app.act(&deal.ana, &deal.exchange, first, "CONFIRM")
+        .await
+        .ok();
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "CONTRIBUTION", "contribution": second, "action": "DISPUTE",
+                "note": "Not received." }),
+    )
+    .await
+    .ok();
+
+    let listed = app.get(&deal.ana, "/v1/exchanges").await.ok();
+    let mine = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == json!(deal.exchange))
+        .unwrap();
+    assert_eq!(
+        mine["payments"],
+        json!({ "total": 3, "confirmed": 1, "disputed": 1 })
+    );
+    assert!(
+        mine.get("stages").is_none(),
+        "one job is not stages: {mine}"
+    );
+
+    // A plain job and its payment are neither.
+    let plain = app.active().await;
+    let listed = app.get(&plain.ana, "/v1/exchanges").await.ok();
+    let entry = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == json!(plain.exchange))
+        .unwrap();
+    assert!(entry.get("payments").is_none() && entry.get("stages").is_none());
+}

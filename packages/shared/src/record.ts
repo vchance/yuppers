@@ -104,6 +104,8 @@ export function noteKind(event: RecordEvent): RecordNoteKind {
     case 'CLOSE_REQUESTED':
     case 'STATEMENT_ADDED':
       return 'statement'
+    case 'PROGRESS_NOTED':
+      return 'progress'
     default:
       return 'note'
   }

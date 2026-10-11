@@ -12,8 +12,8 @@ use uuid::Uuid;
 use super::dto::{
     BoundAddress, Claimant, CommandDto, Consent, CounterpartyDto, CreateExchange, ExchangeSummary,
     ExchangeView, InvitationIssued, InvitationOptions, InvitationPreview, PaymentOptionsView,
-    RevisionSent, RevisionView, RunCommand, SendRevision, StateDto, ViewContext, rfc3339,
-    state_dto,
+    RevisionSent, RevisionView, RunCommand, SendRevision, SeriesCount, StateDto, ViewContext,
+    rfc3339, state_dto,
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
@@ -588,6 +588,47 @@ struct SummaryRow {
     shared_at: Option<OffsetDateTime>,
 }
 
+/// The series in each of these exchanges' agreements in force (DESIGN.md
+/// §7.1, §7.2): for payments and for stages, the party who owes the most of
+/// them, when that is two or more. One query for the lot.
+async fn series_of(
+    db: &PgPool,
+    exchanges: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, (Option<SeriesCount>, Option<SeriesCount>)>, ApiError> {
+    let rows: Vec<(Uuid, bool, i64, i64, i64)> = sqlx::query_as(
+        "SELECT e.id, s.type = 'MONEY' AS money, count(*) AS total,
+                count(*) FILTER (WHERE c.status = 'ACCEPTED') AS confirmed,
+                count(*) FILTER (WHERE c.status = 'DISPUTED') AS disputed
+         FROM exchange e
+         JOIN contribution_snapshot s ON s.revision_id = e.in_force_revision_id
+         JOIN contribution c ON c.exchange_id = s.exchange_id AND c.id = s.contribution_id
+         WHERE e.id = ANY($1) AND s.type IN ('MONEY', 'SERVICE', 'TASK')
+         GROUP BY e.id, money, s.from_slot",
+    )
+    .bind(exchanges)
+    .fetch_all(db)
+    .await?;
+    let mut found: std::collections::HashMap<Uuid, (Option<SeriesCount>, Option<SeriesCount>)> =
+        std::collections::HashMap::new();
+    for (id, money, total, confirmed, disputed) in rows {
+        if total < 2 {
+            continue;
+        }
+        let series = SeriesCount {
+            total,
+            confirmed,
+            disputed,
+        };
+        let entry = found.entry(id).or_default();
+        let slot = if money { &mut entry.0 } else { &mut entry.1 };
+        // The party with the most of them, if both have a series.
+        if slot.is_none_or(|have| series.total > have.total) {
+            *slot = Some(series);
+        }
+    }
+    Ok(found)
+}
+
 pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>, ApiError> {
     let rows: Vec<SummaryRow> = sqlx::query_as(
         "SELECT e.id, e.display_code, e.state, e.closed_outcome, e.closed_reason,
@@ -609,6 +650,8 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
     .bind(now())
     .fetch_all(db)
     .await?;
+    let ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+    let series = series_of(db, &ids).await?;
 
     Ok(rows
         .into_iter()
@@ -639,6 +682,8 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
                 updated_at: rfc3339(row.updated_at),
                 counterparty,
                 invitation_shared_at: row.shared_at.filter(|_| waiting_for_a_claim).map(rfc3339),
+                payments: series.get(&row.id).and_then(|found| found.0),
+                stages: series.get(&row.id).and_then(|found| found.1),
             }
         })
         .collect())

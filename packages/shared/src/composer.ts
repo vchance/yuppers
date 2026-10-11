@@ -115,6 +115,7 @@ export function revisionToSend(
   built: Extract<Built, { ok: true }>,
   language: string,
   boundTo: string,
+  splits?: SplitsUsed,
 ): SendRevision {
   return {
     expected_version: exchange.version,
@@ -122,6 +123,23 @@ export function revisionToSend(
     note: built.note,
     consent: consentShown(language),
     invitation: composerKind(exchange) === 'first' ? invitationOptions(boundTo) : null,
+    // Counted for the product's measures (DESIGN.md §7.1, §7.2): how many
+    // split sheets this was written with, and nothing about what they made.
+    ...(splits && (splits.instalments > 0 || splits.stages > 0) ? { splits } : {}),
+  }
+}
+
+/** How many split sheets a working copy was written with and has not put back. */
+export interface SplitsUsed {
+  instalments: number
+  stages: number
+}
+
+export function splitsUsed(draft: Draft): SplitsUsed {
+  const groups = draft.splits ?? []
+  return {
+    instalments: groups.filter((group) => group.kind === 'INSTALMENTS').length,
+    stages: groups.filter((group) => group.kind === 'STAGES').length,
   }
 }
 

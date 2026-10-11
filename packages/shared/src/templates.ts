@@ -196,6 +196,15 @@ export function swapSides(draft: Draft): Draft {
   return {
     ...draft,
     contributions: draft.contributions.map((item) => ({ ...item, from: flip(item.from) })),
+    // Putting a split back restores the item as it was, on the side it is now.
+    ...(draft.splits
+      ? {
+          splits: draft.splits.map((group) => ({
+            ...group,
+            original: { ...group.original, from: flip(group.original.from) },
+          })),
+        }
+      : {}),
   }
 }
 

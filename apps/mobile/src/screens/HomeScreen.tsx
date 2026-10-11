@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client';
-import { failureCode, groupExchanges, invitationChip, labelText } from '@yuppers/shared';
+import { failureCode, groupExchanges, invitationChip, labelText, seriesChips } from '@yuppers/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -174,7 +174,8 @@ function Group({ heading, exchanges }: { heading: string; exchanges: readonly Ex
 }
 
 function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
-  const { wording, fmt, moment } = useI18n();
+  const i18n = useI18n();
+  const { wording, fmt, moment } = i18n;
   const router = useRouter();
   const w = wording.home;
   return exchanges.map((exchange) => {
@@ -197,6 +198,8 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
     // Yuppers never sends it: until someone joins, the card says whether they
     // have sent it (`invitationChip`), on a chip like an item's status.
     const chip = invitationChip(exchange);
+    // Where a series of payments or stages stands, in words: never an amount.
+    const counts = seriesChips(exchange, i18n);
     const chipText =
       chip === 'notSent'
         ? w.notSent
@@ -209,7 +212,7 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
       <Pressable
         key={exchange.id}
         accessibilityRole="button"
-        accessibilityLabel={[state, chipText, reference, updated, spokenTitle]
+        accessibilityLabel={[state, chipText, ...counts, reference, updated, spokenTitle]
           .filter(Boolean)
           .join('. ')}
         accessibilityHint={wording.a11y.openExchange}
@@ -222,6 +225,9 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
             {chipText && (
               <StatusChip status={chip === 'notSent' ? 'PENDING' : 'CLAIMED'}>{chipText}</StatusChip>
             )}
+            {counts.map((count) => (
+              <Tag key={count}>{count}</Tag>
+            ))}
           </Tags>
           <Hint>{reference}</Hint>
           <Hint>{updated}</Hint>

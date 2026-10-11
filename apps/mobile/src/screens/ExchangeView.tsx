@@ -8,11 +8,16 @@ import {
   isInvitationSpent,
   isUnconfirmedClaimant,
   labelText,
+  markRestCommand,
   moneyIds,
   NAMED_INVITATION,
   otherPartyName,
   paymentOptionsKey,
+  progressNotesOf,
   remainingRequired,
+  restToMarkPaid,
+  seriesInExchange,
+  seriesLine,
   sendReminder,
   statusesOf,
   troublePanel,
@@ -54,7 +59,7 @@ import {
   Tags,
   Written,
 } from '../components/ui';
-import { focusKeeper, useReduceMotion } from '../lib/accessibility';
+import { announce, focusKeeper, useReduceMotion } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 import { showAfterSigning } from '../lib/payments';
 import { api } from '../lib/session';
@@ -248,6 +253,18 @@ export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, r
           <Heading level={2}>{w.agreementHeading}</Heading>
           <AgreedHero>{w.agreementSigned}</AgreedHero>
           {active && remaining > 0 && <P>{fmt(w.remaining, { count: remaining })}</P>}
+          {/* Where a series stands, in words and numbers only (DESIGN.md §7.1, §7.2). */}
+          {(active || closed) &&
+            seriesInExchange(exchange).map((series) => (
+              <P key={`${series.kind}-${series.from}`}>
+                {seriesLine(
+                  series,
+                  series.from === you ? wording.party.you : labelText(otherName),
+                  { wording, fmt },
+                )}
+              </P>
+            ))}
+          {active && <MarkRest exchange={exchange} otherName={otherName} actions={actions} />}
           {active && <WalletButton exchange={exchange} />}
           <TermsView
             terms={inForce.terms}
@@ -266,6 +283,7 @@ export function ExchangeView({ exchange, issued, onIssued, onShared, onChange, r
                 actions={actions}
                 exchange={exchange}
                 onChange={onChange}
+                notes={history.page ? progressNotesOf(history.page.events, contribution.id) : []}
               />
             )}
           />
@@ -684,3 +702,56 @@ function OpenRevision({
 const styles = StyleSheet.create({
   fingerprint: { fontVariant: ['tabular-nums'] },
 });
+
+/**
+ * "Mark the rest as paid" (DESIGN.md §7.1): one record for each payment still
+ * owed, in one step, when there are two or more.
+ */
+function MarkRest({
+  exchange,
+  otherName,
+  actions,
+}: {
+  exchange: Exchange;
+  otherName: string;
+  actions: ExchangeActions;
+}) {
+  const { wording, fmt } = useI18n();
+  const w = wording.exchange.markRest;
+  const ids = restToMarkPaid(exchange);
+  if (ids.length < 2) return null;
+  const panel = 'mark-rest';
+  const values = { name: labelText(otherName), count: ids.length };
+  return (
+    <>
+      <Actions>
+        <Button
+          testID="mark-rest"
+          label={w.button}
+          expanded={actions.panel === panel}
+          disabled={actions.busy}
+          onPress={() => actions.open(panel)}
+        />
+      </Actions>
+      {actions.panel === panel && (
+        <Panel title={w.button}>
+          <P>{fmt(w.text, values)}</P>
+          <Failure code={actions.failure} />
+          <Actions>
+            <Button
+              variant="primary"
+              label={fmt(w.confirm, values)}
+              disabled={actions.busy}
+              onPress={() =>
+                void actions.run(markRestCommand(ids)).then((ok) => {
+                  if (ok) announce(fmt(w.done, values));
+                })
+              }
+            />
+            <Button label={wording.common.cancel} disabled={actions.busy} onPress={actions.close} />
+          </Actions>
+        </Panel>
+      )}
+    </>
+  );
+}

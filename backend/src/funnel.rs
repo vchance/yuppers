@@ -26,6 +26,7 @@ use time::{Date, OffsetDateTime, Time};
 use crate::domain::contribution::{Action, Status};
 use crate::domain::exchange::{Event, NotAgreed, Outcome, State, Unresolved};
 use crate::domain::identity::Identifier;
+use crate::domain::revision::{Kind as ItemKind, Revision, Slot};
 use crate::metrics::{Kind, Name, Text};
 
 pub const ACCOUNTS_CREATED: Name = Name::new("yuppers.accounts.created", "{account}");
@@ -45,6 +46,14 @@ pub const ENTRIES_STARTED: Name = Name::new("yuppers.entries.started", "{yup}");
 pub const ENTRIES_SENT: Name = Name::new("yuppers.entries.sent", "{yup}");
 pub const ENTRIES_IN_FORCE: Name = Name::new("yuppers.entries.in_force", "{agreement}");
 pub const ENTRIES_COMPLETED: Name = Name::new("yuppers.entries.completed", "{agreement}");
+pub const INSTALMENT_YUPS: Name = Name::new("yuppers.instalments.yups", "{agreement}");
+pub const INSTALMENT_ITEMS: Name = Name::new("yuppers.instalments.items", "{payment}");
+pub const STAGE_YUPS: Name = Name::new("yuppers.stages.yups", "{agreement}");
+pub const STAGE_ITEMS: Name = Name::new("yuppers.stages.items", "{stage}");
+pub const SPLITS_USED: Name = Name::new("yuppers.splits.used", "{sheet}");
+pub const MARK_REST_USED: Name = Name::new("yuppers.mark_rest.used", "{command}");
+pub const NOTICES_COALESCED: Name = Name::new("yuppers.notices.coalesced", "{message}");
+pub const PROGRESS_NOTES_ADDED: Name = Name::new("yuppers.progress_notes.added", "{note}");
 pub const DAILY_YUPS_CREATED: Name = Name::new("yuppers.daily.yups_created", "{yup}");
 pub const DAILY_INVITATIONS_SHARED: Name =
     Name::new("yuppers.daily.invitations_shared", "{invitation}");
@@ -194,6 +203,62 @@ impl EmailKind {
     }
 }
 
+/// Which split sheet of the composer (DESIGN.md §7.1, §7.2), as a label.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Split {
+    Instalments,
+    Stages,
+}
+
+impl Split {
+    const ALL: [Self; 2] = [Self::Instalments, Self::Stages];
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Instalments => "instalments",
+            Self::Stages => "stages",
+        }
+    }
+}
+
+/// How an agreement is shaped, as two counts and nothing about what it says
+/// (DESIGN.md §7.1, §7.2, "Measures"): the most money items one party owes
+/// the other, and the most service and task items one party provides. A
+/// count under two is a single payment, or a single job, and is zero here.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Shape {
+    /// Money items from one payer, when there are at least two.
+    pub instalments: usize,
+    /// Service and task items from one provider, when there are at least two.
+    pub stages: usize,
+}
+
+impl Shape {
+    pub fn of(revision: &Revision) -> Self {
+        let most = |counts: [usize; 2]| match counts.into_iter().max().unwrap_or(0) {
+            0 | 1 => 0,
+            many => many,
+        };
+        let mut payments = [0; 2];
+        let mut jobs = [0; 2];
+        for contribution in &revision.contributions {
+            let side = match contribution.from {
+                Slot::A => 0,
+                Slot::B => 1,
+            };
+            match contribution.kind {
+                ItemKind::Money { .. } => payments[side] += 1,
+                ItemKind::Service | ItemKind::Task => jobs[side] += 1,
+                ItemKind::Item | ItemKind::Other => {}
+            }
+        }
+        Self {
+            instalments: most(payments),
+            stages: most(jobs),
+        }
+    }
+}
+
 /// How an agreement closed, as a label.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
@@ -284,6 +349,14 @@ pub struct Funnel {
     entries_sent: [AtomicU64; 10],
     entries_in_force: [AtomicU64; 10],
     entries_completed: [AtomicU64; 10],
+    instalment_yups: AtomicU64,
+    instalment_items: AtomicU64,
+    stage_yups: AtomicU64,
+    stage_items: AtomicU64,
+    splits_used: [AtomicU64; 2],
+    mark_rest_used: AtomicU64,
+    notices_coalesced: AtomicU64,
+    progress_notes_added: AtomicU64,
     daily: Mutex<Option<Daily>>,
 }
 
@@ -313,6 +386,17 @@ pub struct Counts {
     pub entries_sent: [u64; 10],
     pub entries_in_force: [u64; 10],
     pub entries_completed: [u64; 10],
+    /// Agreements that first came into force with instalments, and the
+    /// payments in them; the same for stages.
+    pub instalment_yups: u64,
+    pub instalment_items: u64,
+    pub stage_yups: u64,
+    pub stage_items: u64,
+    /// Split sheets completed, by [`Split`]: instalments, stages.
+    pub splits_used: [u64; 2],
+    pub mark_rest_used: u64,
+    pub notices_coalesced: u64,
+    pub progress_notes_added: u64,
 }
 
 static FUNNEL: Funnel = Funnel {
@@ -331,6 +415,14 @@ static FUNNEL: Funnel = Funnel {
     entries_sent: [const { AtomicU64::new(0) }; 10],
     entries_in_force: [const { AtomicU64::new(0) }; 10],
     entries_completed: [const { AtomicU64::new(0) }; 10],
+    instalment_yups: AtomicU64::new(0),
+    instalment_items: AtomicU64::new(0),
+    stage_yups: AtomicU64::new(0),
+    stage_items: AtomicU64::new(0),
+    splits_used: [const { AtomicU64::new(0) }; 2],
+    mark_rest_used: AtomicU64::new(0),
+    notices_coalesced: AtomicU64::new(0),
+    progress_notes_added: AtomicU64::new(0),
     daily: Mutex::new(None),
 };
 
@@ -372,6 +464,42 @@ impl Funnel {
     /// An email went out.
     pub fn email_sent(&self, kind: EmailKind) {
         bump(&self.emails[kind as usize]);
+    }
+
+    /// An agreement came into force for the first time with this shape
+    /// (`exchanges::service::run_command`). Counts only: how many payments
+    /// one party owes the other, and how many stages one provides.
+    pub fn shape_in_force(&self, revision: &Revision) {
+        let shape = Shape::of(revision);
+        if shape.instalments > 0 {
+            bump(&self.instalment_yups);
+            self.instalment_items
+                .fetch_add(shape.instalments as u64, Ordering::Relaxed);
+        }
+        if shape.stages > 0 {
+            bump(&self.stage_yups);
+            self.stage_items
+                .fetch_add(shape.stages as u64, Ordering::Relaxed);
+        }
+    }
+
+    /// A proposal was sent after the composer's split sheets were completed
+    /// this many times. A client's figure, so each is bounded.
+    pub fn splits_used(&self, instalments: u8, stages: u8) {
+        self.splits_used[Split::Instalments as usize]
+            .fetch_add(u64::from(instalments.min(50)), Ordering::Relaxed);
+        self.splits_used[Split::Stages as usize]
+            .fetch_add(u64::from(stages.min(50)), Ordering::Relaxed);
+    }
+
+    /// "Mark the rest as paid" was used.
+    pub fn mark_rest_used(&self) {
+        bump(&self.mark_rest_used);
+    }
+
+    /// A message that told of several items at once went out by email.
+    pub fn notice_coalesced(&self) {
+        bump(&self.notices_coalesced);
     }
 
     /// A draft was made, from this entry (`exchanges::service::create`).
@@ -438,6 +566,7 @@ impl Funnel {
                     ..
                 } => bump(&self.contributions_disputed),
                 Event::Closed { outcome, .. } => bump(&self.closed[Closure::of(*outcome) as usize]),
+                Event::ProgressNoted { .. } => bump(&self.progress_notes_added),
                 _ => {}
             }
         }
@@ -470,6 +599,14 @@ impl Funnel {
             entries_sent: std::array::from_fn(|index| read(&self.entries_sent[index])),
             entries_in_force: std::array::from_fn(|index| read(&self.entries_in_force[index])),
             entries_completed: std::array::from_fn(|index| read(&self.entries_completed[index])),
+            instalment_yups: read(&self.instalment_yups),
+            instalment_items: read(&self.instalment_items),
+            stage_yups: read(&self.stage_yups),
+            stage_items: read(&self.stage_items),
+            splits_used: std::array::from_fn(|index| read(&self.splits_used[index])),
+            mark_rest_used: read(&self.mark_rest_used),
+            notices_coalesced: read(&self.notices_coalesced),
+            progress_notes_added: read(&self.progress_notes_added),
         }
     }
 
@@ -597,6 +734,57 @@ impl Funnel {
                     read(&counters[entry as usize]) as f64,
                 );
             }
+        }
+        for (name, help, value) in [
+            (
+                INSTALMENT_YUPS,
+                "Agreements that first came into force with two or more payments from one party (instalments).",
+                read(&self.instalment_yups),
+            ),
+            (
+                INSTALMENT_ITEMS,
+                "Payments in those agreements, the most one party owes: divide by yuppers.instalments.yups for instalments per yup.",
+                read(&self.instalment_items),
+            ),
+            (
+                STAGE_YUPS,
+                "Agreements that first came into force with two or more services or tasks from one party (stages).",
+                read(&self.stage_yups),
+            ),
+            (
+                STAGE_ITEMS,
+                "Services and tasks in those agreements, the most one party provides.",
+                read(&self.stage_items),
+            ),
+            (
+                MARK_REST_USED,
+                "\"Mark the rest as paid\" used: one command, one claim for each payment.",
+                read(&self.mark_rest_used),
+            ),
+            (
+                NOTICES_COALESCED,
+                "Emails that told of several claims or confirmations at once.",
+                read(&self.notices_coalesced),
+            ),
+            (
+                PROGRESS_NOTES_ADDED,
+                "Progress notes added to items under way.",
+                read(&self.progress_notes_added),
+            ),
+        ] {
+            text.single(name, Kind::Counter, help, value as f64);
+        }
+        text.family(
+            SPLITS_USED,
+            Kind::Counter,
+            "Split sheets of the composer completed before a proposal was sent, by kind: instalments, stages.",
+        );
+        for split in Split::ALL {
+            text.sample(
+                SPLITS_USED,
+                &[("kind", split.as_str())],
+                read(&self.splits_used[split as usize]) as f64,
+            );
         }
 
         let daily = self

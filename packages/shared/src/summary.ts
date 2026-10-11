@@ -3,6 +3,7 @@ import type { components } from '@yuppers/api-client'
 import type { I18n } from './i18n'
 import { isMoney } from './money'
 import { documentOf, type RecordDocument, type RecordRevision } from './record'
+import { seriesLine, seriesOf, type SeriesItem } from './series'
 import type { ClosedReason } from './wording/types'
 
 type Schemas = components['schemas']
@@ -38,6 +39,7 @@ export interface SummaryItem {
   /** Who gives it. */
   from: Slot
   description: string
+  type: Schemas['ContributionType']
   money: boolean
   amountMinor: number | null
   quantity: Schemas['QuantityDto'] | null
@@ -165,6 +167,7 @@ export function summarizeRecord(record: RecordDocument): RecordSummary {
         id: contribution.id,
         from: contribution.from,
         description: contribution.description,
+        type: contribution.type,
         money: isMoney(contribution),
         amountMinor: contribution.amount_minor ?? null,
         quantity: contribution.quantity ?? null,
@@ -224,6 +227,12 @@ export interface SummarySide {
     /** What became of it; `null` when nothing was agreed. */
     outcome: string | null
   }[]
+  /**
+   * Where a series stands, when this side owes two or more payments or
+   * provides two or more stages (DESIGN.md §7.1, §7.2): "Sam: 2 of 3 payments
+   * confirmed". Counts only, in words. Empty for anything else.
+   */
+  counts: string[]
   /** Said when this side gives nothing. */
   nothing: string | null
 }
@@ -293,12 +302,29 @@ export function summaryText(
                 : null
               return { id: item.id, description: item.description, details, outcome }
             })
+          // A series is counted only where something was agreed.
+          const counted: SeriesItem[] =
+            summary.basis.kind === 'AGREEMENT'
+              ? summary.items
+                  .filter((item) => item.from === slot && item.outcome !== null)
+                  .map((item) => ({
+                    from: item.from,
+                    type: item.type,
+                    status:
+                      item.outcome === 'CONFIRMED'
+                        ? 'ACCEPTED'
+                        : item.outcome === 'DISPUTED'
+                          ? 'DISPUTED'
+                          : 'PENDING',
+                  }))
+              : []
           return {
             slot,
             heading: fmt(summary.basis.kind === 'AGREEMENT' ? w.givesAgreed : w.givesLast, {
               name: name(slot),
             }),
             items,
+            counts: seriesOf(counted).map((series) => seriesLine(series, name(slot), i18n)),
             nothing: items.length === 0 ? wording.terms.nothing : null,
           }
         })

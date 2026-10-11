@@ -66,7 +66,9 @@
         },
         "DELIVERY_CLAIMED": {
           "subject": "Algo se marcó como entregado: {yup}",
-          "body": "La otra parte marcó como entregada una de sus contribuciones. Revísala y luego confírmala o abre una disputa."
+          "body": "La otra parte marcó como entregada una de sus contribuciones. Revísala y luego confírmala o abre una disputa.",
+          "subjectMany": "Se marcaron {count} elementos como entregados o pagados: {yup}",
+          "bodyMany": "La otra parte marcó como entregadas o pagadas {count} de sus contribuciones. Revísalas y luego confirma cada una o abre una disputa."
         },
         "CLAIM_RETRACTED": {
           "subject": "Se desmarcó una entrega: {yup}",
@@ -74,7 +76,9 @@
         },
         "DELIVERY_CONFIRMED": {
           "subject": "Se confirmó una entrega: {yup}",
-          "body": "La otra parte confirmó que recibió una de tus contribuciones."
+          "body": "La otra parte confirmó que recibió una de tus contribuciones.",
+          "subjectMany": "Se confirmaron {count} entregas: {yup}",
+          "bodyMany": "La otra parte confirmó que recibió {count} de tus contribuciones."
         },
         "DISPUTE_OPENED": {
           "subject": "Se disputó una entrega: {yup}",
@@ -151,6 +155,10 @@
         "REVISION_SENT_UNCONFIRMED": {
           "subject": "Cambiaron los términos que te enviaron: {yup}",
           "body": "La otra parte cambió los términos que te envió. Revísalos y luego acéptalos si estás de acuerdo. Hasta que confirme que eres la persona a la que invitó, no puedes rechazarlos ni enviar los tuyos; en cambio, puedes salir del yup."
+        },
+        "PROGRESS_NOTED": {
+          "subject": "Una nota sobre cómo va algo: {yup}",
+          "body": "La otra parte agregó una nota sobre un elemento en el que trabaja. Es su propia declaración. No se marca nada como entregado y no hay nada que debas confirmar. Inicia sesión para leerla. Se te avisa de una nota como máximo cada 24 horas por cada yup; las demás están en el yup."
         }
       },
       "yup": "tu yup con {name} ({code})",
@@ -570,7 +578,82 @@
       "LOCKED": "Ya está confirmado, así que no se puede cambiar ni quitar. Déjalo como estaba o agrega un elemento nuevo.",
       "REUSED": "Este elemento se quitó antes y no puede volver. Agrégalo como un elemento nuevo."
     },
-    "removedCount": "{count, plural, one {# elemento del acuerdo se quita con este cambio.} other {# elementos del acuerdo se quitan con este cambio.}}"
+    "removedCount": "{count, plural, one {# elemento del acuerdo se quita con este cambio.} other {# elementos del acuerdo se quitan con este cambio.}}",
+    "split": {
+      "ordinal": "{description} {number} de {count}",
+      "ordinalBlank": "Pago {number} de {count}",
+      "amounts": {
+        "howLegend": "Cómo se calculan los montos",
+        "howShare": "Repartir un monto",
+        "howEach": "El mismo monto en cada uno",
+        "shareLabel": "Monto a repartir, en {currency}",
+        "eachLabel": "Monto de cada uno, en {currency}",
+        "remainderHint": "Lo que sobre se suma al último pago."
+      },
+      "instalments": {
+        "link": "Dividir en pagos",
+        "title": "Dividir en pagos",
+        "intro": "Este elemento se convierte en varios pagos, uno tras otro. Cada uno es un elemento normal que puedes cambiar después, y cada uno se marca como pagado y se confirma por separado.",
+        "countLabel": "Cuántos pagos",
+        "countHint": "De 2 a {max}.",
+        "firstLabel": "Primera fecha de vencimiento",
+        "everyLegend": "Luego cada",
+        "everyWeek": "semana",
+        "everyTwoWeeks": "dos semanas",
+        "everyMonth": "mes",
+        "everyDays": "cantidad de días",
+        "daysLabel": "Cantidad de días",
+        "monthHint": "Si un mes no tiene ese día, el pago vence el último día de ese mes.",
+        "previewHeading": "Lo que se agregará",
+        "previewLine": "{description}: {amount}, vence el {date}",
+        "plainHint": "Cada pago es un monto simple, sin nada más adjunto.",
+        "done": "Agregar estos pagos",
+        "added": "{count} pagos agregados.",
+        "undo": "Volver a un solo pago",
+        "undone": "Vuelve a ser un solo pago.",
+        "problems": {
+          "COUNT": "Escribe un número entero de 2 a {max}.",
+          "AMOUNT": "Escribe un monto, como {example}.",
+          "TOO_SMALL": "Ese monto es muy pequeño para darle algo a cada pago.",
+          "DATE": "Elige la primera fecha de vencimiento.",
+          "DAYS": "Escribe un número entero de días, de al menos 1."
+        }
+      },
+      "stages": {
+        "link": "Dividir en etapas",
+        "title": "Dividir en etapas",
+        "intro": "Este elemento se convierte en un elemento por etapa, del mismo proveedor. Cada uno se marca como hecho y se confirma por separado, y ambas partes ven cuáles están confirmados.",
+        "countLabel": "Cuántas etapas",
+        "countHint": "De 2 a {max}.",
+        "nameLabel": "Nombre de la etapa {number}",
+        "exampleOne": "p. ej. Postes colocados",
+        "exampleTwo": "p. ej. Paneles instalados",
+        "exampleThree": "p. ej. Pintado",
+        "dueLabel": "Fecha de vencimiento de la etapa {number} (opcional)",
+        "dueHint": "Sin fecha, la etapa vence cuando se firme el acuerdo.",
+        "chainLabel": "Cada etapa vence cuando se confirme la anterior",
+        "chainHint": "Sin marcar, las etapas se pueden marcar como hechas en cualquier orden. Marcado, no se usan las fechas posteriores a la primera etapa.",
+        "payLabel": "Agregar un pago por cada etapa",
+        "payHint": "Un pago de la otra persona por cada etapa, cada uno con vencimiento cuando se confirme su etapa.",
+        "paymentDescription": "Pago por {stage}",
+        "previewHeading": "Lo que se agregará",
+        "previewStage": "Etapa {number}: {name}, vence el {date}",
+        "previewStageOnSigning": "Etapa {number}: {name}, vence cuando se firme el acuerdo",
+        "previewStageChained": "Etapa {number}: {name}, vence cuando se confirme la etapa anterior",
+        "previewPayment": "{description}: {amount}, vence cuando se confirme la etapa {number}",
+        "done": "Agregar estas etapas",
+        "added": "{count} elementos agregados.",
+        "undo": "Volver a un solo trabajo",
+        "undone": "Vuelve a ser un solo trabajo.",
+        "problems": {
+          "COUNT": "Escribe un número entero de 2 a {max}.",
+          "NAME": "Ponle nombre a cada etapa.",
+          "AMOUNT": "Escribe un monto, como {example}.",
+          "TOO_SMALL": "Ese monto es muy pequeño para darle algo a cada pago.",
+          "DATE": "Elige una fecha o bórrala."
+        }
+      }
+    }
   },
   "consent": {
     "heading": "Firma electrónica",
@@ -963,7 +1046,27 @@
     "waitingLong": "{name} no ha confirmado esto desde que lo marcaste como entregado el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como entregado pero sin confirmar.",
     "waitingLongMoney": "{name} no ha confirmado haber recibido esto desde que registraste el pago el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como pagado pero sin confirmar.",
     "closeRequestLapses": "Si nada cambia, se cierra el {date}.",
-    "contentHidden": "Parte de este yup se ocultó tras una revisión. Todavía puedes rechazar o retirar una propuesta, marcar elementos y cerrar el yup, pero no puedes firmar ni cambiar sus términos."
+    "contentHidden": "Parte de este yup se ocultó tras una revisión. Todavía puedes rechazar o retirar una propuesta, marcar elementos y cerrar el yup, pero no puedes firmar ni cambiar sus términos.",
+    "markRest": {
+      "button": "Marcar el resto como pagado",
+      "text": "Esto registra que le pagaste a {name} {count} pagos fuera de nuestro servicio, un registro por cada uno. No movemos ni retenemos dinero. {name} confirma cada pago por separado.",
+      "confirm": "Registrar {count} pagos como pagados",
+      "done": "{count} pagos registrados como pagados."
+    },
+    "progress": {
+      "add": "Agregar una nota de avance",
+      "heading": "Cómo va",
+      "label": "Tu nota",
+      "hint": "Ambas partes pueden leerla y queda en el registro como declaración tuya. No marca nada como entregado, y {name} no tiene nada que confirmar.",
+      "told": "A {name} se le avisa por correo o notificación como máximo una vez cada 24 horas por cada yup. No hay mensaje de texto.",
+      "send": "Agregar la nota",
+      "added": "Tu nota de avance se agregó.",
+      "count": "{count, plural, one {# nota de avance} other {# notas de avance}}",
+      "listLabel": "Notas de avance",
+      "noteBy": "{name}, {date}",
+      "full": "Este elemento ya tiene todas las notas de avance que admite.",
+      "required": "Escribe unas palabras primero."
+    }
   },
   "wallet": {
     "intro": "Guarda este acuerdo en la cartera de tu teléfono. El pase muestra cómo va y enlaza aquí; sus términos se quedan en {productName}.",
@@ -1184,7 +1287,8 @@
       "message": "Mensaje enviado con ella",
       "note": "Nota",
       "reason": "Motivo indicado",
-      "statement": "Declaración"
+      "statement": "Declaración",
+      "progress": "Nota de avance, con sus propias palabras"
     },
     "events": {
       "you": {
@@ -1204,7 +1308,8 @@
         "END_PROPOSAL_CANCELLED": "Dejaste sin efecto la propuesta de terminarlo de común acuerdo.",
         "CLOSE_REQUESTED": "Pediste cerrarlo sin acuerdo.",
         "CLOSE_REQUEST_RETRACTED": "Retiraste la solicitud de cerrarlo.",
-        "STATEMENT_ADDED": "Agregaste una declaración."
+        "STATEMENT_ADDED": "Agregaste una declaración.",
+        "PROGRESS_NOTED": "Anotaste el avance de esto:"
       },
       "named": {
         "COUNTERPARTY_CLAIMED": "{name} abrió la invitación y se unió como la parte invitada.",
@@ -1223,7 +1328,8 @@
         "END_PROPOSAL_CANCELLED": "{name} dejó sin efecto la propuesta de terminarlo de común acuerdo.",
         "CLOSE_REQUESTED": "{name} pidió cerrarlo sin acuerdo.",
         "CLOSE_REQUEST_RETRACTED": "{name} retiró la solicitud de cerrarlo.",
-        "STATEMENT_ADDED": "{name} agregó una declaración."
+        "STATEMENT_ADDED": "{name} agregó una declaración.",
+        "PROGRESS_NOTED": "{name} anotó el avance de esto:"
       },
       "formerClaimant": {
         "COUNTERPARTY_CLAIMED": "Alguien abrió la invitación y se unió como la parte invitada. Esa persona fue retirada después, o salió, antes de ser confirmada.",
@@ -1627,5 +1733,14 @@
     "repair": "Reparación de la cerca",
     "repairDone": "Los dos postes están firmes y el portón cierra sin levantarlo",
     "balance": "Saldo"
+  },
+  "series": {
+    "payments": "{name}: {confirmed} de {total} pagos confirmados",
+    "paymentsDisputed": "{name}: {confirmed} de {total} pagos confirmados, {disputed} en disputa",
+    "stages": "{name}: {confirmed} de {total} etapas confirmadas",
+    "stagesDisputed": "{name}: {confirmed} de {total} etapas confirmadas, {disputed} en disputa",
+    "chipPayments": "{confirmed} de {total} pagos confirmados",
+    "chipStages": "{confirmed} de {total} etapas confirmadas",
+    "chipDisputed": "{disputed} en disputa"
   }
 }

@@ -350,3 +350,69 @@ test('every sentence is filled in, in every language, for every outcome', () => 
     }
   }
 })
+
+describe('a series of payments', () => {
+  const P1 = '00000000-0000-4000-8000-000000000021'
+  const P2 = '00000000-0000-4000-8000-000000000022'
+  const P3 = '00000000-0000-4000-8000-000000000023'
+  const payments = [P1, P2, P3].map((id, index) => ({
+    id,
+    from: 'B' as const,
+    type: 'MONEY' as const,
+    description: `Repayment ${index + 1} of 3`,
+    amount_minor: index === 2 ? 3334 : 3333,
+  }))
+  const series = (statuses: Status[], events: Shape['events'] = []) =>
+    recordOf({
+      state: 'ACTIVE',
+      revisions: [version(V1, 1, inForceStanding, ['A', 'B'], payments)],
+      inForce: V1,
+      statuses: [P1, P2, P3].map((id, index) => [id, statuses[index]] as [string, Status]),
+      events,
+    })
+
+  test('counts them under the payer, in words', () => {
+    const text = say(series(['ACCEPTED', 'ACCEPTED', 'CLAIMED']))
+    expect(text.sides[1].counts).toEqual(['Ben Ortiz: 2 of 3 payments confirmed'])
+    expect(text.sides[0].counts).toEqual([])
+    // The items are still listed under it as before, each with its own amount.
+    expect(text.sides[1].items.map((item) => item.details)).toEqual([
+      ['Amount: $33.33'],
+      ['Amount: $33.33'],
+      ['Amount: $33.34'],
+    ])
+  })
+
+  test('says how many are disputed, and in Spanish too', () => {
+    const record = series(['ACCEPTED', 'DISPUTED', 'PENDING'], [
+      { type: 'CONTRIBUTION_DISPUTED', actor: 'A', contribution: { id: P2, description: '' } },
+    ])
+    expect(say(record).sides[1].counts).toEqual([
+      'Ben Ortiz: 1 of 3 payments confirmed, 1 disputed',
+    ])
+    expect(say(record, es).sides[1].counts).toEqual([
+      'Ben Ortiz: 1 de 3 pagos confirmados, 1 en disputa',
+    ])
+  })
+
+  test('keeps a single payment’s wording', () => {
+    const record = recordOf({
+      state: 'ACTIVE',
+      revisions: [version(V1, 1, inForceStanding, ['A', 'B'])],
+      inForce: V1,
+      statuses: [
+        [BIKE, 'PENDING'],
+        [PAY, 'ACCEPTED'],
+      ],
+    })
+    expect(say(record).sides.map((side) => side.counts)).toEqual([[], []])
+  })
+
+  test('counts nothing for terms that were never agreed', () => {
+    const record = recordOf({
+      state: 'NEGOTIATING',
+      revisions: [version(V1, 1, { status: 'OPEN', since: '2026-10-02T15:00:00Z' }, ['A'], payments)],
+    })
+    expect(say(record).sides.map((side) => side.counts)).toEqual([[], []])
+  })
+})

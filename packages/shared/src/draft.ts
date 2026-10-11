@@ -1,6 +1,7 @@
 import type { components, RevisionTerms } from '@yuppers/api-client'
 
 import { fromMinorUnits, toMinorUnits } from './decimal'
+import type { SplitGroup } from './instalments'
 
 type Slot = components['schemas']['Slot']
 type ContributionType = components['schemas']['ContributionType']
@@ -63,6 +64,12 @@ export interface Draft {
   /** A message to the other party. Not part of what is signed. */
   note: string
   contributions: DraftContribution[]
+  /**
+   * What the composer's split sheets made and how to put each back while
+   * nothing has been sent (DESIGN.md §7.1, §7.2). Kept with the working copy,
+   * never sent and never signed.
+   */
+  splits?: SplitGroup[]
 }
 
 /** The longest note the service accepts, in characters (DESIGN.md §6). */
@@ -190,6 +197,7 @@ export function readDraft(stored: unknown): Draft | null {
     })
   }
 
+  const splits = readSplits(draft.splits)
   return {
     format: 1,
     base: typeof draft.base === 'string' ? draft.base : null,
@@ -198,7 +206,47 @@ export function readDraft(stored: unknown): Draft | null {
     terms: text(draft.terms),
     note: text(draft.note),
     contributions,
+    ...(splits.length > 0 ? { splits } : {}),
   }
+}
+
+function readItem(entry: unknown): DraftContribution | null {
+  if (typeof entry !== 'object' || entry === null) return null
+  const item = entry as Record<string, unknown>
+  if (typeof item.id !== 'string' || item.id === '') return null
+  return {
+    id: item.id,
+    from: item.from === 'B' ? 'B' : 'A',
+    type: TYPES.find((type) => type === item.type) ?? 'ITEM',
+    description: text(item.description),
+    quantity: text(item.quantity),
+    unit: text(item.unit),
+    due: readDue(item.due),
+    criteria: text(item.criteria),
+    required: item.required !== false,
+    amount: text(item.amount),
+  }
+}
+
+/** The split groups a stored working copy remembers; whatever is unreadable is forgotten. */
+function readSplits(stored: unknown): SplitGroup[] {
+  if (!Array.isArray(stored)) return []
+  const groups: SplitGroup[] = []
+  for (const entry of stored as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const group = entry as Record<string, unknown>
+    const original = readItem(group.original)
+    if (
+      !original ||
+      (group.kind !== 'INSTALMENTS' && group.kind !== 'STAGES') ||
+      !Array.isArray(group.ids) ||
+      !group.ids.every((id) => typeof id === 'string')
+    ) {
+      continue
+    }
+    groups.push({ kind: group.kind, original, ids: group.ids as string[] })
+  }
+  return groups
 }
 
 export type ProblemCode =

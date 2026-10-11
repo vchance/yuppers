@@ -126,6 +126,13 @@ struct EmailWording {
 struct Message {
     subject: String,
     body: String,
+    /// For a message that tells of a burst (`Notice::coalesces`): the same
+    /// message about two or more items, with `{count}` in it. Absent for the
+    /// rest, and the plain message is used.
+    #[serde(default, rename = "subjectMany")]
+    subject_many: Option<String>,
+    #[serde(default, rename = "bodyMany")]
+    body_many: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -247,6 +254,22 @@ impl Wording {
         other_party: &str,
         links: Links<'_>,
     ) -> Rendered {
+        self.email_about(language, notice, 1, code, other_party, links)
+    }
+
+    /// [`Wording::email`] for a message about `count` items: a burst of
+    /// claims or confirmations is told in one message that says how many
+    /// (DESIGN.md §12). A count of one, or a message with no wording for
+    /// several, is the plain message.
+    pub fn email_about(
+        &self,
+        language: &str,
+        notice: Notice,
+        count: u32,
+        code: &str,
+        other_party: &str,
+        links: Links<'_>,
+    ) -> Rendered {
         let message_in = |language: &str| {
             let (language, file) = self.languages.get_key_value(language)?;
             let message = file.notifications.email.messages.get(notice.as_str())?;
@@ -257,6 +280,16 @@ impl Wording {
             .or_else(|| message_in(self.default))
             .expect("the default language has every notice; checked when loading");
 
+        // The message about several, where it has one.
+        let (subject_template, body_template) = match (
+            count > 1,
+            message.subject_many.as_deref(),
+            message.body_many.as_deref(),
+        ) {
+            (true, Some(subject), Some(body)) => (subject, body),
+            _ => (message.subject.as_str(), message.body.as_str()),
+        };
+        let count_text = count.to_string();
         let wording = &file.notifications.email;
         let name = email_name(other_party);
         let yup = if name.is_empty() {
@@ -265,19 +298,20 @@ impl Wording {
             fill(&wording.yup, &[("name", &name), ("code", code)])
         };
         // The first line names the yup, then the message.
-        let message_body = format!("{}\n\n{}", wording.intro, message.body);
+        let message_body = format!("{}\n\n{}", wording.intro, body_template);
         let values = [
             ("productName", file.product_name.as_str()),
             ("code", code),
             ("yup", yup.as_str()),
             ("link", links.exchange),
             ("recordLink", links.record),
+            ("count", count_text.as_str()),
         ];
         let layout = &file.notifications.email.layout;
         let text = fill(&message_body, &values);
         let mut with_text = values.to_vec();
         with_text.push(("body", &text));
-        let subject = fill(&message.subject, &values);
+        let subject = fill(subject_template, &values);
         let body = fill(layout, &with_text);
 
         // The HTML follows the layout paragraph by paragraph: the message
@@ -290,6 +324,7 @@ impl Wording {
             ("yup", Value::Text(&yup)),
             ("link", Value::Link(links.exchange)),
             ("recordLink", Value::Link(links.record)),
+            ("count", Value::Text(&count_text)),
             ("body", Value::Text(&text)),
         ];
         let (mut main, mut small_print, mut past_link) = (String::new(), String::new(), false);

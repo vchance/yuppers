@@ -12,8 +12,8 @@ use uuid::Uuid;
 use super::dto::{
     BoundAddress, Claimant, CommandDto, Consent, CounterpartyDto, CreateExchange, ExchangeSummary,
     ExchangeView, InvitationIssued, InvitationOptions, InvitationPreview, PaymentOptionsView,
-    RevisionSent, RevisionView, RunCommand, SendRevision, StateDto, ViewContext, rfc3339,
-    state_dto,
+    RevisionSent, RevisionView, RunCommand, SendRevision, SeriesCount, StateDto, ViewContext,
+    rfc3339, state_dto,
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
@@ -603,6 +603,47 @@ struct SummaryRow {
     shared_at: Option<OffsetDateTime>,
 }
 
+/// The series in each of these exchanges' agreements in force (DESIGN.md
+/// §7.1, §7.2): for payments and for stages, the party who owes the most of
+/// them, when that is two or more. One query for the lot.
+async fn series_of(
+    db: &PgPool,
+    exchanges: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, (Option<SeriesCount>, Option<SeriesCount>)>, ApiError> {
+    let rows: Vec<(Uuid, bool, i64, i64, i64)> = sqlx::query_as(
+        "SELECT e.id, s.type = 'MONEY' AS money, count(*) AS total,
+                count(*) FILTER (WHERE c.status = 'ACCEPTED') AS confirmed,
+                count(*) FILTER (WHERE c.status = 'DISPUTED') AS disputed
+         FROM exchange e
+         JOIN contribution_snapshot s ON s.revision_id = e.in_force_revision_id
+         JOIN contribution c ON c.exchange_id = s.exchange_id AND c.id = s.contribution_id
+         WHERE e.id = ANY($1) AND s.type IN ('MONEY', 'SERVICE', 'TASK')
+         GROUP BY e.id, money, s.from_slot",
+    )
+    .bind(exchanges)
+    .fetch_all(db)
+    .await?;
+    let mut found: std::collections::HashMap<Uuid, (Option<SeriesCount>, Option<SeriesCount>)> =
+        std::collections::HashMap::new();
+    for (id, money, total, confirmed, disputed) in rows {
+        if total < 2 {
+            continue;
+        }
+        let series = SeriesCount {
+            total,
+            confirmed,
+            disputed,
+        };
+        let entry = found.entry(id).or_default();
+        let slot = if money { &mut entry.0 } else { &mut entry.1 };
+        // The party with the most of them, if both have a series.
+        if slot.is_none_or(|have| series.total > have.total) {
+            *slot = Some(series);
+        }
+    }
+    Ok(found)
+}
+
 pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>, ApiError> {
     let rows: Vec<SummaryRow> = sqlx::query_as(
         "SELECT e.id, e.display_code, e.state, e.closed_outcome, e.closed_reason,
@@ -624,6 +665,8 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
     .bind(now())
     .fetch_all(db)
     .await?;
+    let ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+    let series = series_of(db, &ids).await?;
 
     Ok(rows
         .into_iter()
@@ -654,6 +697,8 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
                 updated_at: rfc3339(row.updated_at),
                 counterparty,
                 invitation_shared_at: row.shared_at.filter(|_| waiting_for_a_claim).map(rfc3339),
+                payments: series.get(&row.id).and_then(|found| found.0),
+                stages: series.get(&row.id).and_then(|found| found.1),
             }
         })
         .collect())
@@ -803,6 +848,9 @@ pub async fn send_revision(
     let consent_language = require_signer(&mut tx, session, &body.consent, settings).await?;
 
     let revision = body.terms.into_domain(body.note)?;
+    if let Some(splits) = body.splits {
+        crate::funnel::funnel().splits_used(splits.instalments, splits.stages);
+    }
     let revision_id = Uuid::new_v4();
     let decision = decide(
         &aggregate.exchange,
@@ -923,6 +971,7 @@ pub async fn run_command(
     within_change_rate(&mut tx, id, slot, &settings.rules).await?;
 
     let mut signing = None;
+    let mut claiming_rest: Option<Vec<ContributionId>> = None;
     let (command, note) = match body.command {
         CommandDto::Accept { revision, consent } => {
             // Nobody signs what they cannot read.
@@ -1009,6 +1058,34 @@ pub async fn run_command(
             let note = non_empty(Some(note)).ok_or(ErrorCode::InvalidRequest)?;
             (Command::AddStatement, Some(note))
         }
+        CommandDto::NoteProgress { contribution, note } => {
+            let note = non_empty(Some(note)).ok_or(ErrorCode::InvalidRequest)?;
+            let contribution = ContributionId(contribution);
+            let noted: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM exchange_event
+                 WHERE exchange_id = $1 AND contribution_id = $2 AND type = 'PROGRESS_NOTED'",
+            )
+            .bind(id)
+            .bind(contribution.0)
+            .fetch_one(&mut *tx)
+            .await?;
+            if noted >= settings.rules.progress_notes_per_contribution {
+                return Err(ErrorCode::TooManyRequests.into());
+            }
+            (Command::NoteProgress { id: contribution }, Some(note))
+        }
+        CommandDto::ClaimRest { contributions } => {
+            let ids = payments_to_claim(&aggregate, slot, &contributions, &settings.rules)?;
+            let first = ids[0];
+            claiming_rest = Some(ids);
+            (
+                Command::Contribution {
+                    id: first,
+                    action: Action::Claim,
+                },
+                None,
+            )
+        }
     };
 
     // Notes go into the permanent history, so they are bounded like
@@ -1021,7 +1098,10 @@ pub async fn run_command(
     }
 
     let actor = Actor::Party(slot);
-    let decision = decide(&aggregate.exchange, actor, command, at, &settings.rules)?;
+    let decision = match &claiming_rest {
+        Some(ids) => claim_each(&aggregate.exchange, actor, ids, at, &settings.rules)?,
+        None => decide(&aggregate.exchange, actor, command, at, &settings.rules)?,
+    };
 
     if let Some((consent_language, consent_version)) = &signing {
         let open = aggregate
@@ -1065,6 +1145,10 @@ pub async fn run_command(
         .any(|event| matches!(event, Event::AgreementInForce { .. }));
     if let (true, Some(in_force)) = (came_into_force, &decision.exchange.in_force) {
         name_participants(&mut tx, id, &in_force.revision).await?;
+        // How the first agreement was shaped, as counts (DESIGN.md §7).
+        if aggregate.exchange.state != State::Active {
+            crate::funnel::funnel().shape_in_force(&in_force.revision);
+        }
         // The tier only ever goes up.
         let threshold = settings.rules.tier_one_threshold_minor;
         if required_tier(&in_force.revision, false, threshold) == Tier::One {
@@ -1077,7 +1161,81 @@ pub async fn run_command(
 
     let view = view(&mut tx, &settings.rules, id, session.account_id).await?;
     tx.commit().await?;
+    if claiming_rest.is_some() {
+        crate::funnel::funnel().mark_rest_used();
+    }
     Ok(view)
+}
+
+/// The payments "Mark the rest as paid" names, in the order given, if each is
+/// one the caller can claim as a first claim: at least two, no more than a
+/// revision may hold, none twice, each a money item of the agreement in
+/// force that the caller owes and that is still pending. A claim after a
+/// dispute needs a note, so it is not one of these.
+fn payments_to_claim(
+    aggregate: &Aggregate,
+    slot: Slot,
+    named: &[Uuid],
+    rules: &Rules,
+) -> Result<Vec<ContributionId>, ApiError> {
+    let in_force = aggregate
+        .exchange
+        .in_force
+        .as_ref()
+        .ok_or(ErrorCode::ActionNotAllowed)?;
+    let distinct: HashSet<&Uuid> = named.iter().collect();
+    if named.len() < 2 || named.len() > rules.limits.contributions || distinct.len() != named.len()
+    {
+        return Err(ErrorCode::InvalidRequest.into());
+    }
+    named
+        .iter()
+        .map(|&named| {
+            let id = ContributionId(named);
+            let terms = in_force
+                .revision
+                .contribution(id)
+                .ok_or(ErrorCode::ActionNotAllowed)?;
+            if !matches!(terms.kind, Kind::Money { .. }) || terms.from != slot {
+                return Err(ErrorCode::ActionNotAllowed.into());
+            }
+            if aggregate.exchange.statuses.get(&id) != Some(&Status::Pending) {
+                return Err(ErrorCode::ActionNotAllowed.into());
+            }
+            Ok(id)
+        })
+        .collect()
+}
+
+/// One claim for each of `ids`, in order, each decided on what the one
+/// before left: the same decisions as claiming them one at a time, stored
+/// and told as one command. If any is refused, so is the whole.
+fn claim_each(
+    exchange: &exchange::Exchange,
+    actor: Actor,
+    ids: &[ContributionId],
+    at: OffsetDateTime,
+    rules: &Rules,
+) -> Result<Decision, exchange::Refusal> {
+    let mut decision = Decision {
+        events: Vec::new(),
+        exchange: exchange.clone(),
+    };
+    for &id in ids {
+        let next = decide(
+            &decision.exchange,
+            actor,
+            Command::Contribution {
+                id,
+                action: Action::Claim,
+            },
+            at,
+            rules,
+        )?;
+        decision.events.extend(next.events);
+        decision.exchange = next.exchange;
+    }
+    Ok(decision)
 }
 
 /// The caller, having opened an invitation and not yet been confirmed by the

@@ -73,6 +73,19 @@ function events(service: FakeService): RecordEvent[] {
       note: command.note ?? null,
     });
   }
+  // Each progress note the stand-in accepted, with the item it is on.
+  for (const noted of service.progress) {
+    const item = inForce.terms.contributions.find((candidate) => candidate.id === noted.contribution);
+    if (!item) continue;
+    happened.push({
+      type: 'PROGRESS_NOTED',
+      actor: item.from,
+      at: '2026-10-21T08:00:00Z',
+      revision,
+      contribution: { id: item.id, description: item.description },
+      note: noted.note,
+    });
+  }
   if (service.exchange.end_proposed_by) {
     happened.push({ type: 'END_PROPOSED', actor: 'B', at: '2026-10-21T09:00:00Z' });
   }

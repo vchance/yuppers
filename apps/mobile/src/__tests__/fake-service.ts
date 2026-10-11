@@ -1,6 +1,6 @@
 import type { Account, ErrorCode, ExchangeView } from '@yuppers/api-client';
 import type { PaymentHandles, RevisionView, Wording } from '@yuppers/shared';
-import { TERMS_VERSION } from '@yuppers/shared';
+import { seriesInExchange, TERMS_VERSION } from '@yuppers/shared';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { answerRecordAndSafety } from './fake-record';
@@ -156,6 +156,55 @@ export function waitingExchange(sharedAt: string | null): ExchangeView {
   };
 }
 
+export const INSTALMENT_ONE = '33333333-3333-4333-8333-333333333331';
+export const INSTALMENT_TWO = '33333333-3333-4333-8333-333333333332';
+export const INSTALMENT_THREE = '33333333-3333-4333-8333-333333333333';
+
+/**
+ * An agreement in which the reader owes three payments, the first confirmed,
+ * and provides one job: for series counts, "Mark the rest as paid" and
+ * progress notes. Put in `service.exchange` by a test.
+ */
+export function seriesExchange(): ExchangeView {
+  const money = (id: string, number: number) => ({
+    id,
+    from: 'A' as const,
+    type: 'MONEY' as const,
+    description: `Repayment ${number} of 3`,
+    due: { kind: 'DATE' as const, date: `2026-1${number}-15` },
+    required: true,
+    amount_minor: 3333,
+  });
+  const base = activeExchange();
+  return {
+    ...base,
+    in_force_revision: {
+      ...revision,
+      terms: {
+        ...revision.terms,
+        contributions: [
+          revision.terms.contributions[0],
+          money(INSTALMENT_ONE, 1),
+          money(INSTALMENT_TWO, 2),
+          money(INSTALMENT_THREE, 3),
+        ],
+      },
+    },
+    contributions: [
+      { id: REPAIR, status: 'PENDING' },
+      { id: INSTALMENT_ONE, status: 'ACCEPTED' },
+      { id: INSTALMENT_TWO, status: 'PENDING' },
+      { id: INSTALMENT_THREE, status: 'PENDING' },
+    ],
+  };
+}
+
+/** A progress note the stand-in accepted. */
+export interface ProgressNoted {
+  contribution: string;
+  note: string;
+}
+
 export interface Sent {
   method: string;
   path: string;
@@ -208,6 +257,10 @@ export interface FakeService {
   optedOut: boolean;
   /** The account's own payment options. */
   handles: PaymentHandles;
+  /** The progress notes accepted so far, which the history then shows. */
+  progress: ProgressNoted[];
+  /** Makes the next progress note fail as if the item held as many as it can. */
+  progressFull: boolean;
   fetch: typeof fetch;
 }
 
@@ -232,6 +285,8 @@ export function fakeService(): FakeService {
     texting: true,
     textUpdates: new Set(),
     optedOut: false,
+    progress: [],
+    progressFull: false,
     handles: { venmo: null, cash_app: null, paypal: null, zelle: null },
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -410,6 +465,7 @@ function respond(
           you: 'A',
           counterparty: service.exchange.counterparty,
           invitation_shared_at: service.exchange.invitation_shared_at ?? null,
+          ...counts(service.exchange),
         },
       ],
     ];
@@ -469,6 +525,29 @@ function respond(
       };
       return [200, service.exchange];
     }
+    const rest = command as { type: string; contributions?: string[]; note?: string };
+    if (rest.type === 'CLAIM_REST' && rest.contributions) {
+      const ids = rest.contributions;
+      service.exchange = {
+        ...service.exchange,
+        version: service.exchange.version + 1,
+        contributions: service.exchange.contributions.map((item) =>
+          ids.includes(item.id) ? { ...item, status: 'CLAIMED' } : item,
+        ),
+      };
+      return [200, service.exchange];
+    }
+    if (rest.type === 'NOTE_PROGRESS' && command.contribution) {
+      const item = service.exchange.in_force_revision?.terms.contributions.find(
+        (candidate) => candidate.id === command.contribution,
+      );
+      // Only the one who provides the item can write about its progress.
+      if (!item || item.from !== service.exchange.you) return [403, { code: 'WRONG_ACTOR' }];
+      if (service.progressFull) return [429, { code: 'TOO_MANY_REQUESTS' }];
+      service.progress.push({ contribution: item.id, note: rest.note ?? '' });
+      service.exchange = { ...service.exchange, version: service.exchange.version + 1 };
+      return [200, service.exchange];
+    }
     if (command.type === 'REQUEST_CLOSE' && !service.exchange.close_requested_by) {
       service.exchange = {
         ...service.exchange,
@@ -493,4 +572,18 @@ export async function signInOnScreen(w: Wording): Promise<void> {
   await fireEvent.press(screen.getByRole('button', { name: w.signIn.sendCode }));
   await fireEvent.changeText(await screen.findByLabelText(w.signIn.codeLabel), '123456');
   await fireEvent.press(screen.getByRole('button', { name: w.signIn.submit }));
+}
+
+/** The counts the list carries for a series of payments or stages. */
+function counts(exchange: ExchangeView) {
+  const found: Record<string, { total: number; confirmed: number; disputed: number }> = {};
+  for (const series of seriesInExchange(exchange)) {
+    const sum = found[series.kind] ?? { total: 0, confirmed: 0, disputed: 0 };
+    found[series.kind] = {
+      total: sum.total + series.total,
+      confirmed: sum.confirmed + series.confirmed,
+      disputed: sum.disputed + series.disputed,
+    };
+  }
+  return found;
 }

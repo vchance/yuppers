@@ -49,6 +49,7 @@ export type NotificationKind =
   | 'CLOSE_REQUESTED'
   | 'CLOSE_REQUEST_RETRACTED'
   | 'STATEMENT_ADDED'
+  | 'PROGRESS_NOTED'
   | 'INACTIVITY_PROMPTED'
   | 'DUE_SOON'
   | 'OVERDUE_TO_DELIVER'
@@ -97,7 +98,7 @@ export type FormerClaimantEventType = 'COUNTERPARTY_CLAIMED' | 'REVISION_SENT' |
 export type ContributionEventType = Extract<Schemas['EventType'], `CONTRIBUTION_${string}`>
 
 /** What a note written with an event is: a message, a reason, a statement, or just a note. */
-export type RecordNoteKind = 'message' | 'note' | 'reason' | 'statement'
+export type RecordNoteKind = 'message' | 'note' | 'reason' | 'statement' | 'progress'
 
 /**
  * Every piece of text the product says. Each language's file in `wording/`
@@ -143,7 +144,19 @@ export interface Wording {
     email: {
       /** Wraps every message. Must contain `{body}` and `{link}`; may use `{code}` and `{productName}`. */
       layout: string
-      messages: Record<NotificationKind, { subject: string; body: string }>
+      messages: Record<
+        NotificationKind,
+        {
+          subject: string
+          body: string
+          /**
+           * For a message that tells of a burst of claims or confirmations
+           * (DESIGN.md §12): the same message about `{count}` items.
+           */
+          subjectMany?: string
+          bodyMany?: string
+        }
+      >
     }
     /**
      * The email that carries a one-time code, one message for each thing a
@@ -611,6 +624,95 @@ export interface Wording {
     effects: Record<AmendmentEffect, string>
     /** Uses `{count}`: items of the agreement the working copy no longer has. */
     removedCount: string
+    /** The sheets that split one item into several (DESIGN.md §7.1, §7.2). */
+    split: {
+      /** Uses `{description}`, `{number}`, `{count}`: "Repayment 1 of 3", in the author's language. */
+      ordinal: string
+      /** The same when the item had no description. */
+      ordinalBlank: string
+      amounts: {
+        howLegend: string
+        howShare: string
+        howEach: string
+        /** Uses `{currency}`. */
+        shareLabel: string
+        eachLabel: string
+        remainderHint: string
+      }
+      instalments: {
+        link: string
+        title: string
+        intro: string
+        countLabel: string
+        /** Uses `{max}`. */
+        countHint: string
+        firstLabel: string
+        everyLegend: string
+        everyWeek: string
+        everyTwoWeeks: string
+        everyMonth: string
+        everyDays: string
+        daysLabel: string
+        monthHint: string
+        previewHeading: string
+        /** Uses `{description}`, `{amount}`, `{date}`. */
+        previewLine: string
+        plainHint: string
+        done: string
+        /** Uses `{count}`. */
+        added: string
+        undo: string
+        undone: string
+        /** Uses `{max}` and `{example}` where it has them. */
+        problems: Record<'COUNT' | 'AMOUNT' | 'TOO_SMALL' | 'DATE' | 'DAYS', string>
+      }
+      stages: {
+        link: string
+        title: string
+        intro: string
+        countLabel: string
+        countHint: string
+        nameLabel: string
+        exampleOne: string
+        exampleTwo: string
+        exampleThree: string
+        dueLabel: string
+        dueHint: string
+        chainLabel: string
+        chainHint: string
+        payLabel: string
+        payHint: string
+        /** Uses `{stage}`. */
+        paymentDescription: string
+        previewHeading: string
+        /** Use `{number}`, `{name}` and, for the first, `{date}`. */
+        previewStage: string
+        previewStageOnSigning: string
+        previewStageChained: string
+        /** Uses `{description}`, `{amount}`, `{number}`. */
+        previewPayment: string
+        done: string
+        added: string
+        undo: string
+        undone: string
+        problems: Record<'COUNT' | 'NAME' | 'AMOUNT' | 'TOO_SMALL' | 'DATE', string>
+      }
+    }
+  }
+  /**
+   * Counts for a series of payments or of stages (DESIGN.md §7.1, §7.2).
+   * They use `{name}` (the party who owes or provides them), `{confirmed}`,
+   * `{total}` and `{disputed}`; a count is always words and numbers, never an
+   * amount, a bar or a percentage.
+   */
+  series: {
+    payments: string
+    paymentsDisputed: string
+    stages: string
+    stagesDisputed: string
+    chipPayments: string
+    chipStages: string
+    chipDisputed: string
   }
   /**
    * What a signer is shown before signing. Versioned: `CONSENT_VERSION` names
@@ -1180,6 +1282,31 @@ export interface Wording {
      */
     moneyMoves: Record<Move, string>
     moneyMoveText: Record<Move, string>
+    /** "Mark the rest as paid" on a series of payments (DESIGN.md §7.1). */
+    markRest: {
+      button: string
+      /** Uses `{name}` and `{count}`. */
+      text: string
+      confirm: string
+      done: string
+    }
+    /** Progress notes on an item under way (DESIGN.md §7.2). */
+    progress: {
+      add: string
+      heading: string
+      label: string
+      /** Uses `{name}`. */
+      hint: string
+      told: string
+      send: string
+      added: string
+      count: string
+      listLabel: string
+      /** Uses `{name}` and `{date}`. */
+      noteBy: string
+      full: string
+      required: string
+    }
     /**
      * To the provider of something marked delivered, or paid, that the other
      * party has left unconfirmed for a long time: the ways out. Uses `{name}`

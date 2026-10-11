@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client'
-import { groupExchanges, invitationChip } from '@yuppers/shared'
+import { groupExchanges, invitationChip, seriesChips } from '@yuppers/shared'
 import { useEffect, useState } from 'react'
 
 import { useI18n } from '../app/context'
@@ -121,7 +121,8 @@ function Group({
 }
 
 function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
-  const { wording, fmt, moment } = useI18n()
+  const i18n = useI18n()
+  const { wording, fmt, moment } = i18n
   const w = wording.home
   return (
     <ul className="plain cards">
@@ -151,6 +152,12 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
                   {fmt(w.waitingFor, { name: exchange.other_party_name })}
                 </StatusChip>
               )}
+              {/* Where a series of payments or stages stands, in words (DESIGN.md §7.1, §7.2). */}
+              {seriesChips(exchange, i18n).map((text) => (
+                <span key={text} className="tag">
+                  {text}
+                </span>
+              ))}
             </p>
             <p className="hint">
               {fmt(w.reference, { code: exchange.display_code })}

@@ -8,6 +8,10 @@
 //! Reminders are messages too, but no decision causes them:
 //! `domain::reminder` says when one is due.
 
+use std::sync::atomic::{AtomicI64, Ordering};
+
+use time::Duration;
+
 use super::contribution::Action;
 use super::exchange::{Actor, Counterparty, Event, Exchange, NotAgreed, Outcome, Unresolved};
 use super::revision::Slot;
@@ -49,6 +53,10 @@ pub enum Notice {
     CloseRequested,
     CloseRequestRetracted,
     StatementAdded,
+    /// The party who provides an item added a progress note on it
+    /// (DESIGN.md §7.2). Not a status change: it is sent by email and push,
+    /// never as a text update, and at most once a day per recipient per yup.
+    ProgressNoted,
     InactivityPrompted,
     /// A reminder to the party who owes something that it is due soon. This
     /// and the next two are not about an event; `domain::reminder` says when
@@ -68,7 +76,7 @@ pub enum Notice {
 }
 
 impl Notice {
-    pub const ALL: [Notice; 34] = [
+    pub const ALL: [Notice; 35] = [
         Notice::InvitationClaimed,
         Notice::InvitationClaimedUnconfirmed,
         Notice::CounterpartyConfirmed,
@@ -92,6 +100,7 @@ impl Notice {
         Notice::CloseRequested,
         Notice::CloseRequestRetracted,
         Notice::StatementAdded,
+        Notice::ProgressNoted,
         Notice::InactivityPrompted,
         Notice::DueSoon,
         Notice::OverdueToDeliver,
@@ -130,6 +139,7 @@ impl Notice {
             Notice::CloseRequested => "CLOSE_REQUESTED",
             Notice::CloseRequestRetracted => "CLOSE_REQUEST_RETRACTED",
             Notice::StatementAdded => "STATEMENT_ADDED",
+            Notice::ProgressNoted => "PROGRESS_NOTED",
             Notice::InactivityPrompted => "INACTIVITY_PROMPTED",
             Notice::DueSoon => "DUE_SOON",
             Notice::OverdueToDeliver => "OVERDUE_TO_DELIVER",
@@ -146,6 +156,15 @@ impl Notice {
 
     pub fn parse(text: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|notice| notice.as_str() == text)
+    }
+
+    /// Whether a burst of this notice, from one party on one yup, is told as
+    /// one message that says how many items it was about (DESIGN.md §12,
+    /// "Instalments, stages and progress notes"). Claims and confirmations
+    /// only: a dispute, a waiver and the rest are each told on their own, and
+    /// due-soon and overdue reminders stay per item.
+    pub fn coalesces(self) -> bool {
+        matches!(self, Notice::DeliveryClaimed | Notice::DeliveryConfirmed)
     }
 
     /// Whether this notice is a status change that a party who turned on
@@ -180,6 +199,44 @@ impl Notice {
     }
 }
 
+/// How long a burst of claims, or of confirmations, by one party on one yup
+/// is gathered into one message (DESIGN.md §12). A placeholder from the
+/// design: events by the same actor on the same yup within 10 minutes.
+pub const COALESCE_WINDOW: Duration = Duration::minutes(10);
+
+/// How long a coalescing message waits for the next event of its burst before
+/// it may be sent, each event pushing it back, but never beyond
+/// [`COALESCE_WINDOW`] from the first. Not in the design: a message that went
+/// out at once could not say how many items a burst held. A placeholder of 60
+/// seconds, which `COALESCE_HOLD_SECONDS` changes (the end-to-end suites set
+/// it to 0, so that a text follows its change at once).
+pub fn coalesce_hold() -> Duration {
+    let set = HOLD.load(Ordering::Relaxed);
+    if set >= 0 {
+        return Duration::seconds(set);
+    }
+    let seconds = std::env::var("COALESCE_HOLD_SECONDS")
+        .ok()
+        .and_then(|text| text.trim().parse::<i64>().ok())
+        .filter(|seconds| (0..=600).contains(seconds))
+        .unwrap_or(60);
+    Duration::seconds(seconds)
+}
+
+/// Fixes the hold for this process, over the environment's.
+pub fn set_coalesce_hold(hold: Duration) {
+    HOLD.store(hold.whole_seconds().clamp(0, 600), Ordering::Relaxed);
+}
+
+static HOLD: AtomicI64 = AtomicI64::new(-1);
+
+/// How long after a progress-note notification a recipient is told of no
+/// further note on the same yup (DESIGN.md §7.2: at most one per recipient
+/// per yup per day). Rolling: 24 hours from the last one told, not a
+/// calendar day. Later notes are seen on the yup. A placeholder from the
+/// design.
+pub const PROGRESS_NOTICE_WINDOW: Duration = Duration::days(1);
+
 /// The message a decision calls for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Notification {
@@ -187,6 +244,9 @@ pub struct Notification {
     pub event: usize,
     pub notice: Notice,
     pub to: Vec<Slot>,
+    /// How many of the decision's events the message is about: more than one
+    /// when a single command claimed or confirmed several items.
+    pub count: usize,
 }
 
 /// What one event is worth saying, if anything. `before` is the exchange as
@@ -231,6 +291,7 @@ fn notice(before: &Exchange, event: &Event) -> Option<Notice> {
         Event::CloseRequested { .. } => Notice::CloseRequested,
         Event::CloseRequestRetracted { .. } => Notice::CloseRequestRetracted,
         Event::StatementAdded { .. } => Notice::StatementAdded,
+        Event::ProgressNoted { .. } => Notice::ProgressNoted,
         Event::InactivityPrompted => Notice::InactivityPrompted,
         Event::Closed { outcome, .. } => match outcome {
             Outcome::NotAgreed(NotAgreed::Withdrawn) => Notice::ClosedWithdrawn,
@@ -280,6 +341,7 @@ pub fn notifications(before: &Exchange, actor: Actor, events: &[Event]) -> Vec<N
             event,
             notice,
             to: vec![Slot::A, Slot::B],
+            count: 1,
         });
     }
 
@@ -295,7 +357,21 @@ pub fn notifications(before: &Exchange, actor: Actor, events: &[Event]) -> Vec<N
             Actor::Party(slot) => vec![slot.other()],
             Actor::System => vec![Slot::A, Slot::B],
         };
-        found.push(Notification { event, notice, to });
+        // Several claims or confirmations in one command are one message.
+        let count = if notice.coalesces() {
+            events
+                .iter()
+                .filter(|other| self::notice(before, other) == Some(notice))
+                .count()
+        } else {
+            1
+        };
+        found.push(Notification {
+            event,
+            notice,
+            to,
+            count,
+        });
     }
 
     found
@@ -728,5 +804,57 @@ mod tests {
         // Never a reminder: those are not status changes.
         assert!(!Notice::DueSoon.texted_as_update());
         assert!(!Notice::OverdueToDeliver.texted_as_update());
+    }
+
+    #[test]
+    fn a_progress_note_tells_the_recipient_but_is_not_texted() {
+        let mut s = Scenario::active();
+        assert_eq!(
+            s.run(A, Command::NoteProgress { id: id(1) }),
+            to_b(Notice::ProgressNoted)
+        );
+        assert!(!Notice::ProgressNoted.texted_as_update());
+        assert!(!Notice::ProgressNoted.coalesces());
+    }
+
+    #[test]
+    fn only_claims_and_confirmations_make_a_burst() {
+        let bursts: Vec<&str> = Notice::ALL
+            .into_iter()
+            .filter(|notice| notice.coalesces())
+            .map(Notice::as_str)
+            .collect();
+        assert_eq!(bursts, ["DELIVERY_CLAIMED", "DELIVERY_CONFIRMED"]);
+        // Reminders are per item.
+        assert!(!Notice::DueSoon.coalesces());
+        assert!(!Notice::OverdueToReceive.coalesces());
+    }
+
+    #[test]
+    fn several_claims_in_one_command_are_one_message_that_counts_them() {
+        let s = Scenario::active();
+        let claims: Vec<Event> = [1, 2, 3]
+            .into_iter()
+            .map(|n| Event::ContributionChanged {
+                contribution: id(n),
+                action: Action::Claim,
+                by: Slot::A,
+                status: crate::domain::contribution::Status::Claimed,
+            })
+            .collect();
+        let found = notifications(&s.exchange, A, &claims);
+        assert_eq!(
+            found,
+            [Notification {
+                event: 2,
+                notice: Notice::DeliveryClaimed,
+                to: vec![Slot::B],
+                count: 3,
+            }]
+        );
+
+        // One claim is a count of one.
+        let one = notifications(&s.exchange, A, &claims[..1]);
+        assert_eq!(one[0].count, 1);
     }
 }

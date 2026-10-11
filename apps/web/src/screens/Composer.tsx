@@ -8,20 +8,24 @@ import {
   composerKind,
   CONTRIBUTION_TYPES,
   createDraftSaver,
-  decimalForInput,
   draftEffects,
   draftFromTerms,
   dueOf,
   fractionDigitsOf,
   invitationBoundTo,
   invitationForProblem,
+  liveGroups,
   lockedContributions,
+  mergeInstalments,
+  mergeStages,
   NAMED_INVITATION,
   newContribution,
   otherSlot,
-  parseDecimal,
   problemText as problemMessage,
+  replaceItem,
   revisionToSend,
+  splitRoom,
+  splitsUsed,
   startingDraft,
   statusesOf,
   swapSides,
@@ -30,6 +34,7 @@ import {
   type Draft,
   type DraftContribution,
   type DraftDue,
+  type SplitGroup,
   type InvitationChoice,
   type ItemEffect,
   type Problem,
@@ -52,14 +57,9 @@ import { Panel } from '../components/Panel'
 import { ShowWhenSigning } from '../components/ShowWhenSigning'
 import { StartingPoint, SwapSides } from '../components/StartingPoint'
 import { TermsView } from '../components/TermsView'
-import {
-  ErrorNote,
-  Failure,
-  Field,
-  PageHeading,
-  Written,
-  type ControlProps,
-} from '../components/ui'
+import { DecimalInput } from '../components/DecimalInput'
+import { InstalmentsSheet, StagesSheet } from '../components/SplitSheets'
+import { ErrorNote, Failure, Field, PageHeading, Written } from '../components/ui'
 import { announce, useAnnouncement } from '../lib/announce'
 import { showAfterSigning } from '../lib/payments'
 import { api, failureCode, type RevisionSent, type Slot } from '../lib/api'
@@ -130,6 +130,8 @@ function Editor({ exchange, reload, onSent }: Props) {
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [added, setAdded] = useState<string | null>(null)
+  // The item whose split sheet is open, and which sheet (DESIGN.md §7.1, §7.2).
+  const [sheet, setSheet] = useState<{ id: string; kind: 'instalments' | 'stages' } | null>(null)
   // The common agreement this draft was started from, if this session started it
   // from one, and whether its hint is open: until the first edit.
   const template = kind === 'first' ? templateStartedFrom(exchange.id) : undefined
@@ -199,6 +201,42 @@ function Editor({ exchange, reload, onSent }: Props) {
     setAdded(id)
   }
 
+  // ---- Splitting an item ---------------------------------------------------------
+
+  function addSplit(at: string, items: DraftContribution[], group: SplitGroup) {
+    const current = latest.current
+    edit({
+      ...current,
+      contributions: replaceItem(current.contributions, at, items),
+      splits: [...(current.splits ?? []), group],
+    })
+    setSheet(null)
+    // The amounts typed into the inputs are rebuilt from the new items.
+    setGeneration((count) => count + 1)
+    setAdded(items[0].id)
+    announce(
+      fmt(group.kind === 'INSTALMENTS' ? w.split.instalments.added : w.split.stages.added, {
+        count: items.length,
+      }),
+    )
+  }
+
+  function putBack(group: SplitGroup) {
+    const current = latest.current
+    const merged =
+      group.kind === 'INSTALMENTS'
+        ? mergeInstalments(current.contributions, group, digits)
+        : mergeStages(current.contributions, group)
+    edit({
+      ...current,
+      contributions: merged ?? current.contributions,
+      splits: (current.splits ?? []).filter((candidate) => candidate !== group),
+    })
+    setGeneration((count) => count + 1)
+    setAdded(group.original.id)
+    announce(group.kind === 'INSTALMENTS' ? w.split.instalments.undone : w.split.stages.undone)
+  }
+
   // A new item starts with the keyboard in it.
   useEffect(() => {
     if (added) document.getElementById(`${added}-description`)?.focus()
@@ -254,7 +292,13 @@ function Editor({ exchange, reload, onSent }: Props) {
     try {
       const result = await api.sendRevision(
         exchange.id,
-        revisionToSend(exchange, built, language, invitationBoundTo(invitee) ?? ''),
+        revisionToSend(
+          exchange,
+          built,
+          language,
+          invitationBoundTo(invitee) ?? '',
+          splitsUsed(draft),
+        ),
       )
       saver.sent()
       await showAfterSigning(exchange.id, alsoShow)
@@ -357,6 +401,9 @@ function Editor({ exchange, reload, onSent }: Props) {
   const setName = (slot: Slot, name: string) =>
     change(slot === 'A' ? { partyA: name } : { partyB: name })
   const general = problems.filter((problem) => problem.field === 'contributions')
+  const groups = liveGroups(draft.contributions, draft.splits ?? [])
+  // Room in the revision's 50 items for the parts of a split.
+  const canSplit = splitRoom(draft.contributions.length) >= 2
 
   return (
     <>
@@ -606,6 +653,41 @@ function Editor({ exchange, reload, onSent }: Props) {
                 </div>
               )}
 
+              {/* Several items from one (DESIGN.md §7.1, §7.2). */}
+              {!locked.has(item.id) && (
+                <SplitControls
+                  item={item}
+                  groups={groups}
+                  contributions={draft.contributions}
+                  canSplit={canSplit}
+                  open={sheet?.id === item.id ? sheet.kind : null}
+                  onOpen={(kind) => setSheet({ id: item.id, kind })}
+                  onPutBack={putBack}
+                />
+              )}
+              {sheet?.id === item.id && sheet.kind === 'instalments' && (
+                <InstalmentsSheet
+                  item={item}
+                  existing={draft.contributions.length}
+                  digits={digits}
+                  currency={exchange.currency}
+                  timezone={exchange.timezone}
+                  onAdd={(items, group) => addSplit(item.id, items, group)}
+                  onCancel={() => setSheet(null)}
+                />
+              )}
+              {sheet?.id === item.id && sheet.kind === 'stages' && (
+                <StagesSheet
+                  item={item}
+                  existing={draft.contributions.length}
+                  digits={digits}
+                  currency={exchange.currency}
+                  timezone={exchange.timezone}
+                  onAdd={(items, group) => addSplit(item.id, items, group)}
+                  onCancel={() => setSheet(null)}
+                />
+              )}
+
               <Field label={w.dueLabel}>
                 {(control) => (
                   <select
@@ -819,6 +901,55 @@ function Editor({ exchange, reload, onSent }: Props) {
 }
 
 /**
+ * The links under an item that split it into several, and put a split back
+ * while nothing has been sent (DESIGN.md §7.1, §7.2). A money item splits
+ * into instalments; a service or task into stages.
+ */
+function SplitControls(props: {
+  item: DraftContribution
+  groups: readonly SplitGroup[]
+  contributions: readonly DraftContribution[]
+  canSplit: boolean
+  open: 'instalments' | 'stages' | null
+  onOpen(kind: 'instalments' | 'stages'): void
+  onPutBack(group: SplitGroup): void
+}) {
+  const { wording } = useI18n()
+  const w = wording.composer.split
+  const { item } = props
+  const kind =
+    item.type === 'MONEY'
+      ? 'instalments'
+      : item.type === 'SERVICE' || item.type === 'TASK'
+        ? 'stages'
+        : null
+  // The first of the items a split made carries the way back.
+  const group = props.groups.find(
+    (candidate) =>
+      candidate.ids.find((id) => props.contributions.some((other) => other.id === id)) === item.id,
+  )
+  // An item a split made is changed like any other, but not split again: putting
+  // the outer split back would leave the inner one's items behind.
+  const inSplit = props.groups.some((candidate) => candidate.ids.includes(item.id))
+  const split = kind && props.canSplit && props.open === null && !inSplit
+  if (!split && !group) return null
+  return (
+    <div className="actions">
+      {split && kind && (
+        <button type="button" className="link" onClick={() => props.onOpen(kind)}>
+          {w[kind].link}
+        </button>
+      )}
+      {group && (
+        <button type="button" className="link" onClick={() => props.onPutBack(group)}>
+          {group.kind === 'INSTALMENTS' ? w.instalments.undo : w.stages.undo}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
  * Changes on the editing page that are seen rather than reached: the working
  * copy turning out to be older than the terms, items of the agreement
  * dropping out of it, and a save failing. Saving and saved are shown but not
@@ -875,37 +1006,5 @@ function Effects({ effects }: { effects: readonly ItemEffect[] }) {
       </ul>
       <p className="hint">{w.effectsSteer}</p>
     </section>
-  )
-}
-
-interface DecimalInputProps extends ControlProps {
-  /** A plain decimal, empty for none, `null` when what is typed is not a number. */
-  value: string | null
-  onChange(value: string | null): void
-  /** Grey text for an empty field: an example, never a value. */
-  placeholder?: string
-}
-
-/**
- * A number typed the way the reader's language writes numbers. What is typed
- * stays on screen as typed; the working copy gets the plain form, or `null`
- * while it cannot be read as a number.
- */
-function DecimalInput({ value, onChange, ...control }: DecimalInputProps) {
-  const { language } = useI18n()
-  const [text, setText] = useState(() => (value ? decimalForInput(value, language) : ''))
-  return (
-    <input
-      {...control}
-      type="text"
-      inputMode="decimal"
-      autoComplete="off"
-      value={text}
-      onChange={(event) => {
-        const typed = event.target.value
-        setText(typed)
-        onChange(typed.trim() === '' ? '' : parseDecimal(typed, language))
-      }}
-    />
   )
 }

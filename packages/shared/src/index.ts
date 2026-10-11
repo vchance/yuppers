@@ -306,10 +306,11 @@ export {
   lockedContributions,
   problemText,
   revisionToSend,
+  splitsUsed,
   SAVE_AFTER_MS,
   startingDraft,
 } from './composer'
-export type { ComposerKind, DraftSaver, SaveState } from './composer'
+export type { ComposerKind, DraftSaver, SaveState, SplitsUsed } from './composer'
 export {
   isAwaitingYourConfirmation,
   isInvitationSpent,
@@ -421,3 +422,45 @@ export {
   sampleYup,
   type Sample,
 } from './sample'
+
+export {
+  addDays,
+  addMonths,
+  amountsFor,
+  isDate,
+  liveGroups,
+  MAX_ITEMS,
+  MAX_SPLIT,
+  mergeInstalments,
+  planInstalments,
+  replaceItem,
+  scheduleDates,
+  shareOut,
+  splitIntoInstalments,
+  splitRoom,
+} from './instalments'
+export type {
+  AmountChoice,
+  AmountProblem,
+  Every,
+  InstalmentRow,
+  InstalmentsInput,
+  InstalmentsProblem,
+  SplitGroup,
+} from './instalments'
+export { mergeStages, planStages, splitIntoStages } from './stages'
+export type { StagesInput, StagesPlan, StagesProblem } from './stages'
+export { seriesChips, seriesInExchange, seriesLine, seriesOf } from './series'
+export type { Series, SeriesCounts, SeriesItem, SeriesKind } from './series'
+export {
+  canNoteProgress,
+  MARK_REST_PANEL,
+  markRestCommand,
+  progressPanel,
+  PROGRESS_NOTE_MAX_CHARS,
+  PROGRESS_NOTES_PER_ITEM,
+  progressCommand,
+  progressNotesOf,
+  restToMarkPaid,
+} from './progress'
+export type { ProgressNote } from './progress'

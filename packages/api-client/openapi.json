@@ -4077,6 +4077,53 @@
                 ]
               }
             }
+          },
+          {
+            "type": "object",
+            "description": "Mark several payments as paid at once (\"Mark the rest as paid\",\nDESIGN.md §7.1): one claim for each, in the order given, each exactly\nas if claimed on its own, and one message to the other party saying\nhow many. All or none. Money items you owe, each still pending.",
+            "required": [
+              "contributions",
+              "type"
+            ],
+            "properties": {
+              "contributions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CLAIM_REST"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Note how an item you provide is going (DESIGN.md §7.2). A statement\nof your own: it is not a claim, changes no status and asks nothing of\nthe other party. Only while the item is pending or claimed; a limited\nnumber per item; no text update.",
+            "required": [
+              "contribution",
+              "note",
+              "type"
+            ],
+            "properties": {
+              "contribution": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "note": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "NOTE_PROGRESS"
+                ]
+              }
+            }
           }
         ]
       },
@@ -4518,6 +4565,7 @@
           "CLOSE_REQUESTED",
           "CLOSE_REQUEST_RETRACTED",
           "STATEMENT_ADDED",
+          "PROGRESS_NOTED",
           "INACTIVITY_PROMPTED",
           "EXCHANGE_CLOSED"
         ]
@@ -4564,6 +4612,28 @@
           },
           "other_party_name": {
             "type": "string"
+          },
+          "payments": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SeriesCount",
+                "description": "Where a series of payments stands, when one party owes the other two\nor more money items in the agreement (instalments, DESIGN.md §7.1).\nCounts only: never an amount. Left out for a single payment."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stages": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SeriesCount",
+                "description": "The same for two or more services or tasks from one party (stages,\nDESIGN.md §7.2)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "$ref": "#/components/schemas/StateDto"
@@ -6617,8 +6687,43 @@
             ],
             "description": "A message to the other party. Not part of what is signed."
           },
+          "splits": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SplitsUsed",
+                "description": "How many times the composer's split sheets were completed while this\nwas written (DESIGN.md §7.1, §7.2, \"Measures\"). Counted and nothing\nelse: no amount, no description, no date. A client may leave it out."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "terms": {
             "$ref": "#/components/schemas/RevisionTerms"
+          }
+        }
+      },
+      "SeriesCount": {
+        "type": "object",
+        "description": "How many items of a series are confirmed. Counted by the items' own\nstatuses; there is no running total of anything.",
+        "required": [
+          "total",
+          "confirmed",
+          "disputed"
+        ],
+        "properties": {
+          "confirmed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "disputed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items in the series: at least two."
           }
         }
       },
@@ -6913,6 +7018,24 @@
               "null"
             ],
             "description": "The account's phone number, in international form, or null when it\nhas none; one must be added (`POST /v1/me/identifiers`) first."
+          }
+        }
+      },
+      "SplitsUsed": {
+        "type": "object",
+        "description": "The split sheets completed while a revision was written.",
+        "properties": {
+          "instalments": {
+            "type": "integer",
+            "format": "int32",
+            "description": "\"Split into instalments\" completed.",
+            "minimum": 0
+          },
+          "stages": {
+            "type": "integer",
+            "format": "int32",
+            "description": "\"Split into stages\" completed.",
+            "minimum": 0
           }
         }
       },

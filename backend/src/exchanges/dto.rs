@@ -247,6 +247,22 @@ pub struct SendRevision {
     /// Required when this is the first revision, which also issues the
     /// invitation; ignored after.
     pub invitation: Option<InvitationOptions>,
+    /// How many times the composer's split sheets were completed while this
+    /// was written (DESIGN.md §7.1, §7.2, "Measures"). Counted and nothing
+    /// else: no amount, no description, no date. A client may leave it out.
+    #[serde(default)]
+    pub splits: Option<SplitsUsed>,
+}
+
+/// The split sheets completed while a revision was written.
+#[derive(Clone, Copy, Debug, Default, Deserialize, ToSchema)]
+pub struct SplitsUsed {
+    /// "Split into instalments" completed.
+    #[serde(default)]
+    pub instalments: u8,
+    /// "Split into stages" completed.
+    #[serde(default)]
+    pub stages: u8,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -289,6 +305,21 @@ pub enum CommandDto {
     },
     RetractClose,
     AddStatement {
+        note: String,
+    },
+    /// Mark several payments as paid at once ("Mark the rest as paid",
+    /// DESIGN.md §7.1): one claim for each, in the order given, each exactly
+    /// as if claimed on its own, and one message to the other party saying
+    /// how many. All or none. Money items you owe, each still pending.
+    ClaimRest {
+        contributions: Vec<Uuid>,
+    },
+    /// Note how an item you provide is going (DESIGN.md §7.2). A statement
+    /// of your own: it is not a claim, changes no status and asks nothing of
+    /// the other party. Only while the item is pending or claimed; a limited
+    /// number per item; no text update.
+    NoteProgress {
+        contribution: Uuid,
         note: String,
     },
 }
@@ -499,6 +530,25 @@ pub struct ExchangeSummary {
     /// the invited party's place, when they last opened a way to pass the
     /// link on, if they have.
     pub invitation_shared_at: Option<String>,
+    /// Where a series of payments stands, when one party owes the other two
+    /// or more money items in the agreement (instalments, DESIGN.md §7.1).
+    /// Counts only: never an amount. Left out for a single payment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payments: Option<SeriesCount>,
+    /// The same for two or more services or tasks from one party (stages,
+    /// DESIGN.md §7.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stages: Option<SeriesCount>,
+}
+
+/// How many items of a series are confirmed. Counted by the items' own
+/// statuses; there is no running total of anything.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct SeriesCount {
+    /// Items in the series: at least two.
+    pub total: i64,
+    pub confirmed: i64,
+    pub disputed: i64,
 }
 
 /// What someone holding an invitation link sees before signing in.

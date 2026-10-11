@@ -1332,6 +1332,16 @@ export interface components {
             note: string;
             /** @enum {string} */
             type: "ADD_STATEMENT";
+        } | {
+            contributions: string[];
+            /** @enum {string} */
+            type: "CLAIM_REST";
+        } | {
+            /** Format: uuid */
+            contribution: string;
+            note: string;
+            /** @enum {string} */
+            type: "NOTE_PROGRESS";
         };
         /**
          * @description Which consent wording the signer was shown. Signing is refused unless it
@@ -1497,7 +1507,7 @@ export interface components {
          *     not part of what the parties are shown.
          * @enum {string}
          */
-        EventType: "COUNTERPARTY_CLAIMED" | "COUNTERPARTY_CONFIRMED" | "COUNTERPARTY_REJECTED" | "COUNTERPARTY_RELEASED" | "REVISION_SENT" | "REVISION_SUPERSEDED" | "REVISION_ACCEPTED" | "REVISION_DECLINED" | "REVISION_WITHDRAWN" | "REVISION_EXPIRED" | "AGREEMENT_IN_FORCE" | "CONTRIBUTION_CLAIMED" | "CONTRIBUTION_CLAIM_RETRACTED" | "CONTRIBUTION_CONFIRMED" | "CONTRIBUTION_DISPUTED" | "CONTRIBUTION_WAIVED" | "END_PROPOSED" | "END_PROPOSAL_CANCELLED" | "CLOSE_REQUESTED" | "CLOSE_REQUEST_RETRACTED" | "STATEMENT_ADDED" | "INACTIVITY_PROMPTED" | "EXCHANGE_CLOSED";
+        EventType: "COUNTERPARTY_CLAIMED" | "COUNTERPARTY_CONFIRMED" | "COUNTERPARTY_REJECTED" | "COUNTERPARTY_RELEASED" | "REVISION_SENT" | "REVISION_SUPERSEDED" | "REVISION_ACCEPTED" | "REVISION_DECLINED" | "REVISION_WITHDRAWN" | "REVISION_EXPIRED" | "AGREEMENT_IN_FORCE" | "CONTRIBUTION_CLAIMED" | "CONTRIBUTION_CLAIM_RETRACTED" | "CONTRIBUTION_CONFIRMED" | "CONTRIBUTION_DISPUTED" | "CONTRIBUTION_WAIVED" | "END_PROPOSED" | "END_PROPOSAL_CANCELLED" | "CLOSE_REQUESTED" | "CLOSE_REQUEST_RETRACTED" | "STATEMENT_ADDED" | "PROGRESS_NOTED" | "INACTIVITY_PROMPTED" | "EXCHANGE_CLOSED";
         ExchangeSummary: {
             closed_outcome?: components["schemas"]["OutcomeDto"] | null;
             /**
@@ -1515,6 +1525,8 @@ export interface components {
              */
             invitation_shared_at?: string | null;
             other_party_name: string;
+            payments?: components["schemas"]["SeriesCount"] | null;
+            stages?: components["schemas"]["SeriesCount"] | null;
             state: components["schemas"]["StateDto"];
             updated_at: string;
             you: components["schemas"]["Slot"];
@@ -2401,7 +2413,23 @@ export interface components {
             invitation?: components["schemas"]["InvitationOptions"] | null;
             /** @description A message to the other party. Not part of what is signed. */
             note?: string | null;
+            splits?: components["schemas"]["SplitsUsed"] | null;
             terms: components["schemas"]["RevisionTerms"];
+        };
+        /**
+         * @description How many items of a series are confirmed. Counted by the items' own
+         *     statuses; there is no running total of anything.
+         */
+        SeriesCount: {
+            /** Format: int64 */
+            confirmed: number;
+            /** Format: int64 */
+            disputed: number;
+            /**
+             * Format: int64
+             * @description Items in the series: at least two.
+             */
+            total: number;
         };
         SessionCreated: {
             account: components["schemas"]["Account"];
@@ -2522,6 +2550,19 @@ export interface components {
              *     has none; one must be added (`POST /v1/me/identifiers`) first.
              */
             phone?: string | null;
+        };
+        /** @description The split sheets completed while a revision was written. */
+        SplitsUsed: {
+            /**
+             * Format: int32
+             * @description "Split into instalments" completed.
+             */
+            instalments?: number;
+            /**
+             * Format: int32
+             * @description "Split into stages" completed.
+             */
+            stages?: number;
         };
         /** @description A reviewer's note, required for lifting a suspension. */
         StaffNote: {
